@@ -1,0 +1,37 @@
+name: Bug report / 错误报告
+description: Report a reproducible problem / 报告可复现问题
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Mod version / 模组版本
+      placeholder: 1.0.0
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment / 环境
+      description: Minecraft, Forge, Java, single-player or dedicated server
+      placeholder: Minecraft 1.20.1, Forge 47.3.22, Java 17, dedicated server
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps / 复现步骤
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior / 预期行为
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and definitions / 日志与配置
+      description: Attach relevant latest.log, crash report, and sanitized definition JSON. Remove tokens and personal paths.

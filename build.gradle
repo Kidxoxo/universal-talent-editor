@@ -1,0 +1,109 @@
+plugins {
+    id 'eclipse'
+    id 'idea'
+    id 'maven-publish'
+    id 'net.minecraftforge.gradle' version '6.0.54'
+}
+
+group = 'com.kidxoxo.talenteditor'
+version = '1.0.0'
+
+base {
+    archivesName = 'talent_editor-forge-1.20.1'
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(17)
+    withSourcesJar()
+}
+
+minecraft {
+    mappings channel: 'official', version: '1.20.1'
+    copyIdeResources = true
+
+    runs {
+        configureEach {
+            workingDirectory project.file('run')
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'info'
+            mods {
+                talent_editor {
+                    source sourceSets.main
+                }
+            }
+        }
+
+        client {}
+
+        server {
+            args '--nogui'
+        }
+
+        gameTestServer {
+            property 'forge.enabledGameTestNamespaces', 'talent_editor'
+        }
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    minecraft 'net.minecraftforge:forge:1.20.1-47.3.22'
+
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+}
+
+tasks.named('processResources', ProcessResources).configure {
+    def properties = [
+            mod_id: 'talent_editor',
+            mod_name: 'Universal Talent Editor',
+            mod_version: project.version,
+            mod_license: 'MIT',
+            minecraft_version_range: '[1.20.1,1.20.2)',
+            forge_version_range: '[47.3.22,48)',
+            loader_version_range: '[47,)'
+    ]
+    inputs.properties properties
+    filesMatching(['META-INF/mods.toml', 'pack.mcmeta']) {
+        expand properties
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+tasks.named('test', Test).configure {
+    useJUnitPlatform()
+}
+
+tasks.named('jar', Jar).configure {
+    from('LICENSE.txt') {
+        into 'META-INF'
+        rename { 'LICENSE_talent_editor.txt' }
+    }
+    from('THIRD_PARTY_NOTICES.md') {
+        into 'META-INF'
+        rename { 'THIRD_PARTY_NOTICES_talent_editor.md' }
+    }
+    manifest {
+        attributes([
+                'Specification-Title': 'talent_editor',
+                'Specification-Vendor': 'Kidxoxo',
+                'Specification-Version': '1',
+                'Implementation-Title': project.name,
+                'Implementation-Version': project.jar.archiveVersion,
+                'Implementation-Vendor': 'Kidxoxo',
+                'Bundle-License': 'MIT'
+        ])
+    }
+    finalizedBy 'reobfJar'
+}
+
+tasks.named('sourcesJar', Jar).configure {
+    from('LICENSE.txt')
+    from('THIRD_PARTY_NOTICES.md')
+}

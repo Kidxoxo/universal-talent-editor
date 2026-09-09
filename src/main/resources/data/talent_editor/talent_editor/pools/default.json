@@ -1,0 +1,16 @@
+{
+  "schema": 2,
+  "enabled": true,
+  "name": {
+    "literal": "默认天赋池",
+    "translation": "pool.talent_editor.default"
+  },
+  "choices": 3,
+  "refreshes": 1,
+  "maxOwned": 24,
+  "iconSize": 16,
+  "excludeOwned": true,
+  "rarityWeights": {
+    "talent_editor:common": 1.0
+  }
+}

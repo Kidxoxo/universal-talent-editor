@@ -1,0 +1,20 @@
+{
+  "schema": 2,
+  "enabled": true,
+  "name": {
+    "translation": "item.talent_editor.talent_book",
+    "literal": "天赋册"
+  },
+  "description": [],
+  "customModelData": 0,
+  "glint": false,
+  "attributeModifiers": [],
+  "use": {
+    "enabled": false,
+    "cooldownTicks": 0,
+    "consumeCount": 0,
+    "actions": []
+  },
+  "loot": [],
+  "requiredMods": []
+}

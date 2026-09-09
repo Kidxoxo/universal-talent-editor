@@ -1,0 +1,38 @@
+package com.kidxoxo.talenteditor.network;
+
+import com.kidxoxo.talenteditor.TalentEditorMod;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraftforge.network.NetworkEvent;
+
+import java.util.function.Supplier;
+
+public record RequestConfiguredItemPacket(ResourceLocation id) {
+    static void encode(RequestConfiguredItemPacket packet, FriendlyByteBuf buffer) {
+        buffer.writeResourceLocation(packet.id());
+    }
+
+    static RequestConfiguredItemPacket decode(FriendlyByteBuf buffer) {
+        return new RequestConfiguredItemPacket(buffer.readResourceLocation());
+    }
+
+    static void handle(RequestConfiguredItemPacket packet, Supplier<NetworkEvent.Context> contextSupplier) {
+        NetworkEvent.Context context = contextSupplier.get();
+        ServerPlayer player = context.getSender();
+        if (player != null) {
+            if (!player.hasPermissions(2)) {
+                player.sendSystemMessage(Component.translatable("message.talent_editor.permission_denied"));
+            } else {
+                TalentEditorMod.DEFINITIONS.findConfiguredItem(packet.id()).ifPresentOrElse(
+                        definition -> EditorNetwork.sendConfiguredItemDefinition(player, packet.id(), definition),
+                        () -> player.sendSystemMessage(Component.translatable(
+                                "message.talent_editor.configured_item_not_found", packet.id().toString()
+                        ))
+                );
+            }
+        }
+        context.setPacketHandled(true);
+    }
+}

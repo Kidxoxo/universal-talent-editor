@@ -1,0 +1,22 @@
+name: Feature request / 功能建议
+description: Suggest a general-purpose improvement / 提出通用化改进建议
+title: "[Feature] "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / 使用场景
+      description: What limitation or workflow should be improved?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior / 建议行为
+    validations:
+      required: true
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility and alternatives / 兼容性与替代方案

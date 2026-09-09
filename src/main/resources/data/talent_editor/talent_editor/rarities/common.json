@@ -1,0 +1,13 @@
+{
+  "schema": 2,
+  "enabled": true,
+  "name": {
+    "translation": "rarity.talent_editor.common",
+    "literal": "普通"
+  },
+  "color": "#A0A0A0",
+  "order": 0,
+  "offerable": true,
+  "baseWeight": 1.0
+}
+
