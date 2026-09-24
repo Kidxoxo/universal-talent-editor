@@ -1,11 +1,13 @@
 package com.kidxoxo.talenteditor.player;
 
+import com.kidxoxo.talenteditor.TalentEditorMod;
 import com.kidxoxo.talenteditor.domain.QueueDrawConstraintAction;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.Set;
 import java.util.Map;
+import java.util.List;
 import java.util.Optional;
 
 public final class PlayerTalents {
@@ -18,6 +20,36 @@ public final class PlayerTalents {
                 .orElse(Set.of());
     }
 
+    public static Set<ResourceLocation> activeSources(ServerPlayer player) {
+        return player.getCapability(TalentCapabilities.PLAYER_TALENTS)
+                .map(PlayerTalentData::activeSources)
+                .orElse(Set.of());
+    }
+
+    public static Set<ResourceLocation> categorySources(ServerPlayer player) {
+        return player.getCapability(TalentCapabilities.PLAYER_TALENTS)
+                .map(PlayerTalentData::categorySources)
+                .orElse(Set.of());
+    }
+
+    public static Set<ResourceLocation> triggerSources(ServerPlayer player) {
+        return player.getCapability(TalentCapabilities.PLAYER_TALENTS)
+                .map(PlayerTalentData::triggerSources)
+                .orElse(Set.of());
+    }
+
+    public static Set<ResourceLocation> talentHistory(ServerPlayer player) {
+        return player.getCapability(TalentCapabilities.PLAYER_TALENTS)
+                .map(PlayerTalentData::talentHistory)
+                .orElse(Set.of());
+    }
+
+    public static boolean hasEverAcquired(ServerPlayer player, ResourceLocation talent) {
+        return player.getCapability(TalentCapabilities.PLAYER_TALENTS)
+                .map(data -> data.hasEverAcquired(talent))
+                .orElse(false);
+    }
+
     public static boolean grant(ServerPlayer player, ResourceLocation talent) {
         return player.getCapability(TalentCapabilities.PLAYER_TALENTS)
                 .map(data -> data.grant(talent))
@@ -28,6 +60,63 @@ public final class PlayerTalents {
         return player.getCapability(TalentCapabilities.PLAYER_TALENTS)
                 .map(data -> data.revoke(talent))
                 .orElse(false);
+    }
+
+    public static boolean expire(
+            ServerPlayer player,
+            ResourceLocation talent,
+            boolean retainEffects,
+            boolean retainCategory,
+            boolean retainTriggers
+    ) {
+        return player.getCapability(TalentCapabilities.PLAYER_TALENTS)
+                .map(data -> data.expire(talent, retainEffects, retainCategory, retainTriggers))
+                .orElse(false);
+    }
+
+    /** Backward-compatible expiry API; older callers do not retain triggers. */
+    public static boolean expire(
+            ServerPlayer player, ResourceLocation talent, boolean retainEffects, boolean retainCategory
+    ) {
+        return expire(player, talent, retainEffects, retainCategory, false);
+    }
+
+    public static double numericState(ServerPlayer player, ResourceLocation id) {
+        return player.getCapability(TalentCapabilities.PLAYER_TALENTS)
+                .map(data -> data.numericState(id))
+                .orElse(0.0D);
+    }
+
+    public static Map<ResourceLocation, Double> numericStates(ServerPlayer player) {
+        return player.getCapability(TalentCapabilities.PLAYER_TALENTS)
+                .map(PlayerTalentData::numericStates)
+                .orElse(Map.of());
+    }
+
+    public static double setNumericState(ServerPlayer player, ResourceLocation id, double value) {
+        return player.getCapability(TalentCapabilities.PLAYER_TALENTS)
+                .map(data -> data.setNumericState(id, value))
+                .orElse(0.0D);
+    }
+
+    public static long acquiredTick(ServerPlayer player, ResourceLocation talent) {
+        return player.getCapability(TalentCapabilities.PLAYER_TALENTS)
+                .map(data -> data.acquiredTick(talent)).orElse(-1L);
+    }
+
+    public static long acquiredDraw(ServerPlayer player, ResourceLocation talent) {
+        return player.getCapability(TalentCapabilities.PLAYER_TALENTS)
+                .map(data -> data.acquiredDraw(talent)).orElse(-1L);
+    }
+
+    public static long drawSelections(ServerPlayer player) {
+        return player.getCapability(TalentCapabilities.PLAYER_TALENTS)
+                .map(PlayerTalentData::drawSelections).orElse(0L);
+    }
+
+    public static long recordDrawSelection(ServerPlayer player) {
+        return player.getCapability(TalentCapabilities.PLAYER_TALENTS)
+                .map(PlayerTalentData::recordDrawSelection).orElse(0L);
     }
 
     public static Map<ResourceLocation, Long> counters(ServerPlayer player) {
@@ -156,9 +245,21 @@ public final class PlayerTalents {
     }
 
     public static boolean queueDrawConstraint(ServerPlayer player, QueueDrawConstraintAction constraint) {
+        var poolChoices = new java.util.LinkedHashMap<ResourceLocation, Integer>();
+        TalentEditorMod.SNAPSHOTS.active().pools().forEach((id, pool) -> poolChoices.put(id, pool.choices()));
         return player.getCapability(TalentCapabilities.PLAYER_TALENTS)
-                .map(data -> data.queueDrawConstraint(constraint))
+                .map(data -> data.queueDrawConstraint(constraint, poolChoices))
                 .orElse(false);
+    }
+
+    public static List<QueueDrawConstraintAction> drawConstraintsForPool(
+            ServerPlayer player, ResourceLocation pool, int choices) {
+        return player.getCapability(TalentCapabilities.PLAYER_TALENTS)
+                .map(data -> data.drawConstraintsForPool(pool, choices)).orElse(List.of());
+    }
+
+    public static void consumeDrawConstraints(ServerPlayer player, ResourceLocation pool, int count) {
+        for (int index = 0; index < count; index++) consumeNextDrawConstraint(player, pool);
     }
 
     public static Optional<QueueDrawConstraintAction> nextDrawConstraint(

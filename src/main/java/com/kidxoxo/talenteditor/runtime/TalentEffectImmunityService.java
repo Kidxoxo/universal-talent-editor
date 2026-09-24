@@ -16,7 +16,9 @@ public final class TalentEffectImmunityService {
         List<ActiveEffectImmunityBinding> bindings = TalentEditorMod.SNAPSHOTS.active()
                 .effectImmunityBindings().get(effect);
         if (bindings == null || bindings.isEmpty()) return false;
-        Set<ResourceLocation> owned = PlayerTalents.owned(player);
-        return bindings.stream().anyMatch(binding -> owned.contains(binding.talentId()));
+        Set<ResourceLocation> owned = PlayerTalents.activeSources(player);
+        return bindings.stream().anyMatch(binding -> owned.contains(binding.talentId())
+                && ActionConditionRuntime.active(binding.enabledWhen(), binding.disabledWhen(),
+                player, binding.talentId()));
     }
 }

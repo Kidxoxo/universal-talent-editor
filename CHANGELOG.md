@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.0
+
+- 天赋编辑改为单页分组列表，并加入天赋树预览与关系编辑。
+- 扩展条件、动作、计数器、配置物品、HUD 和玩家模型表现的可视化配置。
+- 改进合成、抽取检索、资源导入及服务端校验。
+- 修复玩家模型透明度和多项编辑器返回、显示问题。
+
 ## 1.0.0 — Initial release
 
 - Added a server-authoritative, data-driven talent runtime for Minecraft 1.20.1 and Forge 47.x.

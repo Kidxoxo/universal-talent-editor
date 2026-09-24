@@ -3,6 +3,7 @@ package com.kidxoxo.talenteditor.domain;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.List;
+import java.util.Optional;
 
 public record CounterRuleDefinition(
         ResourceLocation id,
@@ -23,6 +24,7 @@ public record CounterRuleDefinition(
         int resetIntervalTicks,
         List<ResourceLocation> categories,
         CounterVisibility visibility,
+        Optional<ResourceLocation> displayCategory,
         List<String> requiredMods,
         boolean available,
         List<ResourceLocation> requiredTalents,
@@ -34,6 +36,7 @@ public record CounterRuleDefinition(
 ) {
     public CounterRuleDefinition {
         categories = List.copyOf(categories);
+        displayCategory = displayCategory == null ? Optional.empty() : displayCategory;
         requiredMods = List.copyOf(requiredMods);
         requiredTalents = List.copyOf(requiredTalents);
         entityTypes = List.copyOf(entityTypes);
@@ -79,6 +82,7 @@ public record CounterRuleDefinition(
     ) {
         this(id, schema, enabled, name, event, increment, amountMode, amountScale, rounding, minimumIncrement,
                 maximum, cooldownTicks, intervalTicks, false, false, 0, List.of(), CounterVisibility.FULL,
+                Optional.empty(),
                 requiredMods, available,
                 requiredTalents, entityTypes, entityTags, items, itemTags, damageTags);
     }
@@ -104,7 +108,7 @@ public record CounterRuleDefinition(
     ) {
         this(id, schema, enabled, name, event, increment, CounterAmountMode.FIXED, 1.0D,
                 CounterRounding.ROUND, 0L, maximum, cooldownTicks, intervalTicks, false, false, 0,
-                List.of(), CounterVisibility.FULL,
+                List.of(), CounterVisibility.FULL, Optional.empty(),
                 requiredMods, available,
                 requiredTalents, entityTypes, entityTags, items, itemTags, damageTags);
     }

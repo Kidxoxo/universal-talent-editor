@@ -13,8 +13,10 @@ public final class CounterMetadataScreen extends Screen {
     private static final List<String> VISIBILITIES = List.of("full", "condition_only", "hidden");
     private final CounterEditScreen parent;
     private String categoriesValue;
+    private String displayCategoryValue;
     private String visibility;
     private EditBox categoriesField;
+    private EditBox displayCategoryField;
     private Button visibilityButton;
     private String status = "";
 
@@ -23,6 +25,7 @@ public final class CounterMetadataScreen extends Screen {
         this.parent = parent;
         CounterDraft.MetadataSettings settings = parent.metadataSettings();
         this.categoriesValue = CounterEditScreen.joinIds(settings.categories());
+        this.displayCategoryValue = settings.displayCategory() == null ? "" : settings.displayCategory().toString();
         this.visibility = VISIBILITIES.contains(settings.visibility()) ? settings.visibility() : "full";
     }
 
@@ -44,8 +47,20 @@ public final class CounterMetadataScreen extends Screen {
         addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.reference_picker.choose"),
                         button -> openCategoryPicker())
                 .bounds(x + fieldWidth + 6, 54, chooseWidth, 20).build());
+        displayCategoryField = new EditBox(font, x, 96, fieldWidth, 20,
+                Component.translatable("screen.talent_editor.counter.metadata.display_category"));
+        displayCategoryField.setMaxLength(256);
+        displayCategoryField.setValue(displayCategoryValue);
+        displayCategoryField.setResponder(value -> {
+            displayCategoryValue = value;
+            status = "";
+        });
+        addRenderableWidget(displayCategoryField);
+        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.reference_picker.choose"),
+                        button -> openDisplayCategoryPicker())
+                .bounds(x + fieldWidth + 6, 96, chooseWidth, 20).build());
         visibilityButton = addRenderableWidget(Button.builder(visibilityLabel(), button -> cycleVisibility())
-                .bounds(x, 96, formWidth, 20).build());
+                .bounds(x, 138, formWidth, 20).build());
         addRenderableWidget(Button.builder(Component.translatable("gui.cancel"), button -> returnParent())
                 .bounds(x, height - 28, 80, 20).build());
         addRenderableWidget(Button.builder(Component.translatable("gui.done"), button -> save())
@@ -61,15 +76,17 @@ public final class CounterMetadataScreen extends Screen {
         graphics.drawCenteredString(font, title, width / 2, 15, 0xFFFFFF);
         graphics.drawString(font, Component.translatable("screen.talent_editor.counter.metadata.categories"),
                 x, 43, 0xA0A0A0, false);
+        graphics.drawString(font, Component.translatable("screen.talent_editor.counter.metadata.display_category"),
+                x, 85, 0xA0A0A0, false);
         ReferenceDiagnostics.Summary references = ReferenceDiagnostics.summarize(
                 parent.bootstrap(), ResourceReferencePickerScreen.Source.COUNTER_CATEGORY,
                 categoriesValue, false
         );
         graphics.drawString(font, font.plainSubstrByWidth(
                 ReferenceDiagnostics.label(references).getString(), formWidth
-        ), x, 125, ReferenceDiagnostics.color(references), false);
+        ), x, 167, ReferenceDiagnostics.color(references), false);
         graphics.drawWordWrap(font, Component.translatable(
-                "screen.talent_editor.counter.metadata.help"), x, 143, formWidth, 0x808080);
+                "screen.talent_editor.counter.metadata.help"), x, 185, formWidth, 0x808080);
         if (!status.isBlank()) {
             graphics.drawString(font, font.plainSubstrByWidth(status, formWidth),
                     x, height - 45, 0xFF7777, false);
@@ -98,6 +115,21 @@ public final class CounterMetadataScreen extends Screen {
 
     private void chooseCategory(ResourceLocation id) {
         categoriesValue = TalentMetadataScreen.appendUniqueId(categoriesValue, id);
+        categoriesField.setValue(categoriesValue);
+    }
+
+    private void openDisplayCategoryPicker() {
+        if (minecraft != null) {
+            minecraft.setScreen(new ResourceReferencePickerScreen(
+                    this, ResourceReferencePickerScreen.Source.CATEGORY,
+                    parent.bootstrap(), this::chooseDisplayCategory
+            ));
+        }
+    }
+
+    private void chooseDisplayCategory(ResourceLocation id) {
+        displayCategoryValue = id.toString();
+        displayCategoryField.setValue(displayCategoryValue);
     }
 
     private void save() {
@@ -106,7 +138,14 @@ public final class CounterMetadataScreen extends Screen {
             status = Component.translatable("screen.talent_editor.counter.metadata.invalid_categories").getString();
             return;
         }
-        parent.updateMetadataSettings(new CounterDraft.MetadataSettings(categories, visibility));
+        ResourceLocation displayCategory = displayCategoryField.getValue().isBlank()
+                ? null : ResourceLocation.tryParse(displayCategoryField.getValue().strip());
+        if (!displayCategoryField.getValue().isBlank() && displayCategory == null) {
+            status = Component.translatable(
+                    "screen.talent_editor.counter.metadata.invalid_display_category").getString();
+            return;
+        }
+        parent.updateMetadataSettings(new CounterDraft.MetadataSettings(categories, visibility, displayCategory));
         returnParent();
     }
 

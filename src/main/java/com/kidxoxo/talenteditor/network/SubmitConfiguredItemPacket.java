@@ -68,6 +68,8 @@ public record SubmitConfiguredItemPacket(
         EditorNetwork.sendValidation(player, result);
         if (result.committed()) {
             EditorNetwork.sendBootstrap(player, false);
+            server.getPlayerList().getPlayers().stream().filter(other -> other != player)
+                    .forEach(EditorNetwork::sendConfiguredItemCatalog);
             try {
                 TalentEditorMod.EDITOR_PACK.ensureSelected(server).whenComplete((unused, error) -> {
                     if (error != null) {

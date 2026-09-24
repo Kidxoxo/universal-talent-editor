@@ -24,6 +24,7 @@ public record TalentDefinition(
         List<String> missingMods,
         CompiledCondition acquireCondition,
         SynthesisDefinition synthesis,
+        TalentLifecycleDefinition lifecycle,
         List<CompiledAction> activeEffects,
         List<CompiledTrigger> triggers,
         List<CompiledAction> onAcquire,
@@ -43,10 +44,41 @@ public record TalentDefinition(
         missingMods = List.copyOf(missingMods);
         acquireCondition = Objects.requireNonNull(acquireCondition, "acquireCondition");
         synthesis = Objects.requireNonNull(synthesis, "synthesis");
+        lifecycle = Objects.requireNonNull(lifecycle, "lifecycle");
         activeEffects = List.copyOf(activeEffects);
         triggers = List.copyOf(triggers);
         onAcquire = List.copyOf(onAcquire);
         onSynthesize = List.copyOf(onSynthesize);
         onRemove = List.copyOf(onRemove);
+    }
+
+    public TalentDefinition(
+            ResourceLocation id,
+            int schema,
+            boolean enabled,
+            LocalizedText name,
+            List<LocalizedText> description,
+            boolean showGeneratedEffects,
+            ResourceLocation rarity,
+            List<ResourceLocation> categories,
+            Optional<ResourceLocation> icon,
+            OfferSettings offer,
+            int capacityCost,
+            List<ResourceLocation> tags,
+            List<String> requiredMods,
+            boolean available,
+            List<String> missingMods,
+            CompiledCondition acquireCondition,
+            SynthesisDefinition synthesis,
+            List<CompiledAction> activeEffects,
+            List<CompiledTrigger> triggers,
+            List<CompiledAction> onAcquire,
+            List<CompiledAction> onSynthesize,
+            List<CompiledAction> onRemove
+    ) {
+        this(id, schema, enabled, name, description, showGeneratedEffects, rarity, categories, icon,
+                offer, capacityCost, tags, requiredMods, available, missingMods, acquireCondition,
+                synthesis, TalentLifecycleDefinition.permanent(), activeEffects, triggers,
+                onAcquire, onSynthesize, onRemove);
     }
 }

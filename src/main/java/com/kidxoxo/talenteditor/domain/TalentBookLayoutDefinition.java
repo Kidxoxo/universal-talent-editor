@@ -29,7 +29,7 @@ public record TalentBookLayoutDefinition(
 ) {
     public static final ResourceLocation DEFAULT_ID = new ResourceLocation("talent_editor", "default");
     public static final TalentBookLayoutDefinition DEFAULT = new TalentBookLayoutDefinition(
-            DEFAULT_ID, 2, true, 0, Optional.empty(), 42, 2, 4, 58, 30, 16, true,
+            DEFAULT_ID, 2, true, 0, Optional.empty(), 60, 2, 3, 120, 56, 48, true,
             List.of(), List.of()
     );
 

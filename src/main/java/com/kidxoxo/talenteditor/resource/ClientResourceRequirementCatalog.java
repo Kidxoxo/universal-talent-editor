@@ -62,6 +62,7 @@ public final class ClientResourceRequirementCatalog {
             List<CompiledAction> actions
     ) {
         actions.forEach(action -> {
+            action = com.kidxoxo.talenteditor.domain.ConditionalAction.unwrap(action);
             if (action instanceof PlaySoundAction sound) {
                 target.add(requirement(ClientResourceRequirement.Kind.SOUND, sound.sound()));
             }

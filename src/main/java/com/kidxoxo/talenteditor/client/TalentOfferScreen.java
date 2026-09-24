@@ -13,6 +13,7 @@ import java.util.List;
 
 public final class TalentOfferScreen extends Screen {
     private final TalentEditScreen parent;
+    private final Screen returnScreen;
     private boolean enabled;
     private Button enabledButton;
     private EditBox weightField;
@@ -22,14 +23,17 @@ public final class TalentOfferScreen extends Screen {
     private String status = "";
 
     public TalentOfferScreen(TalentEditScreen parent) {
+        this(parent, parent);
+    }
+
+    TalentOfferScreen(TalentEditScreen parent, Screen returnScreen) {
         super(Component.translatable("screen.talent_editor.offer.title"));
         this.parent = parent;
+        this.returnScreen = returnScreen;
         TalentDraft.OfferDraft offer = parent.offer();
         this.enabled = offer.enabled();
         this.weightValue = Double.toString(offer.weight());
-        this.poolsValue = offer.pools().isEmpty()
-                ? "talent_editor:default"
-                : String.join(", ", offer.pools().stream().map(ResourceLocation::toString).toList());
+        this.poolsValue = String.join(", ", offer.pools().stream().map(ResourceLocation::toString).toList());
     }
 
     @Override
@@ -117,12 +121,12 @@ public final class TalentOfferScreen extends Screen {
             pools.add(id);
         }
         parent.updateOffer(enabled, weight, new ArrayList<>(pools));
-        if (minecraft != null) minecraft.setScreen(parent);
+        if (minecraft != null) minecraft.setScreen(returnScreen);
     }
 
     @Override
     public void onClose() {
-        if (minecraft != null) minecraft.setScreen(parent);
+        if (minecraft != null) minecraft.setScreen(returnScreen);
     }
 
     private Component enabledLabel() {

@@ -37,19 +37,15 @@ public final class TalentComplexEffectsScreen extends Screen {
         int formWidth = Math.min(700, width - 32);
         int x = (width - formWidth) / 2;
         int gap = 6;
-        int quarter = (formWidth - gap * 3) / 4;
+        int topThird = (formWidth - gap * 2) / 3;
         addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.complex.add_dynamic"),
                         button -> addDynamic())
-                .bounds(x, 42, quarter, 20).build());
+                .bounds(x, 42, topThird, 20).build());
         addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.add_refresh_bonus"),
                         button -> addRefresh())
-                .bounds(x + quarter + gap, 42, quarter, 20).build());
+                .bounds(x + topThird + gap, 42, topThird, 20).build());
         flight = addRenderableWidget(Button.builder(flightLabel(), button -> toggleFlight())
-                .bounds(x + (quarter + gap) * 2, 42, quarter, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.complex.event_effects"),
-                        button -> owner.openTriggerSettings(this))
-                .bounds(x + (quarter + gap) * 3, 42,
-                        formWidth - (quarter + gap) * 3, 20).build());
+                .bounds(x + (topThird + gap) * 2, 42, formWidth - (topThird + gap) * 2, 20).build());
 
         int detailY = height - 84;
         int third = (formWidth - gap * 2) / 3;
@@ -113,9 +109,7 @@ public final class TalentComplexEffectsScreen extends Screen {
                         selected ? 0x7050A0E8 : 0x404A90E2);
             }
             String label;
-            if (TalentDraft.isEventEffect(row)) {
-                label = owner.effectLabel(row);
-            } else if (row.editableDynamicAttribute()) {
+            if (row.editableDynamicAttribute()) {
                 TalentDraft.DynamicAttributeDraft value = owner.draft().dynamicAttribute(row.rawIndex());
                 label = Component.translatable("screen.talent_editor.complex.dynamic_row",
                         value.attribute().toString(), sourceLabel(value.source()), compact(value.base()),
@@ -125,10 +119,8 @@ public final class TalentComplexEffectsScreen extends Screen {
             } else {
                 label = Component.translatable("screen.talent_editor.creative_flight_effect").getString();
             }
-            int color = TalentDraft.isEventEffect(row) && !owner.draft().isEditableEventEffect(row)
-                    ? 0xFF909090 : 0xFFE8E8E8;
             graphics.drawString(font, font.plainSubstrByWidth(label, formWidth - 8), x + 4, y,
-                    color, false);
+                    0xFFE8E8E8, false);
         }
         if (rows.isEmpty()) {
             graphics.drawCenteredString(font, Component.translatable("screen.talent_editor.complex.empty"),
@@ -177,9 +169,7 @@ public final class TalentComplexEffectsScreen extends Screen {
     private void editSelected() {
         TalentDraft.EffectRow selected = selected();
         if (selected == null || minecraft == null) return;
-        if (TalentDraft.isEventEffect(selected) && owner.draft().isEditableEventEffect(selected)) {
-            owner.openTriggerSettings(this, TalentDraft.eventRawIndex(selected));
-        } else if (selected.editableDynamicAttribute()) {
+        if (selected.editableDynamicAttribute()) {
             minecraft.setScreen(new TalentDynamicAttributeScreen(
                     owner, this, bootstrap, selected.rawIndex(), false
             ));
@@ -224,13 +214,8 @@ public final class TalentComplexEffectsScreen extends Screen {
 
     private void removeSelected() {
         TalentDraft.EffectRow selected = selected();
-        if (selected == null || TalentDraft.isEventEffect(selected)
-                && !owner.draft().isEditableEventEffect(selected)) return;
-        if (TalentDraft.isEventEffect(selected)) {
-            owner.draft().removeEffectTrigger(TalentDraft.eventRawIndex(selected));
-        } else {
-            owner.draft().removeEditableActiveEffect(selected.rawIndex());
-        }
+        if (selected == null) return;
+        owner.draft().removeEditableActiveEffect(selected.rawIndex());
         selectedRawIndex = -1;
         owner.markComplexUpdated("screen.talent_editor.complex.updated");
         status = Component.translatable("screen.talent_editor.effect_removed").getString();
@@ -243,12 +228,9 @@ public final class TalentComplexEffectsScreen extends Screen {
         boolean refresh = selected != null && selected.editableDrawRefreshBonus();
         refreshAmount.active = refresh;
         applyRefresh.active = refresh;
-        boolean event = TalentDraft.isEventEffect(selected);
-        boolean editableEvent = event && owner.draft().isEditableEventEffect(selected);
-        editSelected.active = selected != null && (selected.editableDynamicAttribute() || editableEvent);
-        editSelected.setMessage(Component.translatable(event
-                ? "screen.talent_editor.complex.edit_event" : "screen.talent_editor.complex.edit_dynamic"));
-        remove.active = selected != null && (!event || editableEvent);
+        editSelected.active = selected != null && selected.editableDynamicAttribute();
+        editSelected.setMessage(Component.translatable("screen.talent_editor.complex.edit_dynamic"));
+        remove.active = selected != null;
         refreshAmount.setValue(refresh ? Integer.toString((int) selected.amount()) : "");
     }
 
@@ -257,9 +239,7 @@ public final class TalentComplexEffectsScreen extends Screen {
     }
 
     private List<TalentDraft.EffectRow> rows() {
-        return owner.draft().allEffectRows().stream().filter(row -> row.editableDynamicAttribute()
-                || row.editableDrawRefreshBonus() || row.editableCreativeFlight()
-                || TalentDraft.isEventEffect(row)).toList();
+        return owner.draft().specialEffectRows();
     }
 
     private Component flightLabel() {

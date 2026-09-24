@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Queues a one-shot filter for a player's next explicit draw refresh.
+ * Queues a one-shot filter for a player's next newly generated draw, whether opened or refreshed.
  * Values inside one selector list are ORed; non-empty selector groups are ANDed.
  */
 public record QueueDrawConstraintAction(

@@ -21,6 +21,18 @@ import java.util.Set;
 
 public final class PlayerTalentData implements INBTSerializable<CompoundTag> {
     private static final String TALENTS_KEY = "talents";
+    private static final String TALENT_HISTORY_KEY = "talentHistory";
+    private static final String RETAINED_EFFECTS_KEY = "retainedEffects";
+    private static final String RETAINED_CATEGORIES_KEY = "retainedCategories";
+    private static final String RETAINED_TRIGGERS_KEY = "retainedTriggers";
+    private static final String STATES_KEY = "numericStates";
+    private static final String STATE_ID_KEY = "id";
+    private static final String STATE_VALUE_KEY = "value";
+    private static final String ACQUISITIONS_KEY = "talentAcquisitions";
+    private static final String ACQUISITION_ID_KEY = "id";
+    private static final String ACQUISITION_TICK_KEY = "tick";
+    private static final String ACQUISITION_DRAW_KEY = "draw";
+    private static final String DRAW_SELECTIONS_KEY = "drawSelections";
     private static final String DRAW_TOKENS_KEY = "drawTokens";
     private static final String COUNTERS_KEY = "counters";
     private static final String COUNTER_ID_KEY = "id";
@@ -57,8 +69,17 @@ public final class PlayerTalentData implements INBTSerializable<CompoundTag> {
     public static final int MAX_TRIGGER_DISTANCE_PROGRESS = 4_096;
     public static final double MAX_TRIGGER_DISTANCE_VALUE = 1_000_000_000_000.0D;
     public static final int MAX_DRAW_CONSTRAINTS = 64;
+    public static final int MAX_NUMERIC_STATES = 4_096;
+    public static final double MAX_NUMERIC_STATE_VALUE = 1.0E12D;
     private static final int MAX_DRAW_CONSTRAINT_VALUES = 256;
+    private static final int MAX_TALENT_HISTORY = 10_000;
     private final LinkedHashSet<ResourceLocation> owned = new LinkedHashSet<>();
+    private final LinkedHashSet<ResourceLocation> talentHistory = new LinkedHashSet<>();
+    private final LinkedHashSet<ResourceLocation> retainedEffects = new LinkedHashSet<>();
+    private final LinkedHashSet<ResourceLocation> retainedCategories = new LinkedHashSet<>();
+    private final LinkedHashSet<ResourceLocation> retainedTriggers = new LinkedHashSet<>();
+    private final LinkedHashMap<ResourceLocation, Double> numericStates = new LinkedHashMap<>();
+    private final LinkedHashMap<ResourceLocation, Acquisition> acquisitions = new LinkedHashMap<>();
     private final LinkedHashMap<ResourceLocation, Long> counters = new LinkedHashMap<>();
     private final LinkedHashMap<ResourceLocation, Integer> drawPity = new LinkedHashMap<>();
     private final LinkedHashMap<String, Long> triggerCooldowns = new LinkedHashMap<>();
@@ -67,6 +88,7 @@ public final class PlayerTalentData implements INBTSerializable<CompoundTag> {
     private final ArrayList<QueueDrawConstraintAction> drawConstraints = new ArrayList<>();
     private int drawTokens;
     private long counterLifecycleTicks;
+    private long drawSelections;
 
     public Set<ResourceLocation> owned() {
         return Set.copyOf(owned);
@@ -77,13 +99,107 @@ public final class PlayerTalentData implements INBTSerializable<CompoundTag> {
     }
 
     public boolean grant(ResourceLocation talent) {
-        return owned.add(talent);
+        if (!owned.add(talent)) return false;
+        talentHistory.add(talent);
+        retainedEffects.remove(talent);
+        retainedCategories.remove(talent);
+        retainedTriggers.remove(talent);
+        acquisitions.put(talent, new Acquisition(counterLifecycleTicks, drawSelections));
+        return true;
     }
 
     public boolean revoke(ResourceLocation talent) {
         if (!owned.remove(talent)) return false;
+        retainedEffects.remove(talent);
+        retainedCategories.remove(talent);
+        retainedTriggers.remove(talent);
+        acquisitions.remove(talent);
         clearTriggerState(talent);
         return true;
+    }
+
+    public boolean expire(
+            ResourceLocation talent,
+            boolean retainEffects,
+            boolean retainCategory,
+            boolean retainTriggerBindings
+    ) {
+        if (!owned.remove(talent)) return false;
+        if (retainEffects) retainedEffects.add(talent); else retainedEffects.remove(talent);
+        if (retainCategory) retainedCategories.add(talent); else retainedCategories.remove(talent);
+        if (retainTriggerBindings) retainedTriggers.add(talent); else retainedTriggers.remove(talent);
+        acquisitions.remove(talent);
+        if (!retainTriggerBindings) clearTriggerState(talent);
+        return true;
+    }
+
+    /** Backward-compatible expiry API; older callers do not retain triggers. */
+    public boolean expire(ResourceLocation talent, boolean retainEffects, boolean retainCategory) {
+        return expire(talent, retainEffects, retainCategory, false);
+    }
+
+    public Set<ResourceLocation> activeSources() {
+        LinkedHashSet<ResourceLocation> values = new LinkedHashSet<>(owned);
+        values.addAll(retainedEffects);
+        return Set.copyOf(values);
+    }
+
+    public Set<ResourceLocation> categorySources() {
+        LinkedHashSet<ResourceLocation> values = new LinkedHashSet<>(owned);
+        values.addAll(retainedCategories);
+        return Set.copyOf(values);
+    }
+
+    public Set<ResourceLocation> triggerSources() {
+        LinkedHashSet<ResourceLocation> values = new LinkedHashSet<>(owned);
+        values.addAll(retainedTriggers);
+        return Set.copyOf(values);
+    }
+
+    public Set<ResourceLocation> talentHistory() {
+        return Set.copyOf(talentHistory);
+    }
+
+    public boolean hasEverAcquired(ResourceLocation talent) {
+        return talentHistory.contains(talent);
+    }
+
+    public double numericState(ResourceLocation id) {
+        return numericStates.getOrDefault(id, 0.0D);
+    }
+
+    public Map<ResourceLocation, Double> numericStates() {
+        return Map.copyOf(numericStates);
+    }
+
+    public double setNumericState(ResourceLocation id, double value) {
+        double bounded = Double.isFinite(value)
+                ? Math.max(-MAX_NUMERIC_STATE_VALUE, Math.min(MAX_NUMERIC_STATE_VALUE, value)) : 0.0D;
+        if (Math.abs(bounded) < 1.0E-12D) {
+            numericStates.remove(id);
+        } else if (numericStates.containsKey(id) || numericStates.size() < MAX_NUMERIC_STATES) {
+            numericStates.put(id, bounded);
+        }
+        return numericState(id);
+    }
+
+    public long acquiredTick(ResourceLocation talent) {
+        Acquisition acquisition = acquisitions.get(talent);
+        return acquisition == null ? -1L : acquisition.tick();
+    }
+
+    public long acquiredDraw(ResourceLocation talent) {
+        Acquisition acquisition = acquisitions.get(talent);
+        return acquisition == null ? -1L : acquisition.draw();
+    }
+
+    public long drawSelections() {
+        return drawSelections;
+    }
+
+    public long recordDrawSelection() {
+        drawSelections = drawSelections == Long.MAX_VALUE ? 1L : drawSelections + 1L;
+        return drawSelections;
     }
 
     public Map<ResourceLocation, Long> counters() {
@@ -158,6 +274,18 @@ public final class PlayerTalentData implements INBTSerializable<CompoundTag> {
     public void copyFrom(PlayerTalentData other) {
         owned.clear();
         owned.addAll(other.owned);
+        talentHistory.clear();
+        talentHistory.addAll(other.talentHistory);
+        retainedEffects.clear();
+        retainedEffects.addAll(other.retainedEffects);
+        retainedCategories.clear();
+        retainedCategories.addAll(other.retainedCategories);
+        retainedTriggers.clear();
+        retainedTriggers.addAll(other.retainedTriggers);
+        numericStates.clear();
+        numericStates.putAll(other.numericStates);
+        acquisitions.clear();
+        acquisitions.putAll(other.acquisitions);
         counters.clear();
         counters.putAll(other.counters);
         drawPity.clear();
@@ -172,6 +300,7 @@ public final class PlayerTalentData implements INBTSerializable<CompoundTag> {
         drawConstraints.addAll(other.drawConstraints);
         drawTokens = other.drawTokens;
         counterLifecycleTicks = other.counterLifecycleTicks;
+        drawSelections = other.drawSelections;
     }
 
     public int drawTokens() {
@@ -206,6 +335,11 @@ public final class PlayerTalentData implements INBTSerializable<CompoundTag> {
     }
 
     public boolean queueDrawConstraint(QueueDrawConstraintAction constraint) {
+        return queueDrawConstraint(constraint, Map.of());
+    }
+
+    public boolean queueDrawConstraint(QueueDrawConstraintAction constraint,
+                                       Map<ResourceLocation, Integer> poolChoices) {
         if (constraint == null) return false;
         long previous = constraint.successCounter().map(this::counter).orElse(0L);
         if (constraint.successCounter().isPresent()
@@ -221,6 +355,20 @@ public final class PlayerTalentData implements INBTSerializable<CompoundTag> {
                 && drawConstraints.stream().anyMatch(value -> value.spec().equals(selected))) {
             return false;
         }
+        for (var entry : poolChoices.entrySet()) {
+            if (!selected.appliesTo(entry.getKey())) continue;
+            int occupied = drawConstraints.stream().filter(value -> value.appliesTo(entry.getKey()))
+                    .mapToInt(QueueDrawConstraintAction::guaranteed).sum();
+            int capacity = entry.getValue();
+            int reserved = Math.min(selected.guaranteed(), capacity);
+            if (occupied >= capacity || (constraint.queueMode() != DrawConstraintQueueMode.REPLACE
+                    && occupied + reserved > capacity)) {
+                // The search itself succeeds even when this draw has no free choice slot.
+                // Keep the earlier reservations intact, but advance its success counter.
+                constraint.successCounter().ifPresent(counter -> setCounter(counter, next));
+                return true;
+            }
+        }
         if (constraint.queueMode() == DrawConstraintQueueMode.REPLACE) {
             drawConstraints.removeIf(value -> value.spec().overlapsPoolScope(selected));
         }
@@ -232,6 +380,18 @@ public final class PlayerTalentData implements INBTSerializable<CompoundTag> {
 
     public Optional<QueueDrawConstraintAction> nextDrawConstraint(ResourceLocation pool) {
         return drawConstraints.stream().filter(value -> value.appliesTo(pool)).findFirst();
+    }
+
+    public List<QueueDrawConstraintAction> drawConstraintsForPool(ResourceLocation pool, int choices) {
+        ArrayList<QueueDrawConstraintAction> result = new ArrayList<>();
+        int slots = 0;
+        for (QueueDrawConstraintAction value : drawConstraints) {
+            if (!value.appliesTo(pool)) continue;
+            if (slots >= choices) break;
+            result.add(value);
+            slots += value.guaranteed();
+        }
+        return List.copyOf(result);
     }
 
     public boolean consumeNextDrawConstraint(ResourceLocation pool) {
@@ -263,8 +423,7 @@ public final class PlayerTalentData implements INBTSerializable<CompoundTag> {
     public boolean acquireWithDrawToken(ResourceLocation talent) {
         if (drawTokens <= 0 || owned.contains(talent)) return false;
         drawTokens--;
-        owned.add(talent);
-        return true;
+        return grant(talent);
     }
 
     public int drawPity(ResourceLocation pool) {
@@ -308,8 +467,7 @@ public final class PlayerTalentData implements INBTSerializable<CompoundTag> {
         }
         consumeTalents.forEach(this::revoke);
         consumeCounters.forEach((id, amount) -> setCounter(id, counter(id) - amount));
-        owned.add(result);
-        return true;
+        return grant(result);
     }
 
     @Override
@@ -320,8 +478,34 @@ public final class PlayerTalentData implements INBTSerializable<CompoundTag> {
                 .sorted(Comparator.comparing(ResourceLocation::toString))
                 .forEach(id -> values.add(StringTag.valueOf(id.toString())));
         root.put(TALENTS_KEY, values);
+        putTalentIds(root, TALENT_HISTORY_KEY, talentHistory);
+        putTalentIds(root, RETAINED_EFFECTS_KEY, retainedEffects);
+        putTalentIds(root, RETAINED_CATEGORIES_KEY, retainedCategories);
+        putTalentIds(root, RETAINED_TRIGGERS_KEY, retainedTriggers);
         root.putInt(DRAW_TOKENS_KEY, drawTokens);
         root.putLong(COUNTER_LIFECYCLE_TICKS_KEY, counterLifecycleTicks);
+        root.putLong(DRAW_SELECTIONS_KEY, drawSelections);
+        ListTag stateValues = new ListTag();
+        numericStates.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey(Comparator.comparing(ResourceLocation::toString)))
+                .forEach(entry -> {
+                    CompoundTag state = new CompoundTag();
+                    state.putString(STATE_ID_KEY, entry.getKey().toString());
+                    state.putDouble(STATE_VALUE_KEY, entry.getValue());
+                    stateValues.add(state);
+                });
+        root.put(STATES_KEY, stateValues);
+        ListTag acquisitionValues = new ListTag();
+        acquisitions.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey(Comparator.comparing(ResourceLocation::toString)))
+                .forEach(entry -> {
+                    CompoundTag acquisition = new CompoundTag();
+                    acquisition.putString(ACQUISITION_ID_KEY, entry.getKey().toString());
+                    acquisition.putLong(ACQUISITION_TICK_KEY, entry.getValue().tick());
+                    acquisition.putLong(ACQUISITION_DRAW_KEY, entry.getValue().draw());
+                    acquisitionValues.add(acquisition);
+                });
+        root.put(ACQUISITIONS_KEY, acquisitionValues);
         ListTag counterValues = new ListTag();
         counters.entrySet().stream()
                 .sorted(Map.Entry.comparingByKey(Comparator.comparing(ResourceLocation::toString)))
@@ -395,6 +579,33 @@ public final class PlayerTalentData implements INBTSerializable<CompoundTag> {
             ResourceLocation id = ResourceLocation.tryParse(values.getString(index));
             if (id != null) owned.add(id);
         }
+        talentHistory.clear();
+        talentHistory.addAll(readTalentIds(root, TALENT_HISTORY_KEY));
+        if (talentHistory.isEmpty()) talentHistory.addAll(owned);
+        retainedEffects.clear();
+        retainedEffects.addAll(readTalentIds(root, RETAINED_EFFECTS_KEY));
+        retainedCategories.clear();
+        retainedCategories.addAll(readTalentIds(root, RETAINED_CATEGORIES_KEY));
+        retainedTriggers.clear();
+        retainedTriggers.addAll(readTalentIds(root, RETAINED_TRIGGERS_KEY));
+        numericStates.clear();
+        ListTag stateValues = root.getList(STATES_KEY, Tag.TAG_COMPOUND);
+        for (int index = 0; index < stateValues.size() && numericStates.size() < MAX_NUMERIC_STATES; index++) {
+            CompoundTag state = stateValues.getCompound(index);
+            ResourceLocation id = ResourceLocation.tryParse(state.getString(STATE_ID_KEY));
+            double value = state.getDouble(STATE_VALUE_KEY);
+            if (id != null && Double.isFinite(value)) setNumericState(id, value);
+        }
+        acquisitions.clear();
+        ListTag acquisitionValues = root.getList(ACQUISITIONS_KEY, Tag.TAG_COMPOUND);
+        for (int index = 0; index < acquisitionValues.size(); index++) {
+            CompoundTag acquisition = acquisitionValues.getCompound(index);
+            ResourceLocation id = ResourceLocation.tryParse(acquisition.getString(ACQUISITION_ID_KEY));
+            if (id != null && owned.contains(id)) acquisitions.put(id, new Acquisition(
+                    Math.max(0L, acquisition.getLong(ACQUISITION_TICK_KEY)),
+                    Math.max(0L, acquisition.getLong(ACQUISITION_DRAW_KEY))
+            ));
+        }
         counters.clear();
         ListTag counterValues = root.getList(COUNTERS_KEY, Tag.TAG_COMPOUND);
         for (int index = 0; index < counterValues.size() && counters.size() < MAX_COUNTERS; index++) {
@@ -462,6 +673,10 @@ public final class PlayerTalentData implements INBTSerializable<CompoundTag> {
         }
         setDrawTokens(root.getInt(DRAW_TOKENS_KEY));
         counterLifecycleTicks = Math.max(0L, root.getLong(COUNTER_LIFECYCLE_TICKS_KEY));
+        drawSelections = Math.max(0L, root.getLong(DRAW_SELECTIONS_KEY));
+        for (ResourceLocation talent : owned) {
+            acquisitions.putIfAbsent(talent, new Acquisition(counterLifecycleTicks, drawSelections));
+        }
     }
 
     private static boolean validTriggerCooldownId(String id) {
@@ -486,6 +701,24 @@ public final class PlayerTalentData implements INBTSerializable<CompoundTag> {
         return List.copyOf(result);
     }
 
+    private static void putTalentIds(CompoundTag parent, String key, Set<ResourceLocation> values) {
+        if (values.isEmpty()) return;
+        ListTag list = new ListTag();
+        values.stream().sorted(Comparator.comparing(ResourceLocation::toString)).limit(MAX_TALENT_HISTORY)
+                .forEach(value -> list.add(StringTag.valueOf(value.toString())));
+        parent.put(key, list);
+    }
+
+    private static List<ResourceLocation> readTalentIds(CompoundTag parent, String key) {
+        ListTag values = parent.getList(key, Tag.TAG_STRING);
+        LinkedHashSet<ResourceLocation> result = new LinkedHashSet<>();
+        for (int index = 0; index < values.size() && result.size() < MAX_TALENT_HISTORY; index++) {
+            ResourceLocation value = ResourceLocation.tryParse(values.getString(index));
+            if (value != null) result.add(value);
+        }
+        return List.copyOf(result);
+    }
+
     private void clearTriggerState(ResourceLocation talent) {
         String prefix = talent + "#";
         triggerCooldowns.keySet().removeIf(id -> id.startsWith(prefix));
@@ -495,5 +728,8 @@ public final class PlayerTalentData implements INBTSerializable<CompoundTag> {
 
     private static boolean validTriggerStateId(String id) {
         return id != null && !id.isBlank() && id.length() <= MAX_TRIGGER_COOLDOWN_ID_LENGTH;
+    }
+
+    private record Acquisition(long tick, long draw) {
     }
 }

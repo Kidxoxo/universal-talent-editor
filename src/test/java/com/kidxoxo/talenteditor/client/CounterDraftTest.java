@@ -35,7 +35,8 @@ class CounterDraftTest {
                 "Undead defeated", false, "damage_dealt", 2L, 200L, 5, 20,
                 new CounterDraft.ResetSettings(false, true, 2400),
                 new CounterDraft.MetadataSettings(
-                        List.of(new ResourceLocation("example", "damage_events")), "hidden"
+                        List.of(new ResourceLocation("example", "damage_events")), "hidden",
+                        new ResourceLocation("example", "light")
                 ),
                 List.of("minecraft"), List.of(new ResourceLocation("example", "hunter")),
                 new CounterDraft.Filters(
@@ -61,6 +62,7 @@ class CounterDraftTest {
         assertEquals(2400, root.get("resetIntervalTicks").getAsInt());
         assertEquals("example:damage_events", root.getAsJsonArray("categories").get(0).getAsString());
         assertEquals("hidden", root.get("visibility").getAsString());
+        assertEquals("example:light", root.get("displayCategory").getAsString());
         assertEquals(new CounterDraft.ResetSettings(true, false, 1200),
                 CounterDraft.parse("""
                         {"resetOnLogin":true,"resetOnDeath":false,"resetIntervalTicks":1200}
@@ -69,6 +71,11 @@ class CounterDraftTest {
                         List.of(new ResourceLocation("example", "combat_events")), "condition_only"),
                 CounterDraft.parse("""
                         {"categories":["example:combat_events"],"visibility":"condition_only"}
+                        """).metadataSettings());
+        assertEquals(new CounterDraft.MetadataSettings(
+                        List.of(), "full", new ResourceLocation("example", "dark")),
+                CounterDraft.parse("""
+                        {"displayCategory":"example:dark"}
                         """).metadataSettings());
     }
 }

@@ -7,6 +7,7 @@ import com.kidxoxo.talenteditor.compile.CompilationResult;
 import com.kidxoxo.talenteditor.compile.RawDefinitionSet;
 import com.kidxoxo.talenteditor.compile.TalentCompiler;
 import com.kidxoxo.talenteditor.domain.TalentPoolDefinition;
+import com.kidxoxo.talenteditor.domain.CompiledCondition;
 import com.kidxoxo.talenteditor.domain.QueueDrawConstraintAction;
 import com.kidxoxo.talenteditor.domain.DrawConstraintQueueMode;
 import com.kidxoxo.talenteditor.runtime.RuntimeSnapshot;
@@ -28,6 +29,26 @@ class TalentDrawServiceTest {
     private static final ResourceLocation COMMON = id("example:common");
     private static final ResourceLocation RARE = id("example:rare");
     private static final ResourceLocation POOL = id("example:main");
+
+    @Test
+    void attributeComparisonIsAcceptedInAcquisitionCondition() {
+        RawDefinitionSet base = definitions(3);
+        LinkedHashMap<ResourceLocation, JsonObject> talents = new LinkedHashMap<>(base.talents());
+        ResourceLocation bladeId = id("example:common_0");
+        JsonObject blade = talents.get(bladeId).deepCopy();
+        blade.add("acquireCondition", JsonParser.parseString("""
+                {"type":"attribute_compare","attribute":"minecraft:generic.attack_speed",
+                 "operator":"gte","value":8}
+                """));
+        talents.put(bladeId, blade);
+        CompilationResult result = TalentCompiler.withBuiltins().compile(
+                new RawDefinitionSet(base.rarities(), talents, base.pools(), List.of()),
+                new CompilationEnvironment(Set.of("minecraft", "forge", "talent_editor"),
+                        Set.of(id("minecraft:generic.attack_speed"))));
+        assertFalse(result.report().hasErrors(), () -> result.report().issues().toString());
+        assertTrue(result.candidate().orElseThrow().talents().get(bladeId).acquireCondition()
+                instanceof CompiledCondition.AttributeCompare);
+    }
 
     @Test
     void poolCompilesWithConfigurableChoicesRefreshesLimitAndRarityWeights() {
@@ -55,7 +76,7 @@ class TalentDrawServiceTest {
                 new CompilationEnvironment(Set.of("minecraft", "forge", "talent_editor"), Set.of())
         );
         assertFalse(legacy.report().hasErrors());
-        assertEquals(16, legacy.candidate().orElseThrow().pools().get(POOL).iconSize());
+        assertEquals(64, legacy.candidate().orElseThrow().pools().get(POOL).iconSize());
 
         JsonObject invalidPool = legacyPool.deepCopy();
         invalidPool.addProperty("iconSize", 65);
@@ -78,6 +99,21 @@ class TalentDrawServiceTest {
         assertEquals(5, offers.size());
         assertEquals(offers.size(), offers.stream().distinct().count());
         assertFalse(offers.contains(owned));
+    }
+
+    @Test
+    void talentsInAcquisitionHistoryCannotBeOfferedAfterTheyAreRevoked() {
+        RuntimeSnapshot snapshot = snapshot(5);
+        TalentPoolDefinition pool = snapshot.pools().get(POOL);
+        ResourceLocation revoked = id("example:common_0");
+
+        List<ResourceLocation> offers = TalentDrawService.generateOffers(
+                snapshot, pool, Set.of(), Set.of(revoked), ConditionEvaluator.Context.empty(Set.of()),
+                0.0D, false, new Random(7L)
+        );
+
+        assertEquals(5, offers.size());
+        assertFalse(offers.contains(revoked));
     }
 
     @Test
@@ -267,6 +303,47 @@ class TalentDrawServiceTest {
         assertEquals(3, offers.size());
         assertEquals(2, offers.stream().filter(value -> value.equals(id("example:common_0"))
                 || value.equals(id("example:common_1"))).count());
+        assertEquals(offers.size(), offers.stream().distinct().count());
+    }
+
+    @Test
+    void threeQueuedDarkSearchesFillThreeDistinctOfferSlots() {
+        RawDefinitionSet base = definitions(3);
+        LinkedHashMap<ResourceLocation, JsonObject> talents = new LinkedHashMap<>(base.talents());
+        for (String path : List.of("common_0", "common_1", "common_2")) {
+            ResourceLocation talentId = id("example:" + path);
+            JsonObject changed = talents.get(talentId).deepCopy();
+            changed.add("categories", JsonParser.parseString("[\"example:dark\"]"));
+            talents.put(talentId, changed);
+        }
+        RuntimeSnapshot snapshot = TalentCompiler.withBuiltins().compile(
+                new RawDefinitionSet(base.rarities(), talents, base.pools(), List.of()),
+                new CompilationEnvironment(Set.of("minecraft", "forge", "talent_editor"), Set.of())
+        ).candidate().orElseThrow();
+        QueueDrawConstraintAction dark = new QueueDrawConstraintAction(
+                List.of(), List.of(id("example:dark")), List.of(), List.of(), List.of(POOL), 1);
+        List<ResourceLocation> offers = TalentDrawService.generateOffersWithConstraints(
+                snapshot, snapshot.pools().get(POOL), Set.of(), Set.of(),
+                ConditionEvaluator.Context.empty(Set.of()), 0, false,
+                List.of(dark, dark, dark), new Random(37L));
+        assertEquals(3, offers.size());
+        assertEquals(3, offers.stream().distinct().count());
+        assertTrue(offers.stream().allMatch(id -> id.getPath().startsWith("common_")));
+    }
+
+    @Test
+    void queuedConstraintFallsBackToOrdinaryOffersWhenNoMatchingTalentRemains() {
+        RuntimeSnapshot snapshot = snapshot(3);
+        QueueDrawConstraintAction constraint = new QueueDrawConstraintAction(
+                List.of(), List.of(id("example:missing_category")), List.of(), List.of(), List.of(), 3
+        );
+
+        List<ResourceLocation> offers = TalentDrawService.generateOffersWithConstraint(
+                snapshot, snapshot.pools().get(POOL), Set.of(), Set.of(),
+                ConditionEvaluator.Context.empty(Set.of()), 0.0D, false, constraint, new Random(31L)
+        );
+
+        assertEquals(3, offers.size());
         assertEquals(offers.size(), offers.stream().distinct().count());
     }
 

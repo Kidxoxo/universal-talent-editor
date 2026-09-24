@@ -23,7 +23,8 @@ public record EditorBootstrap(
         List<ResourceLocation> itemTags,
         List<ResourceLocation> damageTypeTags,
         List<AttributeDescriptor> attributes,
-        List<ConfiguredItemSummary> configuredItems
+        List<ConfiguredItemSummary> configuredItems,
+        List<ResourceLocation> numericStates
 ) {
     public EditorBootstrap {
         rarities = List.copyOf(rarities);
@@ -37,6 +38,28 @@ public record EditorBootstrap(
         damageTypeTags = List.copyOf(damageTypeTags);
         attributes = List.copyOf(attributes);
         configuredItems = List.copyOf(configuredItems);
+        numericStates = List.copyOf(numericStates);
+    }
+
+    public EditorBootstrap(
+            long revision,
+            String contentHash,
+            List<RaritySummary> rarities,
+            List<TalentSummary> talents,
+            List<PoolSummary> pools,
+            List<CounterSummary> counters,
+            List<LayoutSummary> layouts,
+            List<DefinitionReference> references,
+            boolean referencesTruncated,
+            List<ResourceLocation> entityTypeTags,
+            List<ResourceLocation> itemTags,
+            List<ResourceLocation> damageTypeTags,
+            List<AttributeDescriptor> attributes,
+            List<ConfiguredItemSummary> configuredItems
+    ) {
+        this(revision, contentHash, rarities, talents, pools, counters, layouts, references,
+                referencesTruncated, entityTypeTags, itemTags, damageTypeTags, attributes,
+                configuredItems, List.of());
     }
 
     public EditorBootstrap(
@@ -55,7 +78,8 @@ public record EditorBootstrap(
             List<AttributeDescriptor> attributes
     ) {
         this(revision, contentHash, rarities, talents, pools, counters, layouts, references,
-                referencesTruncated, entityTypeTags, itemTags, damageTypeTags, attributes, List.of());
+                referencesTruncated, entityTypeTags, itemTags, damageTypeTags, attributes,
+                List.of(), List.of());
     }
 
     public EditorBootstrap(
@@ -156,12 +180,26 @@ public record EditorBootstrap(
             boolean available,
             List<ResourceLocation> categories,
             String source,
-            int inboundReferences
+            int inboundReferences,
+            Optional<ResourceLocation> icon,
+            List<ResourceLocation> acquireTalents,
+            boolean acquireRelationsEditable,
+            String acquireMode,
+            int acquireOtherConditions,
+            boolean synthesisEnabled,
+            List<ResourceLocation> synthesisTalents,
+            int synthesisOtherCosts
     ) {
         public TalentSummary {
             categories = List.copyOf(categories);
             source = normalizeSource(source);
             inboundReferences = Math.max(0, inboundReferences);
+            icon = icon == null ? Optional.empty() : icon;
+            acquireTalents = List.copyOf(acquireTalents);
+            acquireMode = acquireMode == null || acquireMode.isBlank() ? "all" : acquireMode;
+            acquireOtherConditions = Math.max(0, acquireOtherConditions);
+            synthesisTalents = List.copyOf(synthesisTalents);
+            synthesisOtherCosts = Math.max(0, synthesisOtherCosts);
         }
 
         public TalentSummary(
@@ -182,6 +220,14 @@ public record EditorBootstrap(
                 List<ResourceLocation> categories, String source
         ) {
             this(id, name, rarity, enabled, available, categories, source, 0);
+        }
+
+        public TalentSummary(
+                ResourceLocation id, String name, ResourceLocation rarity, boolean enabled, boolean available,
+                List<ResourceLocation> categories, String source, int inboundReferences
+        ) {
+            this(id, name, rarity, enabled, available, categories, source, inboundReferences,
+                    Optional.empty(), List.of(), true, "all", 0, false, List.of(), 0);
         }
     }
 

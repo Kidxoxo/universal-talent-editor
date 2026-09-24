@@ -16,6 +16,13 @@ public final class TalentEventTypes {
     public static final ResourceLocation PLAYER_TICK = id("player_tick");
     public static final ResourceLocation PLAYER_SECOND = id("player_second");
     public static final ResourceLocation PLAYER_MOVE_DISTANCE = id("player_move_distance");
+    public static final ResourceLocation LEVEL_UP = id("level_up");
+    public static final ResourceLocation DRAW_SELECTED = id("draw_selected");
+    public static final ResourceLocation DRAW_REFRESHED = id("draw_refreshed");
+    public static final ResourceLocation COUNTER_CHANGED = id("counter_changed");
+    public static final ResourceLocation FATAL_DAMAGE = id("fatal_damage");
+    public static final ResourceLocation NEARBY_ENTITY_DEATH = id("nearby_entity_death");
+    public static final ResourceLocation ITEM_SUBMITTED = id("item_submitted");
 
     private TalentEventTypes() {
     }

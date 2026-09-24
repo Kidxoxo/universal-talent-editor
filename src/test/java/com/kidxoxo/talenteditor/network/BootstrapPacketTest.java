@@ -29,7 +29,10 @@ class BootstrapPacketTest {
                 )),
                 List.of(new EditorBootstrap.TalentSummary(
                         new ResourceLocation("example", "vitality"), "Vitality", common, true, true,
-                        List.of(new ResourceLocation("example", "combat")), "file/example_pack", 1
+                        List.of(new ResourceLocation("example", "combat")), "file/example_pack", 1,
+                        Optional.of(new ResourceLocation("example", "textures/talent/vitality.png")),
+                        List.of(new ResourceLocation("example", "root")), true, "all", 2,
+                        true, List.of(new ResourceLocation("example", "lesser_vitality")), 1
                 )),
                 List.of(new EditorBootstrap.PoolSummary(
                         new ResourceLocation("example", "main"), "Main", true,
@@ -61,7 +64,8 @@ class BootstrapPacketTest {
                 List.of(new EditorBootstrap.ConfiguredItemSummary(
                         new ResourceLocation("example", "talent_shard"), "Talent Shard",
                         true, true, 1001, true, "talent_editor_generated", 0
-                ))
+                )),
+                List.of(new ResourceLocation("example", "growth"))
         );
         FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
         try {

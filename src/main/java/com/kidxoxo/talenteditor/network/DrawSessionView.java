@@ -39,6 +39,6 @@ public record DrawSessionView(
             List<PlayerTalentState.TalentView> offers
     ) {
         this(sessionId, definitionRevision, poolId, poolName, drawTokens, refreshesRemaining,
-                16, 0.0D, 0, 0, false, Map.of(), offers);
+                64, 0.0D, 0, 0, false, Map.of(), offers);
     }
 }

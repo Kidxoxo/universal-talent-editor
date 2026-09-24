@@ -34,15 +34,19 @@ public final class EditorHomeScreen extends Screen {
         int contentWidth = Math.min(900, width - 32);
         int x = (width - contentWidth) / 2;
         int actionGap = 4;
-        int actionWidth = Math.max(55, (contentWidth - actionGap) / 2);
+        int actionWidth = Math.max(55, (contentWidth - actionGap * 2) / 3);
         addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.new_talent"),
                         button -> openNew())
                 .bounds(x, 45, actionWidth, 20)
                 .build());
+        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.tree.open"),
+                        button -> openTalentTree())
+                .bounds(x + actionWidth + actionGap, 45, actionWidth, 20)
+                .build());
         addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.manage_rarities"),
                         button -> openRarities())
-                .bounds(x + actionWidth + actionGap, 45,
-                        contentWidth - actionWidth - actionGap, 20)
+                .bounds(x + (actionWidth + actionGap) * 2, 45,
+                        contentWidth - (actionWidth + actionGap) * 2, 20)
                 .build());
         int managementWidth = Math.max(36, (contentWidth - actionGap * 3) / 4);
         addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.manage_pools"),
@@ -164,6 +168,12 @@ public final class EditorHomeScreen extends Screen {
         if (minecraft == null) return;
         ClientEditorState.clearValidation();
         minecraft.setScreen(TalentEditScreen.createNew(bootstrap));
+    }
+
+    private void openTalentTree() {
+        if (minecraft == null) return;
+        ClientEditorState.clearValidation();
+        minecraft.setScreen(new TalentTreeScreen(bootstrap));
     }
 
     private void openPools() {

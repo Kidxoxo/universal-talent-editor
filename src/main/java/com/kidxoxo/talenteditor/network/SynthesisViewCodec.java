@@ -25,6 +25,7 @@ final class SynthesisViewCodec {
             }
             buffer.writeEnum(cost.type());
             buffer.writeResourceLocation(cost.id());
+            TalentViewCodec.encodeText(buffer, cost.name());
             buffer.writeVarLong(cost.required());
             buffer.writeVarLong(cost.current());
         }
@@ -41,12 +42,13 @@ final class SynthesisViewCodec {
         for (int index = 0; index < count; index++) {
             PlayerTalentState.SynthesisCostType type = buffer.readEnum(PlayerTalentState.SynthesisCostType.class);
             net.minecraft.resources.ResourceLocation id = buffer.readResourceLocation();
+            PlayerTalentState.StyledTextView name = TalentViewCodec.decodeText(buffer);
             long required = buffer.readVarLong();
             long current = buffer.readVarLong();
             if (required < 0L || required > MAX_VALUE || current < 0L || current > MAX_VALUE) {
                 throw new IllegalArgumentException("Invalid synthesis cost value");
             }
-            costs.add(new PlayerTalentState.SynthesisCostView(type, id, required, current));
+            costs.add(new PlayerTalentState.SynthesisCostView(type, id, name, required, current));
         }
         return new PlayerTalentState.SynthesisView(target, conditionMet, ready, costs);
     }

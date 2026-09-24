@@ -32,4 +32,5 @@ public final class ClientModEvents {
         event.register(OPEN_EDITOR);
         event.register(OPEN_TALENT_BOOK);
     }
+
 }

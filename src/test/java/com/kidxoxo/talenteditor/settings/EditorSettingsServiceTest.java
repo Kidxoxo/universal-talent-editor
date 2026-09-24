@@ -9,6 +9,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.io.InputStream;
 import java.util.List;
 import java.util.Map;
 import java.nio.charset.StandardCharsets;
@@ -17,12 +18,25 @@ import java.util.zip.ZipOutputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class EditorSettingsServiceTest {
     @TempDir
     Path temporaryDirectory;
+
+    @Test
+    void configuredItemsCarryTheirCuriosTagInTheModResources() throws Exception {
+        try (InputStream input = getClass().getResourceAsStream("/data/curios/tags/items/curio.json")) {
+            assertNotNull(input);
+            var tag = JsonParser.parseString(new String(input.readAllBytes(), StandardCharsets.UTF_8))
+                    .getAsJsonObject();
+            assertFalse(tag.get("replace").getAsBoolean());
+            assertEquals("talent_editor:configured_item",
+                    tag.getAsJsonArray("values").get(0).getAsString());
+        }
+    }
 
     @Test
     void settingsDefaultToAutomaticAndRoundTripManualMode() throws Exception {

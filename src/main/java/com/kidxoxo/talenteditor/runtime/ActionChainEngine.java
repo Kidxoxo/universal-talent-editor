@@ -20,9 +20,21 @@ public final class ActionChainEngine {
             Predicate<CompiledAction> executor,
             boolean retainTrace
     ) {
+        return execute(primary, failure, policy, action -> true, executor, retainTrace);
+    }
+
+    public static Result execute(
+            List<CompiledAction> primary,
+            List<CompiledAction> failure,
+            ActionFailurePolicy policy,
+            Predicate<CompiledAction> applicable,
+            Predicate<CompiledAction> executor,
+            boolean retainTrace
+    ) {
         Objects.requireNonNull(primary, "primary");
         Objects.requireNonNull(failure, "failure");
         Objects.requireNonNull(policy, "policy");
+        Objects.requireNonNull(applicable, "applicable");
         Objects.requireNonNull(executor, "executor");
         ArrayList<TriggerTraceEntry.ActionResult> results = retainTrace ? new ArrayList<>() : null;
         int applied = 0;
@@ -30,6 +42,7 @@ public final class ActionChainEngine {
         boolean primaryFailed = false;
         for (int index = 0; index < primary.size(); index++) {
             CompiledAction action = primary.get(index);
+            if (!applicable.test(action)) continue;
             boolean actionApplied = executor.test(action);
             attempted++;
             retain(results, TriggerTraceEntry.Branch.PRIMARY, index, action, actionApplied);
@@ -42,6 +55,7 @@ public final class ActionChainEngine {
         if (primaryFailed) {
             for (int index = 0; index < failure.size(); index++) {
                 CompiledAction action = failure.get(index);
+                if (!applicable.test(action)) continue;
                 boolean actionApplied = executor.test(action);
                 attempted++;
                 retain(results, TriggerTraceEntry.Branch.FAILURE, index, action, actionApplied);

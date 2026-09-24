@@ -12,6 +12,216 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TalentDraftTest {
     @Test
+    void attributeRequirementIsVisuallyEditableAndRoundTrips() {
+        TalentDraft draft = TalentDraft.parse("""
+                {"schema":2,"text":{"name":"Blade"},"rarity":"talent_editor:common",
+                 "acquireCondition":{"type":"all","children":[
+                   {"type":"has_talent","talent":"example:sword"},
+                   {"type":"attribute_compare","attribute":"minecraft:generic.attack_speed",
+                    "operator":"gte","value":8}]}}
+                """);
+        TalentDraft.RequirementsDraft requirements = draft.requirements();
+        assertTrue(requirements.editable());
+        assertEquals(TalentDraft.RequirementType.ATTRIBUTE, requirements.rows().get(1).type());
+        assertEquals("gte", requirements.rows().get(1).operator());
+        assertEquals(8, requirements.rows().get(1).attributeValue());
+        draft.updateRequirements(requirements.mode(), requirements.rows());
+        TalentDraft reopened = TalentDraft.parse(draft.toJson("Blade"));
+        assertEquals(requirements.rows(), reopened.requirements().rows());
+    }
+
+    @Test
+    void individualEffectGatesRemainVisibleAndSurviveDraftRoundTrip() {
+        String source = """
+                {"schema":2,"text":{"name":"Gated"},"rarity":"talent_editor:common",
+                 "activeEffects":[
+                   {"type":"attribute_modifier","attribute":"minecraft:generic.armor",
+                    "amount":5,"operation":"addition",
+                    "disabledWhen":{"type":"has_talent","talent":"example:override"}},
+                   {"type":"add_effect","effect":"minecraft:speed","target":"self",
+                    "durationTicks":100,"amplifier":0,
+                    "enabledWhen":{"type":"has_talent","talent":"example:required"}}],
+                 "triggers":[{"id":"hit","event":"damage_dealt","actions":[
+                   {"type":"modify_damage_expression","operation":"add","expression":"40",
+                    "disabledWhen":{"type":"has_talent","talent":"example:override"}}]}]}
+                """;
+        TalentDraft draft = TalentDraft.parse(source);
+        assertEquals(2, draft.basicEffectRows().size());
+        assertFalse(draft.editorOverview().section(TalentDraft.EditorSection.RAW_JSON).configured());
+        assertTrue(draft.advancedAction(TalentDraft.AdvancedActionLocation.ACTIVE_EFFECTS, -1, 0)
+                .has("disabledWhen"));
+        assertTrue(draft.advancedAction(TalentDraft.AdvancedActionLocation.TRIGGER_ACTIONS, 0, 0)
+                .has("disabledWhen"));
+        TalentDraft reopened = TalentDraft.parse(draft.toJson("Gated"));
+        assertEquals(2, reopened.basicEffectRows().size());
+        assertTrue(reopened.advancedAction(TalentDraft.AdvancedActionLocation.ACTIVE_EFFECTS, -1, 1)
+                .has("enabledWhen"));
+        assertTrue(reopened.advancedAction(TalentDraft.AdvancedActionLocation.TRIGGER_ACTIONS, 0, 0)
+                .has("disabledWhen"));
+    }
+    @Test
+    void newTalentUsesDrawableDefaultOfferWhileLegacyOmissionStaysDisabled() {
+        TalentDraft created = TalentDraft.create();
+        assertTrue(created.hasOfferDefinition());
+        assertTrue(created.offer().enabled());
+        assertEquals(1.0D, created.offer().weight());
+        assertEquals(java.util.List.of(new ResourceLocation("talent_editor", "default")),
+                created.offer().pools());
+        assertFalse(created.editorOverview().section(TalentDraft.EditorSection.OFFER).configured());
+
+        TalentDraft legacy = TalentDraft.parse("""
+                {"schema":2,"text":{"name":"Legacy"},
+                 "rarity":"talent_editor:common","activeEffects":[]}
+                """);
+        assertFalse(legacy.hasOfferDefinition());
+        assertFalse(legacy.offer().enabled());
+        assertTrue(legacy.editorOverview().section(TalentDraft.EditorSection.OFFER).configured());
+        assertFalse(JsonParser.parseString(legacy.toJson("Legacy")).getAsJsonObject().has("offer"));
+    }
+
+    @Test
+    void editorOverviewTracksVisualSectionsAndAdvancedJsonFallback() {
+        TalentDraft draft = TalentDraft.create();
+        TalentDraft.EditorOverview defaults = draft.editorOverview();
+        assertFalse(defaults.section(TalentDraft.EditorSection.TEXT).configured());
+        assertFalse(defaults.section(TalentDraft.EditorSection.METADATA).configured());
+        assertFalse(defaults.section(TalentDraft.EditorSection.BASIC_EFFECTS).configured());
+        assertFalse(defaults.section(TalentDraft.EditorSection.RAW_JSON).configured());
+
+        draft.addAttribute(new ResourceLocation("minecraft", "generic.armor"));
+        draft.updateLifecycle(new TalentDraft.LifecycleDraft(200, 0, false, false, false));
+        TalentDraft.EditorOverview changed = draft.editorOverview();
+        assertEquals(1, changed.section(TalentDraft.EditorSection.BASIC_EFFECTS).count());
+        assertTrue(changed.section(TalentDraft.EditorSection.BASIC_EFFECTS).configured());
+        assertTrue(changed.section(TalentDraft.EditorSection.LIFECYCLE).configured());
+
+        TalentDraft advanced = TalentDraft.parse("""
+                {"schema":2,"text":{"name":"Advanced"},"rarity":"talent_editor:common",
+                 "activeEffects":[{"type":"future:unknown_effect","value":7}]}
+                """);
+        assertTrue(advanced.editorOverview().section(TalentDraft.EditorSection.RAW_JSON).configured());
+        assertTrue(advanced.editorOverview().section(TalentDraft.EditorSection.RAW_JSON).advancedOnly());
+    }
+
+    @Test
+    void metadataUpdatesDoNotRewriteStyledDescriptionsAndEffectGroupsPreserveUnknownRows() {
+        TalentDraft draft = TalentDraft.parse("""
+                {
+                  "schema":2,
+                  "text":{"name":"Grouped","description":[{"literal":"Keep","color":"#55AAFF"}]},
+                  "rarity":"talent_editor:common",
+                  "activeEffects":[
+                    {"type":"attribute_modifier","attribute":"minecraft:generic.armor","amount":2},
+                    {"type":"dynamic_attribute_modifier","attribute":"minecraft:generic.attack_damage",
+                     "source":"health_percent","base":0,"scale":1},
+                    {"type":"future:unknown_effect","value":9}
+                  ]
+                }
+                """);
+        draft.updateMetadata(false, new ResourceLocation("talent_editor", "common"), false,
+                java.util.List.of(new ResourceLocation("example", "combat")),
+                java.util.Optional.empty(), 2);
+        assertEquals(1, draft.basicEffectRows().size());
+        assertEquals(1, draft.specialEffectRows().size());
+        JsonObject output = JsonParser.parseString(draft.toJson("Grouped")).getAsJsonObject();
+        assertEquals("#55AAFF", output.getAsJsonObject("text").getAsJsonArray("description")
+                .get(0).getAsJsonObject().get("color").getAsString());
+        assertEquals(9, output.getAsJsonArray("activeEffects").get(2)
+                .getAsJsonObject().get("value").getAsInt());
+    }
+
+    @Test
+    void activeAdvancedEditorListsOnlyHudAndRenderRowsWithoutDroppingOrdinaryEffects() {
+        TalentDraft draft = TalentDraft.parse("""
+                {
+                  "schema":2,
+                  "text":{"name":"Active interfaces"},
+                  "rarity":"talent_editor:common",
+                  "activeEffects":[
+                    {"type":"attribute_modifier","attribute":"minecraft:generic.armor","amount":2},
+                    {"type":"hud_resource","state":"example:energy","maximum":"100"},
+                    {"type":"future:custom_action","customValue":7},
+                    {"type":"player_render","alpha":0.7,"scale":1.1}
+                  ]
+                }
+                """);
+
+        var rows = draft.advancedActionRows(TalentDraft.AdvancedActionLocation.ACTIVE_EFFECTS, -1);
+        assertEquals(2, rows.size());
+        assertEquals(1, rows.get(0).rawIndex());
+        assertEquals("hud_resource", rows.get(0).type());
+        assertEquals(3, rows.get(1).rawIndex());
+        assertEquals(java.util.List.of(new ResourceLocation("example", "energy")), draft.numericStateIds());
+
+        draft.moveAdvancedAction(TalentDraft.AdvancedActionLocation.ACTIVE_EFFECTS, -1, 3, -1);
+        JsonArray effects = JsonParser.parseString(draft.toJson("Active interfaces"))
+                .getAsJsonObject().getAsJsonArray("activeEffects");
+        assertEquals("attribute_modifier", effects.get(0).getAsJsonObject().get("type").getAsString());
+        assertEquals("player_render", effects.get(1).getAsJsonObject().get("type").getAsString());
+        assertEquals(7, effects.get(2).getAsJsonObject().get("customValue").getAsInt());
+        assertEquals("hud_resource", effects.get(3).getAsJsonObject().get("type").getAsString());
+    }
+
+    @Test
+    void visualAdvancedEditorsMutateConditionsAndOrderedActionChainsWithoutDroppingLegacyActions() {
+        TalentDraft draft = TalentDraft.parse("""
+                {
+                  "schema":2,
+                  "text":{"name":"Visual Advanced"},
+                  "rarity":"talent_editor:common",
+                  "triggers":[{
+                    "id":"guard","event":"fatal_damage",
+                    "condition":{"type":"event_entity_tag","tag":"minecraft:undead"},
+                    "actions":[{"type":"cancel_damage"}]
+                  }]
+                }
+                """);
+
+        TalentDraft.ExpressionConditionDraft original = draft.triggerExpressionCondition(0);
+        assertFalse(original.expression());
+        assertTrue(original.hadCondition());
+        draft.updateTriggerExpressionCondition(0, "health_percent", "lte", "0.25");
+        assertTrue(draft.triggerExpressionCondition(0).expression());
+
+        JsonObject state = JsonParser.parseString("""
+                {"type":"talent_editor:modify_state","state":"example:guard",
+                 "operation":"add","expression":"1","minimum":0,"maximum":10,
+                 "target":"self","radius":4}
+                """).getAsJsonObject();
+        draft.putAdvancedAction(TalentDraft.AdvancedActionLocation.TRIGGER_ACTIONS, 0, -1, state);
+        assertEquals(java.util.List.of(new ResourceLocation("example", "guard")), draft.numericStateIds());
+        assertEquals(2, draft.advancedActionRows(
+                TalentDraft.AdvancedActionLocation.TRIGGER_ACTIONS, 0).size());
+        assertFalse(draft.advancedActionRows(
+                TalentDraft.AdvancedActionLocation.TRIGGER_ACTIONS, 0).get(0).editable());
+        assertTrue(draft.advancedActionRows(
+                TalentDraft.AdvancedActionLocation.TRIGGER_ACTIONS, 0).get(1).editable());
+        assertFalse(draft.editorOverview().section(TalentDraft.EditorSection.RAW_JSON).configured());
+        assertTrue(draft.editorOverview().section(TalentDraft.EditorSection.TRIGGERS).advancedOnly());
+
+        draft.moveAdvancedAction(TalentDraft.AdvancedActionLocation.TRIGGER_ACTIONS, 0, 1, -1);
+        JsonObject reward = JsonParser.parseString("""
+                {"type":"talent_editor:give_item","item":"minecraft:diamond",
+                 "count":"2","dropOverflow":true}
+                """).getAsJsonObject();
+        draft.putAdvancedAction(TalentDraft.AdvancedActionLocation.ON_ACQUIRE, -1, -1, reward);
+
+        JsonObject output = JsonParser.parseString(draft.toJson("Visual Advanced")).getAsJsonObject();
+        JsonObject condition = output.getAsJsonArray("triggers").get(0).getAsJsonObject()
+                .getAsJsonObject("condition");
+        assertEquals("talent_editor:expression_compare", condition.get("type").getAsString());
+        assertEquals("health_percent", condition.get("left").getAsString());
+        assertEquals("talent_editor:modify_state", output.getAsJsonArray("triggers").get(0)
+                .getAsJsonObject().getAsJsonArray("actions").get(0).getAsJsonObject()
+                .get("type").getAsString());
+        assertEquals("cancel_damage", output.getAsJsonArray("triggers").get(0)
+                .getAsJsonObject().getAsJsonArray("actions").get(1).getAsJsonObject()
+                .get("type").getAsString());
+        assertEquals("minecraft:diamond", output.getAsJsonArray("onAcquire").get(0)
+                .getAsJsonObject().get("item").getAsString());
+    }
+
+    @Test
     void exposesEventTriggersAsEditableUnifiedEffectRows() {
         TalentDraft draft = TalentDraft.create();
         draft.addAttribute(new ResourceLocation("minecraft", "generic.attack_damage"));
@@ -74,7 +284,6 @@ class TalentDraftTest {
         draft.updateMetadata(
                 false,
                 new ResourceLocation("talent_editor", "common"),
-                TalentDraft.parseDescriptionEditorText(metadata.descriptionEditorText()),
                 false,
                 java.util.List.of(
                         new ResourceLocation("example", "combat"),
@@ -615,7 +824,7 @@ class TalentDraftTest {
         assertTrue(acquire.messageEnabled());
         assertTrue(acquire.subtitleEnabled());
         assertEquals("Awakened", acquire.text().literal());
-        assertFalse(draft.presentation(TalentDraft.PresentationPhase.SYNTHESIZE).editable());
+        assertTrue(draft.presentation(TalentDraft.PresentationPhase.SYNTHESIZE).editable());
 
         TalentDraft.PresentationDraft changed = new TalentDraft.PresentationDraft(
                 true, true, new ResourceLocation("minecraft", "ui.toast.challenge_complete"),
@@ -624,6 +833,7 @@ class TalentDraftTest {
                 false, LocalizedTextDraft.literal(""), 10, 70, 20
         );
         draft.updatePresentation(TalentDraft.PresentationPhase.ACQUIRE, changed);
+        draft.updatePresentation(TalentDraft.PresentationPhase.SYNTHESIZE, changed);
         JsonObject output = JsonParser.parseString(draft.toJson("Ceremony")).getAsJsonObject();
         assertEquals("minecraft:ui.toast.challenge_complete", output.getAsJsonArray("onAcquire")
                 .get(0).getAsJsonObject().get("sound").getAsString());
@@ -631,5 +841,7 @@ class TalentDraftTest {
                 .get(1).getAsJsonObject().get("mode").getAsString());
         assertEquals("future:custom_presentation", output.getAsJsonArray("onSynthesize")
                 .get(0).getAsJsonObject().get("type").getAsString());
+        assertEquals("minecraft:ui.toast.challenge_complete", output.getAsJsonArray("onSynthesize")
+                .get(1).getAsJsonObject().get("sound").getAsString());
     }
 }

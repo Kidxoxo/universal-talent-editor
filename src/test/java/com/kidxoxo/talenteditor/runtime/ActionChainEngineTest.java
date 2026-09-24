@@ -18,6 +18,19 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ActionChainEngineTest {
     @Test
+    void inapplicableActionDoesNotTriggerFailureBranch() {
+        CompiledAction skipped = damage(1.0D);
+        CompiledAction applied = damage(2.0D);
+        CompiledAction fallback = new CancelDamageAction();
+        ActionChainEngine.Result result = ActionChainEngine.execute(
+                List.of(skipped, applied), List.of(fallback), ActionFailurePolicy.STOP,
+                action -> action != skipped, action -> action == applied, true
+        );
+        assertFalse(result.primaryFailed());
+        assertEquals(1, result.attemptedActions());
+        assertEquals(1, result.appliedActions());
+    }
+    @Test
     void continuesPrimaryChainAndRunsFallbackAfterAnyFailure() {
         CompiledAction first = damage(1.0D);
         CompiledAction failed = damage(2.0D);

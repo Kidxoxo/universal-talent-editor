@@ -40,12 +40,22 @@ public final class ResourceReferencePickerScreen extends Screen {
             EditorBootstrap bootstrap,
             Consumer<ResourceLocation> selection
     ) {
+        this(parent, source, bootstrap, List.of(), selection);
+    }
+
+    public ResourceReferencePickerScreen(
+            Screen parent,
+            Source source,
+            EditorBootstrap bootstrap,
+            List<ResourceLocation> additionalIds,
+            Consumer<ResourceLocation> selection
+    ) {
         super(Component.translatable("screen.talent_editor.reference_picker.title",
                 Component.translatable("screen.talent_editor.reference_picker.source." + source.serializedName())));
         this.parent = parent;
         this.source = source;
         this.selection = selection;
-        this.entries = buildEntries(source, bootstrap);
+        this.entries = buildEntries(source, bootstrap, additionalIds);
     }
 
     @Override
@@ -142,7 +152,9 @@ public final class ResourceReferencePickerScreen extends Screen {
                 .toLowerCase(Locale.ROOT).contains(normalized);
     }
 
-    private static List<Entry> buildEntries(Source source, EditorBootstrap bootstrap) {
+    private static List<Entry> buildEntries(
+            Source source, EditorBootstrap bootstrap, List<ResourceLocation> additionalIds
+    ) {
         ArrayList<Entry> result = new ArrayList<>();
         switch (source) {
             case TALENT -> bootstrap.talents().stream().limit(MAX_ENTRIES).forEach(talent -> result.add(new Entry(
@@ -151,6 +163,17 @@ public final class ResourceReferencePickerScreen extends Screen {
             case COUNTER -> bootstrap.counters().stream().limit(MAX_ENTRIES).forEach(counter -> result.add(new Entry(
                     counter.id(), counter.name(), ReferenceDiagnostics.status(counter.enabled(), counter.available())
             )));
+            case NUMERIC_STATE -> {
+                LinkedHashSet<ResourceLocation> states = new LinkedHashSet<>(bootstrap.numericStates());
+                states.addAll(additionalIds);
+                String label = Component.translatable(
+                        "screen.talent_editor.reference_picker.numeric_state_defined"
+                ).getString();
+                states.stream().sorted(Comparator.comparing(ResourceLocation::toString)).limit(MAX_ENTRIES)
+                        .forEach(id -> result.add(new Entry(
+                                id, label, ReferenceDiagnostics.Status.AVAILABLE
+                        )));
+            }
             case COUNTER_CATEGORY -> {
                 Map<ResourceLocation, Integer> counts = new LinkedHashMap<>();
                 bootstrap.counters().forEach(counter -> counter.categories().forEach(category ->
@@ -327,6 +350,7 @@ public final class ResourceReferencePickerScreen extends Screen {
     public enum Source {
         TALENT("talent", "server_definition"),
         COUNTER("counter", "server_definition"),
+        NUMERIC_STATE("numeric_state", "defined_state"),
         COUNTER_CATEGORY("counter_category", "derived_counter_category"),
         CATEGORY("category", "derived_category"),
         ITEM("item", "registry_or_definition"),

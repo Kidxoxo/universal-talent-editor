@@ -10,10 +10,14 @@ public sealed interface CompiledCondition permits CompiledCondition.Always, Comp
         CompiledCondition.Any, CompiledCondition.Not, CompiledCondition.HasTalent,
         CompiledCondition.CounterAtLeast, CompiledCondition.CategoryCountAtLeast,
         CompiledCondition.CounterCategoryTotalAtLeast, CompiledCondition.HasItem,
+        CompiledCondition.AttributeCompare,
         CompiledCondition.EventEntityType, CompiledCondition.EventEntityTag,
-        CompiledCondition.DamageTypeTag, CompiledCondition.EventItem,
-        CompiledCondition.EventItemTag, CompiledCondition.EventBlock,
-        CompiledCondition.EventBlockTag {
+        CompiledCondition.EventEntityEffect, CompiledCondition.DamageTypeTag,
+        CompiledCondition.EventTalent, CompiledCondition.EventTalentCategory,
+        CompiledCondition.EventTalentRarity, CompiledCondition.EventItem,
+        CompiledCondition.EventItemTag, CompiledCondition.EventItemEdible, CompiledCondition.EventBlock,
+        CompiledCondition.EventBlockTag, CompiledCondition.CuriosEquipped,
+        CompiledCondition.ExpressionCompare {
     ResourceLocation type();
 
     record Always(boolean value) implements CompiledCondition {
@@ -153,11 +157,57 @@ public sealed interface CompiledCondition permits CompiledCondition.Always, Comp
         public ResourceLocation type() { return TYPE; }
     }
 
+    record EventEntityEffect(ResourceLocation effect) implements CompiledCondition {
+        public static final ResourceLocation TYPE = new ResourceLocation(TalentEditorMod.MOD_ID, "event_entity_effect");
+
+        public EventEntityEffect {
+            effect = Objects.requireNonNull(effect, "effect");
+        }
+
+        @Override
+        public ResourceLocation type() { return TYPE; }
+    }
+
     record DamageTypeTag(ResourceLocation tag) implements CompiledCondition {
         public static final ResourceLocation TYPE = new ResourceLocation(TalentEditorMod.MOD_ID, "damage_type_tag");
 
         public DamageTypeTag {
             tag = Objects.requireNonNull(tag, "tag");
+        }
+
+        @Override
+        public ResourceLocation type() { return TYPE; }
+    }
+
+    record EventTalent(ResourceLocation talent) implements CompiledCondition {
+        public static final ResourceLocation TYPE = new ResourceLocation(TalentEditorMod.MOD_ID, "event_talent");
+
+        public EventTalent {
+            talent = Objects.requireNonNull(talent, "talent");
+        }
+
+        @Override
+        public ResourceLocation type() { return TYPE; }
+    }
+
+    record EventTalentCategory(ResourceLocation category) implements CompiledCondition {
+        public static final ResourceLocation TYPE =
+                new ResourceLocation(TalentEditorMod.MOD_ID, "event_talent_category");
+
+        public EventTalentCategory {
+            category = Objects.requireNonNull(category, "category");
+        }
+
+        @Override
+        public ResourceLocation type() { return TYPE; }
+    }
+
+    record EventTalentRarity(ResourceLocation rarity) implements CompiledCondition {
+        public static final ResourceLocation TYPE =
+                new ResourceLocation(TalentEditorMod.MOD_ID, "event_talent_rarity");
+
+        public EventTalentRarity {
+            rarity = Objects.requireNonNull(rarity, "rarity");
         }
 
         @Override
@@ -186,6 +236,13 @@ public sealed interface CompiledCondition permits CompiledCondition.Always, Comp
         public ResourceLocation type() { return TYPE; }
     }
 
+    record EventItemEdible() implements CompiledCondition {
+        public static final ResourceLocation TYPE = new ResourceLocation(TalentEditorMod.MOD_ID, "event_item_edible");
+
+        @Override
+        public ResourceLocation type() { return TYPE; }
+    }
+
     record EventBlock(ResourceLocation block) implements CompiledCondition {
         public static final ResourceLocation TYPE = new ResourceLocation(TalentEditorMod.MOD_ID, "event_block");
 
@@ -206,5 +263,39 @@ public sealed interface CompiledCondition permits CompiledCondition.Always, Comp
 
         @Override
         public ResourceLocation type() { return TYPE; }
+    }
+
+    record CuriosEquipped(ResourceLocation item) implements CompiledCondition {
+        public static final ResourceLocation TYPE = new ResourceLocation(TalentEditorMod.MOD_ID, "curios_equipped");
+        public CuriosEquipped { item = Objects.requireNonNull(item, "item"); }
+        @Override public ResourceLocation type() { return TYPE; }
+    }
+
+    /** Compares the player's current effective attribute value, including equipment and modifiers. */
+    record AttributeCompare(ResourceLocation attribute, ComparisonOperator operator, double value)
+            implements CompiledCondition {
+        public static final ResourceLocation TYPE = new ResourceLocation(TalentEditorMod.MOD_ID, "attribute_compare");
+        public AttributeCompare {
+            attribute = Objects.requireNonNull(attribute, "attribute");
+            operator = Objects.requireNonNull(operator, "operator");
+            if (!Double.isFinite(value)) throw new IllegalArgumentException("value must be finite");
+        }
+        @Override public ResourceLocation type() { return TYPE; }
+    }
+
+    record ExpressionCompare(
+            NumericExpression left,
+            ComparisonOperator operator,
+            NumericExpression right
+    ) implements CompiledCondition {
+        public static final ResourceLocation TYPE = new ResourceLocation(TalentEditorMod.MOD_ID, "expression_compare");
+
+        public ExpressionCompare {
+            left = Objects.requireNonNull(left, "left");
+            operator = Objects.requireNonNull(operator, "operator");
+            right = Objects.requireNonNull(right, "right");
+        }
+
+        @Override public ResourceLocation type() { return TYPE; }
     }
 }

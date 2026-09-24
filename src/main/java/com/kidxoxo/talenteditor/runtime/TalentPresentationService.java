@@ -22,8 +22,20 @@ import java.util.List;
 
 public final class TalentPresentationService {
     public void acquired(ServerPlayer player, TalentDefinition talent, boolean synthesized) {
-        execute(player, talent.onAcquire(), synthesized);
-        if (synthesized) execute(player, talent.onSynthesize(), true);
+        player.sendSystemMessage(net.minecraft.network.chat.Component.translatable(
+                "message.talent_editor.talent_acquired", talent.name().component()
+        ));
+        RuntimeActionExecutor.executeLifecycle(player, talent.id(), talent.onAcquire(), synthesized);
+        if (synthesized) {
+            RuntimeActionExecutor.executeLifecycle(player, talent.id(), talent.onSynthesize(), true);
+            if (talent.onSynthesize().stream().noneMatch(ShowMessageAction.class::isInstance)) {
+                showDefaultSynthesisTitle(player, talent);
+            }
+        }
+    }
+
+    public void removed(ServerPlayer player, TalentDefinition talent) {
+        RuntimeActionExecutor.executeLifecycle(player, talent.id(), talent.onRemove(), false);
     }
 
     public static int execute(ServerPlayer player, List<CompiledAction> actions) {
@@ -33,24 +45,31 @@ public final class TalentPresentationService {
     private static int execute(ServerPlayer player, List<CompiledAction> actions, boolean synthesis) {
         int applied = 0;
         for (CompiledAction action : actions) {
-            if (action instanceof PlaySoundAction soundAction) {
-                if (synthesis) playSynthesisSound(player, soundAction);
-                else playVanillaSound(player, soundAction);
-                applied++;
-            } else if (action instanceof ShowMessageAction messageAction) {
-                if (synthesis && TalentEditorMod.SETTINGS.synthesisMessageAudience()
-                        == EditorRuntimeSettings.SynthesisMessageAudience.GLOBAL) {
-                    player.server.getPlayerList().getPlayers().forEach(recipient ->
-                            showMessage(recipient, messageAction));
-                } else {
-                    showMessage(player, messageAction);
-                }
-                applied++;
-            } else {
+            if (executePresentation(player, action, synthesis)) applied++;
+            else {
                 TalentEditorMod.LOGGER.warn("Ignored unsupported acquisition presentation action {}", action.type());
             }
         }
         return applied;
+    }
+
+    public static boolean executePresentation(ServerPlayer player, CompiledAction action, boolean synthesis) {
+        if (action instanceof PlaySoundAction soundAction) {
+            if (synthesis) playSynthesisSound(player, soundAction);
+            else playVanillaSound(player, soundAction);
+            return true;
+        }
+        if (action instanceof ShowMessageAction messageAction) {
+            if (synthesis && TalentEditorMod.SETTINGS.synthesisMessageAudience()
+                    == EditorRuntimeSettings.SynthesisMessageAudience.GLOBAL) {
+                player.server.getPlayerList().getPlayers().forEach(recipient ->
+                        showMessage(recipient, messageAction));
+            } else {
+                showMessage(player, messageAction);
+            }
+            return true;
+        }
+        return false;
     }
 
     private static void playSynthesisSound(ServerPlayer player, PlaySoundAction action) {
@@ -91,5 +110,13 @@ public final class TalentPresentationService {
                 new ClientboundSetSubtitleTextPacket(subtitle.component())
         ));
         player.connection.send(new ClientboundSetTitleTextPacket(text));
+    }
+
+    private static void showDefaultSynthesisTitle(ServerPlayer player, TalentDefinition talent) {
+        player.connection.send(new ClientboundSetTitlesAnimationPacket(10, 70, 20));
+        player.connection.send(new ClientboundSetSubtitleTextPacket(talent.name().component()));
+        player.connection.send(new ClientboundSetTitleTextPacket(
+                net.minecraft.network.chat.Component.translatable("message.talent_editor.synthesis_complete")
+        ));
     }
 }

@@ -15,23 +15,38 @@ public record PlayerTalentState(
         boolean synthesesTruncated,
         List<SynthesisView> syntheses,
         boolean countersTruncated,
-        List<CounterProgressView> counters
+        List<CounterProgressView> counters,
+        List<HudResourceView> hudResources,
+        RenderView render
 ) {
     public PlayerTalentState {
         talents = List.copyOf(talents);
         syntheses = List.copyOf(syntheses);
         counters = List.copyOf(counters);
+        hudResources = List.copyOf(hudResources);
+        render = render == null ? RenderView.DEFAULT : render;
     }
 
     public PlayerTalentState(long definitionRevision, int drawTokens, boolean truncated, List<TalentView> talents) {
-        this(definitionRevision, drawTokens, truncated, talents, false, List.of(), false, List.of());
+        this(definitionRevision, drawTokens, truncated, talents, false, List.of(), false, List.of(),
+                List.of(), RenderView.DEFAULT);
     }
 
     public PlayerTalentState(
             long definitionRevision, int drawTokens, boolean truncated, List<TalentView> talents,
             boolean synthesesTruncated, List<SynthesisView> syntheses
     ) {
-        this(definitionRevision, drawTokens, truncated, talents, synthesesTruncated, syntheses, false, List.of());
+        this(definitionRevision, drawTokens, truncated, talents, synthesesTruncated, syntheses, false, List.of(),
+                List.of(), RenderView.DEFAULT);
+    }
+
+    public PlayerTalentState(
+            long definitionRevision, int drawTokens, boolean truncated, List<TalentView> talents,
+            boolean synthesesTruncated, List<SynthesisView> syntheses,
+            boolean countersTruncated, List<CounterProgressView> counters
+    ) {
+        this(definitionRevision, drawTokens, truncated, talents, synthesesTruncated, syntheses,
+                countersTruncated, counters, List.of(), RenderView.DEFAULT);
     }
 
     public record TalentView(
@@ -108,9 +123,13 @@ public record PlayerTalentState(
     public record SynthesisCostView(
             SynthesisCostType type,
             ResourceLocation id,
+            StyledTextView name,
             long required,
             long current
     ) {
+        public SynthesisCostView(SynthesisCostType type, ResourceLocation id, long required, long current) {
+            this(type, id, new StyledTextView(id.getPath(), "", null, false, false), required, current);
+        }
         public boolean satisfied() {
             return current >= required;
         }
@@ -125,6 +144,31 @@ public record PlayerTalentState(
             boolean defined,
             boolean active
     ) {
+    }
+
+    public record HudResourceView(ResourceLocation state, StyledTextView name, double value, double maximum,
+                                  int color, int order, boolean showWhenFull) {
+        public HudResourceView(ResourceLocation state, double value, double maximum,
+                               int color, int order, boolean showWhenFull) {
+            this(state, new StyledTextView(state.getPath(), "", null, false, false),
+                    value, maximum, color, order, showWhenFull);
+        }
+        public HudResourceView {
+            name = name == null ? new StyledTextView(state.getPath(), "", null, false, false) : name;
+            if (!Double.isFinite(value)) value = 0.0D;
+            if (!Double.isFinite(maximum) || maximum <= 0.0D) maximum = 1.0D;
+            color &= 0xFFFFFF;
+        }
+    }
+
+    public record RenderView(double alpha, double scale, boolean hideNameplate) {
+        public static final RenderView DEFAULT = new RenderView(1.0D, 1.0D, false);
+        public RenderView {
+            if (!Double.isFinite(alpha)) alpha = 1.0D;
+            if (!Double.isFinite(scale)) scale = 1.0D;
+            alpha = Math.max(0.05D, Math.min(1.0D, alpha));
+            scale = Math.max(0.1D, Math.min(4.0D, scale));
+        }
     }
 
     public enum SynthesisCostType {

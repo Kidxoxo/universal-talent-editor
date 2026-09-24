@@ -2,11 +2,11 @@
   "schema": 2,
   "enabled": true,
   "priority": 0,
-  "panelPercent": 42,
+  "panelPercent": 60,
   "columns": 2,
-  "rows": 4,
-  "slotWidth": 58,
-  "slotHeight": 30,
-  "iconSize": 16,
+  "rows": 3,
+  "slotWidth": 120,
+  "slotHeight": 56,
+  "iconSize": 48,
   "showGeneratedEffects": true
 }

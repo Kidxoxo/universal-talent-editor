@@ -11,23 +11,26 @@ import net.minecraft.resources.ResourceLocation;
 import java.util.List;
 import java.util.Locale;
 
+/** Manages ordinary attributes, maintained effects, and effect immunities in one list. */
 public final class TalentEffectEditorScreen extends Screen {
     private static final List<String> OPERATIONS = List.of("addition", "multiply_base", "multiply_total");
+    private static final int ROW_HEIGHT = 20;
 
     private final TalentEditScreen owner;
     private final EditorBootstrap bootstrap;
     private int selectedRawIndex;
     private int operationIndex;
+    private int scroll;
     private EditBox amountField;
     private Button operationButton;
     private Button applyButton;
+    private Button removeButton;
+    private Button gateButton;
     private String status = "";
     private int statusColor = EditorTheme.MUTED;
 
     TalentEffectEditorScreen(TalentEditScreen owner, EditorBootstrap bootstrap, int selectedRawIndex) {
-        super(Component.translatable(selectedRawIndex < 0
-                ? "screen.talent_editor.effect_editor.add_title"
-                : "screen.talent_editor.effect_editor.edit_title"));
+        super(Component.translatable("screen.talent_editor.effect_editor.manage_title"));
         this.owner = owner;
         this.bootstrap = bootstrap;
         this.selectedRawIndex = selectedRawIndex;
@@ -38,35 +41,38 @@ public final class TalentEffectEditorScreen extends Screen {
         int formWidth = Math.min(700, width - 32);
         int x = (width - formWidth) / 2;
         int gap = 6;
-        int quarter = (formWidth - gap * 3) / 4;
+        int third = (formWidth - gap * 2) / 3;
         addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.add_attribute"),
                         button -> chooseAttribute())
-                .bounds(x, 43, quarter, 20).build());
+                .bounds(x, 43, third, 20).build());
         addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.add_maintained_effect"),
                         button -> chooseMaintainedEffect())
-                .bounds(x + quarter + gap, 43, quarter, 20).build());
+                .bounds(x + third + gap, 43, third, 20).build());
         addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.add_immunity"),
                         button -> chooseImmunity())
-                .bounds(x + (quarter + gap) * 2, 43, quarter, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.add_complex_effect"),
-                        button -> openComplexEffects())
-                .bounds(x + (quarter + gap) * 3, 43,
-                        formWidth - (quarter + gap) * 3, 20).build());
+                .bounds(x + (third + gap) * 2, 43, formWidth - (third + gap) * 2, 20).build());
 
         int half = (formWidth - gap) / 2;
-        amountField = new EditBox(font, x, 126, half, 20,
+        int detailY = height - 82;
+        amountField = new EditBox(font, x, detailY, half, 20,
                 Component.translatable("screen.talent_editor.form.amount"));
         amountField.setMaxLength(48);
         addRenderableWidget(amountField);
         operationButton = addRenderableWidget(Button.builder(operationLabel(), button -> cycleOperation())
-                .bounds(x + half + gap, 126, formWidth - half - gap, 20).build());
+                .bounds(x + half + gap, detailY, formWidth - half - gap, 20).build());
 
         int bottom = height - 28;
         addRenderableWidget(Button.builder(Component.translatable("gui.back"), button -> returnOwner())
-                .bounds(x, bottom, half, 20).build());
+                .bounds(x, bottom, third, 20).build());
         applyButton = addRenderableWidget(Button.builder(
                         Component.translatable("screen.talent_editor.effect_editor.apply"), button -> applySelected())
-                .bounds(x + half + gap, bottom, formWidth - half - gap, 20).build());
+                .bounds(x + third + gap, bottom, third, 20).build());
+        removeButton = addRenderableWidget(Button.builder(
+                        Component.translatable("screen.talent_editor.remove_effect"), button -> removeSelected())
+                .bounds(x + (third + gap) * 2, bottom, formWidth - (third + gap) * 2, 20).build());
+        gateButton = addRenderableWidget(Button.builder(Component.translatable(
+                        "screen.talent_editor.action_gate.open"), button -> editGate())
+                .bounds(x + formWidth - 100, 8, 100, 20).build());
         syncSelection();
     }
 
@@ -75,93 +81,120 @@ public final class TalentEffectEditorScreen extends Screen {
         renderBackground(graphics);
         int formWidth = Math.min(700, width - 32);
         int x = (width - formWidth) / 2;
+        int listBottom = height - 91;
         EditorTheme.panel(graphics, x - 7, 27, formWidth + 14, 43);
-        EditorTheme.panel(graphics, x - 7, 76, formWidth + 14, Math.max(1, height - 112));
+        EditorTheme.panel(graphics, x - 7, 75, formWidth + 14, Math.max(1, listBottom - 75));
+        EditorTheme.panel(graphics, x - 7, height - 89, formWidth + 14, 54);
         super.render(graphics, mouseX, mouseY, partialTick);
         graphics.drawCenteredString(font, title, width / 2, 9, EditorTheme.TEXT);
-        graphics.drawCenteredString(font, Component.translatable("screen.talent_editor.effect_editor.help"),
+        graphics.drawCenteredString(font, Component.translatable("screen.talent_editor.effect_editor.manage_help"),
                 width / 2, 29, EditorTheme.MUTED);
-        TalentDraft.EffectRow selected = selectedRow();
-        if (selected == null) {
-            graphics.drawCenteredString(font,
-                    Component.translatable("screen.talent_editor.effect_editor.choose_type"),
-                    width / 2, 91, EditorTheme.MUTED);
-        } else {
-            graphics.drawString(font, font.plainSubstrByWidth(owner.effectLabel(selected), formWidth - 8),
-                    x + 4, 88, EditorTheme.TEXT, false);
-            graphics.drawString(font, font.plainSubstrByWidth(
-                    detailHelp(selected).getString(), formWidth - 8), x + 4, 106, EditorTheme.MUTED, false);
-        }
+        renderRows(graphics, mouseX, mouseY, x, formWidth);
         if (!status.isBlank()) {
-            graphics.drawString(font, font.plainSubstrByWidth(status, formWidth), x, height - 43,
+            graphics.drawString(font, font.plainSubstrByWidth(status, formWidth), x, height - 55,
                     statusColor, false);
         }
     }
 
-    private Component detailHelp(TalentDraft.EffectRow row) {
-        String suffix = row.editableAttribute() ? "attribute"
-                : row.editableMaintainedEffect() ? "maintained"
-                : row.editableDrawRefreshBonus() ? "refresh"
-                : row.editableDynamicAttribute() ? "dynamic"
-                : row.editableImmunity() ? "immunity"
-                : row.editableCreativeFlight() ? "flight" : "unsupported";
-        return Component.translatable("screen.talent_editor.effect_editor.help." + suffix);
+    private void renderRows(GuiGraphics graphics, int mouseX, int mouseY, int x, int formWidth) {
+        List<TalentDraft.EffectRow> rows = rows();
+        int top = 84;
+        int bottom = height - 96;
+        int visible = Math.max(1, (bottom - top) / ROW_HEIGHT);
+        scroll = Math.max(0, Math.min(scroll, Math.max(0, rows.size() - visible)));
+        for (int index = scroll; index < Math.min(rows.size(), scroll + visible); index++) {
+            TalentDraft.EffectRow row = rows.get(index);
+            int y = top + (index - scroll) * ROW_HEIGHT;
+            boolean selected = row.rawIndex() == selectedRawIndex;
+            boolean hovered = mouseX >= x && mouseX < x + formWidth && mouseY >= y - 3 && mouseY < y + 15;
+            if (selected || hovered) graphics.fill(x, y - 3, x + formWidth, y + 15,
+                    selected ? 0x7050A0E8 : 0x404A90E2);
+            var action = owner.draft().advancedAction(TalentDraft.AdvancedActionLocation.ACTIVE_EFFECTS,
+                    -1, row.rawIndex());
+            String gated = action.has("enabledWhen") || action.has("disabledWhen")
+                    ? " " + Component.translatable("screen.talent_editor.action_gate.marked").getString() : "";
+            graphics.drawString(font, font.plainSubstrByWidth(owner.effectLabel(row) + gated, formWidth - 8),
+                    x + 4, y, EditorTheme.TEXT, false);
+        }
+        if (rows.isEmpty()) graphics.drawCenteredString(font,
+                Component.translatable("screen.talent_editor.effect_editor.empty"),
+                width / 2, top + 10, EditorTheme.MUTED);
+    }
+
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (button == 0) {
+            int formWidth = Math.min(700, width - 32);
+            int x = (width - formWidth) / 2;
+            int top = 84;
+            int bottom = height - 96;
+            if (mouseX >= x && mouseX < x + formWidth && mouseY >= top && mouseY < bottom) {
+                int index = scroll + (int) ((mouseY - top) / ROW_HEIGHT);
+                if (index >= 0 && index < rows().size()) {
+                    selectedRawIndex = rows().get(index).rawIndex();
+                    status = "";
+                    syncSelection();
+                    return true;
+                }
+            }
+        }
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        int visible = Math.max(1, (height - 96 - 84) / ROW_HEIGHT);
+        scroll = Math.max(0, Math.min(scroll - (int) Math.signum(delta) * 3,
+                Math.max(0, rows().size() - visible)));
+        return true;
+    }
+
+    private List<TalentDraft.EffectRow> rows() {
+        return owner.draft().basicEffectRows();
     }
 
     private void chooseAttribute() {
-        if (minecraft == null) return;
-        minecraft.setScreen(new ResourceReferencePickerScreen(
+        if (minecraft != null) minecraft.setScreen(new ResourceReferencePickerScreen(
                 this, ResourceReferencePickerScreen.Source.ATTRIBUTE, bootstrap, this::addAttribute
         ));
     }
 
     private void addAttribute(ResourceLocation attribute) {
         selectedRawIndex = owner.addAttributeEffect(attribute);
-        status = Component.translatable("screen.talent_editor.attribute_added", attribute).getString();
-        statusColor = 0xFF55FF55;
+        updated("screen.talent_editor.attribute_added", attribute);
     }
 
     private void chooseMaintainedEffect() {
-        if (minecraft == null) return;
-        minecraft.setScreen(new ResourceReferencePickerScreen(
+        if (minecraft != null) minecraft.setScreen(new ResourceReferencePickerScreen(
                 this, ResourceReferencePickerScreen.Source.MOB_EFFECT, bootstrap, this::addMaintainedEffect
         ));
     }
 
     private void addMaintainedEffect(ResourceLocation effect) {
         selectedRawIndex = owner.addMaintainedEffect(effect);
-        status = Component.translatable("screen.talent_editor.maintained_effect_added", effect).getString();
-        statusColor = 0xFF55FF55;
+        updated("screen.talent_editor.maintained_effect_added", effect);
     }
 
     private void chooseImmunity() {
-        if (minecraft == null) return;
-        minecraft.setScreen(new ResourceReferencePickerScreen(
+        if (minecraft != null) minecraft.setScreen(new ResourceReferencePickerScreen(
                 this, ResourceReferencePickerScreen.Source.MOB_EFFECT, bootstrap, this::addImmunity
         ));
     }
 
     private void addImmunity(ResourceLocation effect) {
         selectedRawIndex = owner.addEffectImmunity(effect);
-        status = Component.translatable("screen.talent_editor.immunity_added", effect).getString();
-        statusColor = 0xFF55FF55;
+        updated("screen.talent_editor.immunity_added", effect);
     }
 
-    private void openComplexEffects() {
-        if (minecraft == null) return;
-        selectedRawIndex = -1;
-        minecraft.setScreen(new TalentComplexEffectsScreen(owner, this, bootstrap));
+    private void updated(String key, Object argument) {
+        status = Component.translatable(key, argument).getString();
+        statusColor = 0xFF55FF55;
+        syncSelection();
     }
 
     private void applySelected() {
         TalentDraft.EffectRow selected = selectedRow();
-        if (selected == null) return;
-        if (selected.editableDynamicAttribute()) {
-            if (minecraft != null) minecraft.setScreen(new TalentDynamicAttributeScreen(
-                    owner, this, bootstrap, selected.rawIndex(), false
-            ));
-            return;
-        }
+        if (selected == null || selected.editableImmunity()) return;
         double amount;
         try {
             amount = Double.parseDouble(amountField.getValue().strip());
@@ -169,24 +202,15 @@ public final class TalentEffectEditorScreen extends Screen {
                 throw new NumberFormatException();
             }
         } catch (NumberFormatException ignored) {
-            status = Component.translatable("screen.talent_editor.form.invalid_amount").getString();
-            statusColor = 0xFFFF7777;
+            invalid("screen.talent_editor.form.invalid_amount");
             return;
         }
         if (selected.editableMaintainedEffect()) {
             if (amount != Math.rint(amount) || amount < 0.0D || amount > 255.0D) {
-                status = Component.translatable("screen.talent_editor.invalid_effect_level").getString();
-                statusColor = 0xFFFF7777;
+                invalid("screen.talent_editor.invalid_effect_level");
                 return;
             }
             owner.draft().updateMaintainedEffectAmplifier(selected.rawIndex(), (int) amount);
-        } else if (selected.editableDrawRefreshBonus()) {
-            if (amount != Math.rint(amount) || amount < 1.0D || amount > 100.0D) {
-                status = Component.translatable("screen.talent_editor.invalid_refresh_bonus").getString();
-                statusColor = 0xFFFF7777;
-                return;
-            }
-            owner.draft().updateDrawRefreshBonus(selected.rawIndex(), (int) amount);
         } else if (selected.editableAttribute()) {
             owner.draft().updateAttribute(selected.rawIndex(), amount, OPERATIONS.get(operationIndex));
         } else {
@@ -198,18 +222,44 @@ public final class TalentEffectEditorScreen extends Screen {
         syncSelection();
     }
 
+    private void removeSelected() {
+        TalentDraft.EffectRow selected = selectedRow();
+        if (selected == null) return;
+        owner.draft().removeEditableActiveEffect(selected.rawIndex());
+        selectedRawIndex = -1;
+        owner.markComplexUpdated("screen.talent_editor.effect_removed");
+        status = Component.translatable("screen.talent_editor.effect_removed").getString();
+        statusColor = 0xFF55FF55;
+        syncSelection();
+    }
+
+    private void editGate() {
+        TalentDraft.EffectRow row = selectedRow();
+        if (row != null && minecraft != null) minecraft.setScreen(new TalentActionGateScreen(
+                this, owner, TalentDraft.AdvancedActionLocation.ACTIVE_EFFECTS, -1, row.rawIndex()));
+    }
+
+    private void invalid(String key) {
+        status = Component.translatable(key).getString();
+        statusColor = 0xFFFF7777;
+    }
+
     private void syncSelection() {
         TalentDraft.EffectRow selected = selectedRow();
-        boolean amountEditable = selected != null && (selected.editableAttribute()
-                || selected.editableMaintainedEffect() || selected.editableDrawRefreshBonus());
+        boolean amountEditable = selected != null
+                && (selected.editableAttribute() || selected.editableMaintainedEffect());
+        if (amountField == null) return;
         amountField.visible = amountEditable;
         amountField.active = amountEditable;
         operationButton.visible = selected != null && selected.editableAttribute();
         operationButton.active = operationButton.visible;
-        applyButton.active = amountEditable || (selected != null && selected.editableDynamicAttribute());
-        applyButton.setMessage(Component.translatable(selected != null && selected.editableDynamicAttribute()
-                ? "screen.talent_editor.complex.edit_dynamic" : "screen.talent_editor.effect_editor.apply"));
-        if (!amountEditable) return;
+        applyButton.active = amountEditable;
+        removeButton.active = selected != null;
+        gateButton.active = selected != null;
+        if (!amountEditable) {
+            amountField.setValue("");
+            return;
+        }
         amountField.setValue(compact(selected.amount()));
         operationIndex = selected.editableAttribute()
                 ? Math.max(0, OPERATIONS.indexOf(selected.operation())) : 0;
@@ -217,9 +267,7 @@ public final class TalentEffectEditorScreen extends Screen {
     }
 
     private TalentDraft.EffectRow selectedRow() {
-        return owner.draft().effectRows().stream()
-                .filter(row -> row.rawIndex() == selectedRawIndex)
-                .findFirst().orElse(null);
+        return rows().stream().filter(row -> row.rawIndex() == selectedRawIndex).findFirst().orElse(null);
     }
 
     private void cycleOperation() {

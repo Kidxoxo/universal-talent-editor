@@ -429,9 +429,11 @@ public final class TalentEditorCommands {
             ResourceLocation talentId
     ) {
         int changed = 0;
+        TalentDefinition talent = TalentEditorMod.SNAPSHOTS.active().talents().get(talentId);
         for (ServerPlayer player : players) {
             if (!PlayerTalents.revoke(player, talentId)) continue;
             changed++;
+            if (talent != null) TalentEditorMod.PRESENTATIONS.removed(player, talent);
             TalentAttributeRuntime.refresh(player);
             EditorNetwork.sendPlayerState(player, false);
             player.sendSystemMessage(Component.translatable(

@@ -8,7 +8,7 @@
   "choices": 3,
   "refreshes": 1,
   "maxOwned": 24,
-  "iconSize": 16,
+  "iconSize": 64,
   "excludeOwned": true,
   "rarityWeights": {
     "talent_editor:common": 1.0

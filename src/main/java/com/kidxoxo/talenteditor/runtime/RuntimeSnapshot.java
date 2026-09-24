@@ -5,12 +5,14 @@ import com.kidxoxo.talenteditor.domain.AddEffectAction;
 import com.kidxoxo.talenteditor.domain.CompiledAction;
 import com.kidxoxo.talenteditor.domain.CompiledTrigger;
 import com.kidxoxo.talenteditor.domain.CompiledCondition;
+import com.kidxoxo.talenteditor.domain.ConditionalAction;
 import com.kidxoxo.talenteditor.domain.ConfiguredItemDefinition;
 import com.kidxoxo.talenteditor.domain.CounterEventType;
 import com.kidxoxo.talenteditor.domain.CounterRuleDefinition;
 import com.kidxoxo.talenteditor.domain.CounterVisibility;
 import com.kidxoxo.talenteditor.domain.EffectImmunityAction;
 import com.kidxoxo.talenteditor.domain.DynamicAttributeModifierAction;
+import com.kidxoxo.talenteditor.domain.ModifyCounterAction;
 import com.kidxoxo.talenteditor.domain.DefinitionKind;
 import com.kidxoxo.talenteditor.domain.DefinitionReference;
 import com.kidxoxo.talenteditor.domain.DefinitionTarget;
@@ -18,6 +20,7 @@ import com.kidxoxo.talenteditor.domain.RarityDefinition;
 import com.kidxoxo.talenteditor.domain.TalentDefinition;
 import com.kidxoxo.talenteditor.domain.TalentBookLayoutDefinition;
 import com.kidxoxo.talenteditor.domain.TalentPoolDefinition;
+import com.kidxoxo.talenteditor.domain.QueueDrawConstraintAction;
 import com.kidxoxo.talenteditor.loot.ConfiguredItemLootBinding;
 import net.minecraft.resources.ResourceLocation;
 
@@ -92,16 +95,24 @@ public record RuntimeSnapshot(
                 .filter(TalentDefinition::enabled)
                 .filter(TalentDefinition::available)
                 .forEach(talent -> {
-                    for (CompiledAction action : talent.activeEffects()) {
+                    for (CompiledAction configured : talent.activeEffects()) {
+                        CompiledAction action = ConditionalAction.unwrap(configured);
+                        CompiledCondition enabledWhen = configured instanceof ConditionalAction gate
+                                ? gate.enabledWhen().orElse(null) : null;
+                        CompiledCondition disabledWhen = configured instanceof ConditionalAction gate
+                                ? gate.disabledWhen().orElse(null) : null;
                         if (action instanceof AttributeModifierAction attributeAction) {
                             attributes.computeIfAbsent(attributeAction.attribute(), ignored -> new ArrayList<>())
-                                    .add(new ActiveAttributeBinding(talent.id(), attributeAction));
+                                    .add(new ActiveAttributeBinding(talent.id(), attributeAction,
+                                            enabledWhen, disabledWhen));
                         } else if (action instanceof EffectImmunityAction immunityAction) {
                             immunities.computeIfAbsent(immunityAction.effect(), ignored -> new ArrayList<>())
-                                    .add(new ActiveEffectImmunityBinding(talent.id(), immunityAction));
+                                    .add(new ActiveEffectImmunityBinding(talent.id(), immunityAction,
+                                            enabledWhen, disabledWhen));
                         } else if (action instanceof AddEffectAction effectAction) {
                             statusEffects.computeIfAbsent(effectAction.effect(), ignored -> new ArrayList<>())
-                                    .add(new ActiveStatusEffectBinding(talent.id(), effectAction));
+                                    .add(new ActiveStatusEffectBinding(talent.id(), effectAction,
+                                            enabledWhen, disabledWhen));
                         }
                     }
                     for (CompiledTrigger trigger : talent.triggers()) {
@@ -122,14 +133,20 @@ public record RuntimeSnapshot(
         configuredItems.values().stream()
                 .filter(ConfiguredItemDefinition::enabled)
                 .filter(ConfiguredItemDefinition::available)
-                .forEach(item -> item.loot().forEach(rule -> {
-                    ConfiguredItemLootBinding binding = new ConfiguredItemLootBinding(item.id(), rule);
-                    rule.exactTable().ifPresentOrElse(
-                            table -> configuredItemLoot.computeIfAbsent(table, ignored -> new ArrayList<>())
-                                    .add(binding),
-                            () -> configuredItemLootPatterns.add(binding)
-                    );
-                }));
+                .forEach(item -> {
+                    for (CompiledTrigger trigger : item.triggers()) {
+                        triggers.computeIfAbsent(trigger.event(), ignored -> new ArrayList<>())
+                                .add(new TriggerBinding(item.id(), trigger));
+                    }
+                    item.loot().forEach(rule -> {
+                        ConfiguredItemLootBinding binding = new ConfiguredItemLootBinding(item.id(), rule);
+                        rule.exactTable().ifPresentOrElse(
+                                table -> configuredItemLoot.computeIfAbsent(table, ignored -> new ArrayList<>())
+                                        .add(binding),
+                                () -> configuredItemLootPatterns.add(binding)
+                        );
+                    });
+                });
 
         LinkedHashSet<ResourceLocation> referencedCounters = new LinkedHashSet<>();
         LinkedHashSet<ResourceLocation> referencedCategories = new LinkedHashSet<>();
@@ -139,13 +156,15 @@ public record RuntimeSnapshot(
                     if (talent.synthesis().enabled()) {
                         referencedCounters.addAll(talent.synthesis().consumeCounters().keySet());
                     }
-                    talent.activeEffects().stream()
-                            .filter(DynamicAttributeModifierAction.class::isInstance)
-                            .map(DynamicAttributeModifierAction.class::cast)
-                            .forEach(action -> action.counter().ifPresent(referencedCounters::add));
-                    talent.triggers().forEach(trigger -> collectCounterReferences(
-                            trigger.condition(), referencedCounters, referencedCategories
-                    ));
+                    collectActionCounterReferences(talent.activeEffects(), referencedCounters);
+                    collectActionCounterReferences(talent.onAcquire(), referencedCounters);
+                    collectActionCounterReferences(talent.onSynthesize(), referencedCounters);
+                    collectActionCounterReferences(talent.onRemove(), referencedCounters);
+                    talent.triggers().forEach(trigger -> {
+                        collectCounterReferences(trigger.condition(), referencedCounters, referencedCategories);
+                        collectActionCounterReferences(trigger.actions(), referencedCounters);
+                        collectActionCounterReferences(trigger.failureActions(), referencedCounters);
+                    });
                 });
         pools.values().stream().filter(TalentPoolDefinition::enabled)
                 .forEach(pool -> pool.duplicateCounter().ifPresent(referencedCounters::add));
@@ -238,6 +257,22 @@ public record RuntimeSnapshot(
             any.children().forEach(child -> collectCounterReferences(child, counters, categories));
         } else if (condition instanceof CompiledCondition.Not not) {
             collectCounterReferences(not.child(), counters, categories);
+        }
+    }
+
+    private static void collectActionCounterReferences(
+            List<CompiledAction> actions,
+            Set<ResourceLocation> counters
+    ) {
+        for (CompiledAction action : actions) {
+            action = ConditionalAction.unwrap(action);
+            if (action instanceof ModifyCounterAction modify) {
+                counters.add(modify.counter());
+            } else if (action instanceof DynamicAttributeModifierAction dynamic) {
+                dynamic.counter().ifPresent(counters::add);
+            } else if (action instanceof QueueDrawConstraintAction constraint) {
+                constraint.successCounter().ifPresent(counters::add);
+            }
         }
     }
 

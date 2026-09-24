@@ -12,6 +12,7 @@ import com.kidxoxo.talenteditor.synthesis.TalentSynthesisService;
 import com.kidxoxo.talenteditor.counter.CounterEventService;
 import com.kidxoxo.talenteditor.runtime.TalentTriggerService;
 import com.kidxoxo.talenteditor.runtime.TalentPresentationService;
+import com.kidxoxo.talenteditor.runtime.ItemSubmissionService;
 import com.kidxoxo.talenteditor.resource.ClientResourceStatusTracker;
 import com.kidxoxo.talenteditor.settings.EditorSettingsService;
 import com.mojang.logging.LogUtils;
@@ -26,8 +27,8 @@ import net.minecraftforge.fml.common.Mod;
 import org.slf4j.Logger;
 import com.kidxoxo.talenteditor.player.PlayerTalentData;
 import com.kidxoxo.talenteditor.item.ModItems;
+import com.kidxoxo.talenteditor.item.ModCreativeTabs;
 import com.kidxoxo.talenteditor.loot.ModLootModifiers;
-import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraftforge.event.BuildCreativeModeTabContentsEvent;
 
 @Mod(TalentEditorMod.MOD_ID)
@@ -43,12 +44,14 @@ public final class TalentEditorMod {
     public static final CounterEventService COUNTERS = new CounterEventService();
     public static final TalentTriggerService TRIGGERS = new TalentTriggerService();
     public static final TalentPresentationService PRESENTATIONS = new TalentPresentationService();
+    public static final ItemSubmissionService SUBMISSIONS = new ItemSubmissionService();
     public static final ClientResourceStatusTracker CLIENT_RESOURCES = new ClientResourceStatusTracker();
     public static final EditorSettingsService SETTINGS = new EditorSettingsService(EDITOR_PACK);
 
     public TalentEditorMod() {
         IEventBus modBus = FMLJavaModLoadingContext.get().getModEventBus();
         ModItems.ITEMS.register(modBus);
+        ModCreativeTabs.TABS.register(modBus);
         ModLootModifiers.REGISTER.register(modBus);
         modBus.addListener(this::commonSetup);
         modBus.addListener(this::registerCapabilities);
@@ -66,9 +69,8 @@ public final class TalentEditorMod {
     }
 
     private void addCreativeTabItems(BuildCreativeModeTabContentsEvent event) {
-        if (event.getTabKey() == CreativeModeTabs.TOOLS_AND_UTILITIES) {
-            event.accept(ModItems.TALENT_BOOK);
-            event.accept(ModItems.TALENT_POINT);
+        if (event.getTabKey().equals(ModCreativeTabs.KEY)) {
+            com.kidxoxo.talenteditor.client.ClientCreativeItems.addTo(event);
         }
     }
 

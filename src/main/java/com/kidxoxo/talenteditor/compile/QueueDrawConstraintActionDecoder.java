@@ -28,7 +28,7 @@ final class QueueDrawConstraintActionDecoder implements ActionDecoder {
 
     @Override
     public Set<ActionPlacement> supportedPlacements() {
-        return Set.of(ActionPlacement.TRIGGER);
+        return Set.of(ActionPlacement.TRIGGER, ActionPlacement.ON_ACQUIRE);
     }
 
     @Override

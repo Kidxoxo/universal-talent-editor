@@ -33,6 +33,9 @@ final class ConfiguredItemUseRuntime {
 
         int applied = 0;
         for (CompiledAction action : use.actions()) {
+            if (!com.kidxoxo.talenteditor.runtime.ActionConditionRuntime.active(action, player,
+                    definition.id())) continue;
+            action = com.kidxoxo.talenteditor.domain.ConditionalAction.unwrap(action);
             if (action instanceof AddEffectAction add && add.target() == ActionTarget.SELF) {
                 var effect = ForgeRegistries.MOB_EFFECTS.getValue(add.effect());
                 if (effect != null && player.addEffect(new MobEffectInstance(

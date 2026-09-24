@@ -9,6 +9,7 @@ import com.kidxoxo.talenteditor.domain.TalentBookLayoutDefinition;
 import com.kidxoxo.talenteditor.network.ClientResourceRequirementsPacket;
 import com.kidxoxo.talenteditor.network.ClientResourceStatusPacket;
 import com.kidxoxo.talenteditor.network.EditorSettingsPacket;
+import com.kidxoxo.talenteditor.network.HudResourceStatePacket;
 
 import java.util.HashMap;
 import java.util.List;
@@ -22,6 +23,8 @@ public final class ClientEditorState {
     private static DrawSessionView drawSession;
     private static ClientResourceRequirementsPacket resourceRequirements;
     private static ClientResourceStatusPacket resourceStatus;
+    private static TalentTreeEditRequest talentTreeEditRequest;
+    private static boolean openTalentTreeOnNextBootstrap;
     private static EditorSettingsPacket editorSettings = new EditorSettingsPacket(
             true,
             com.kidxoxo.talenteditor.settings.EditorRuntimeSettings.SynthesisSoundAudience.PERSONAL,
@@ -39,6 +42,27 @@ public final class ClientEditorState {
 
     static void setBootstrap(EditorBootstrap value) {
         bootstrap = value;
+    }
+
+    static void requestTalentTreeEdit(TalentTreeEditRequest request) {
+        talentTreeEditRequest = request;
+    }
+
+    static TalentTreeEditRequest consumeTalentTreeEdit(net.minecraft.resources.ResourceLocation id) {
+        TalentTreeEditRequest request = talentTreeEditRequest;
+        if (request == null || !request.target().equals(id)) return null;
+        talentTreeEditRequest = null;
+        return request;
+    }
+
+    static void openTalentTreeOnNextBootstrap() {
+        openTalentTreeOnNextBootstrap = true;
+    }
+
+    static boolean consumeOpenTalentTreeOnNextBootstrap() {
+        boolean value = openTalentTreeOnNextBootstrap;
+        openTalentTreeOnNextBootstrap = false;
+        return value;
     }
 
     public static ValidationResultPacket validation() {
@@ -86,7 +110,7 @@ public final class ClientEditorState {
                             .map(cost -> cost.type() == PlayerTalentState.SynthesisCostType.COUNTER
                                     && values.containsKey(cost.id())
                                     ? new PlayerTalentState.SynthesisCostView(
-                                            cost.type(), cost.id(), cost.required(), values.get(cost.id())
+                                            cost.type(), cost.id(), cost.name(), cost.required(), values.get(cost.id())
                                     ) : cost)
                             .toList();
                     return new PlayerTalentState.SynthesisView(
@@ -97,7 +121,19 @@ public final class ClientEditorState {
         playerTalentState = new PlayerTalentState(
                 playerTalentState.definitionRevision(), playerTalentState.drawTokens(), playerTalentState.truncated(),
                 playerTalentState.talents(), playerTalentState.synthesesTruncated(), syntheses,
-                playerTalentState.countersTruncated(), counters
+                playerTalentState.countersTruncated(), counters,
+                playerTalentState.hudResources(), playerTalentState.render()
+        );
+        return playerTalentState;
+    }
+
+    static PlayerTalentState applyHudResources(HudResourceStatePacket packet) {
+        if (playerTalentState == null) return null;
+        playerTalentState = new PlayerTalentState(
+                playerTalentState.definitionRevision(), playerTalentState.drawTokens(), playerTalentState.truncated(),
+                playerTalentState.talents(), playerTalentState.synthesesTruncated(), playerTalentState.syntheses(),
+                playerTalentState.countersTruncated(), playerTalentState.counters(),
+                packet.resources(), playerTalentState.render()
         );
         return playerTalentState;
     }

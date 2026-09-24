@@ -139,6 +139,23 @@ class PlayerTalentStateTest {
     }
 
     @Test
+    void hudResourceStatePacketRoundTripsLightweightUpdates() {
+        HudResourceStatePacket packet = new HudResourceStatePacket(List.of(
+                new PlayerTalentState.HudResourceView(
+                        id("example:energy"), 12.5D, 40.0D, 0x55AAFF, -2, false
+                )
+        ));
+        FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
+        try {
+            HudResourceStatePacket.encode(packet, buffer);
+            assertEquals(packet, HudResourceStatePacket.decode(buffer));
+            assertEquals(0, buffer.readableBytes());
+        } finally {
+            buffer.release();
+        }
+    }
+
+    @Test
     void synthesisViewsAndResultsRoundTripWithinProtocolBounds() {
         PlayerTalentState.TalentView target = PlayerTalentStateFactory.view(snapshot(), TALENT);
         PlayerTalentState.SynthesisView synthesis = new PlayerTalentState.SynthesisView(

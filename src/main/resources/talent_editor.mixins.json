@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "minVersion": "0.8.5",
+  "package": "com.kidxoxo.talenteditor.mixin.client",
+  "compatibilityLevel": "JAVA_17",
+  "refmap": "talent_editor.refmap.json",
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "client": [
+    "LivingEntityRendererMixin"
+  ]
+}

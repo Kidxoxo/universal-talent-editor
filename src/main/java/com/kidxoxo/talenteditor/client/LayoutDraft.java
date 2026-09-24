@@ -33,12 +33,12 @@ final class LayoutDraft {
     boolean enabled() { return bool("enabled", true); }
     int priority() { return integer("priority", 0); }
     String background() { return string("background", ""); }
-    int panelPercent() { return integer("panelPercent", 42); }
+    int panelPercent() { return integer("panelPercent", 60); }
     int columns() { return integer("columns", 2); }
-    int rows() { return integer("rows", 4); }
-    int slotWidth() { return integer("slotWidth", 58); }
-    int slotHeight() { return integer("slotHeight", 30); }
-    int iconSize() { return integer("iconSize", 16); }
+    int rows() { return integer("rows", 3); }
+    int slotWidth() { return integer("slotWidth", 120); }
+    int slotHeight() { return integer("slotHeight", 56); }
+    int iconSize() { return integer("iconSize", 48); }
     boolean showGeneratedEffects() { return bool("showGeneratedEffects", true); }
 
     List<SlotDraft> slots() {

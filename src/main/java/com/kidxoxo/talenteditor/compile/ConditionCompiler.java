@@ -5,6 +5,8 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.kidxoxo.talenteditor.TalentEditorMod;
 import com.kidxoxo.talenteditor.domain.CompiledCondition;
+import com.kidxoxo.talenteditor.domain.ComparisonOperator;
+import com.kidxoxo.talenteditor.domain.NumericExpression;
 import com.kidxoxo.talenteditor.validation.ValidationReport;
 import net.minecraft.resources.ResourceLocation;
 
@@ -148,6 +150,31 @@ final class ConditionCompiler {
             }
             return new CompiledCondition.HasItem(item, count);
         }
+        if (CompiledCondition.AttributeCompare.TYPE.equals(type)) {
+            JsonAccess.knownKeys(object, Set.of("type", "attribute", "operator", "value"), source, path, report);
+            ResourceLocation attribute = JsonAccess.requiredId(
+                    object, "attribute", "minecraft:generic.attack_speed", true, source, path, report
+            );
+            if (!environment.hasAttribute(attribute)) {
+                if (missingMods.isEmpty()) report.error("UNKNOWN_ATTRIBUTE", source,
+                        JsonAccess.child(path, "attribute"), "Unknown attribute '" + attribute + "'");
+                else report.warning("ATTRIBUTE_UNAVAILABLE_WITH_MISSING_MOD", source,
+                        JsonAccess.child(path, "attribute"), "Attribute is unavailable while required mods are missing: " + attribute);
+            }
+            ComparisonOperator operator;
+            try {
+                operator = ComparisonOperator.parse(JsonAccess.string(
+                        object, "operator", "gte", false, source, path, report
+                ));
+            } catch (IllegalArgumentException exception) {
+                report.error("INVALID_COMPARISON_OPERATOR", source, JsonAccess.child(path, "operator"),
+                        "Expected lt, lte, eq, neq, gte, or gt");
+                operator = ComparisonOperator.GTE;
+            }
+            double value = JsonAccess.decimal(object, "value", 0.0D, -1.0E9D, 1.0E9D,
+                    source, path, report);
+            return new CompiledCondition.AttributeCompare(attribute, operator, value);
+        }
         if (CompiledCondition.EventEntityType.TYPE.equals(type)) {
             rejectOutsideEvent(path);
             JsonAccess.knownKeys(object, Set.of("type", "entityType"), source, path, report);
@@ -173,11 +200,55 @@ final class ConditionCompiler {
                     object, "tag", "minecraft:undead", true, source, path, report
             ));
         }
+        if (CompiledCondition.EventEntityEffect.TYPE.equals(type)) {
+            rejectOutsideEvent(path);
+            JsonAccess.knownKeys(object, Set.of("type", "effect"), source, path, report);
+            ResourceLocation effect = JsonAccess.requiredId(
+                    object, "effect", "minecraft:speed", true, source, path, report
+            );
+            if (!environment.hasMobEffect(effect)) {
+                if (missingMods.isEmpty()) {
+                    report.error("UNKNOWN_EVENT_ENTITY_EFFECT", source, JsonAccess.child(path, "effect"),
+                            "Unknown event entity effect '" + effect + "'");
+                } else {
+                    report.warning("EVENT_ENTITY_EFFECT_UNAVAILABLE_WITH_MISSING_MOD", source,
+                            JsonAccess.child(path, "effect"),
+                            "Effect is unavailable while required mods are missing: " + effect);
+                }
+            }
+            return new CompiledCondition.EventEntityEffect(effect);
+        }
         if (CompiledCondition.DamageTypeTag.TYPE.equals(type)) {
             rejectOutsideEvent(path);
             JsonAccess.knownKeys(object, Set.of("type", "tag"), source, path, report);
             return new CompiledCondition.DamageTypeTag(JsonAccess.requiredId(
                     object, "tag", "minecraft:is_fire", true, source, path, report
+            ));
+        }
+        if (CompiledCondition.EventTalent.TYPE.equals(type)) {
+            rejectOutsideEvent(path);
+            JsonAccess.knownKeys(object, Set.of("type", "talent"), source, path, report);
+            ResourceLocation talent = JsonAccess.requiredId(
+                    object, "talent", "minecraft:invalid", true, source, path, report
+            );
+            if (!knownTalents.contains(talent)) {
+                report.error("UNKNOWN_EVENT_TALENT", source, JsonAccess.child(path, "talent"),
+                        "Unknown event talent '" + talent + "'");
+            }
+            return new CompiledCondition.EventTalent(talent);
+        }
+        if (CompiledCondition.EventTalentCategory.TYPE.equals(type)) {
+            rejectOutsideEvent(path);
+            JsonAccess.knownKeys(object, Set.of("type", "category"), source, path, report);
+            return new CompiledCondition.EventTalentCategory(JsonAccess.requiredId(
+                    object, "category", "minecraft:invalid", true, source, path, report
+            ));
+        }
+        if (CompiledCondition.EventTalentRarity.TYPE.equals(type)) {
+            rejectOutsideEvent(path);
+            JsonAccess.knownKeys(object, Set.of("type", "rarity"), source, path, report);
+            return new CompiledCondition.EventTalentRarity(JsonAccess.requiredId(
+                    object, "rarity", "minecraft:invalid", true, source, path, report
             ));
         }
         if (CompiledCondition.EventItem.TYPE.equals(type)) {
@@ -205,6 +276,11 @@ final class ConditionCompiler {
                     object, "tag", "minecraft:tools", true, source, path, report
             ));
         }
+        if (CompiledCondition.EventItemEdible.TYPE.equals(type)) {
+            rejectOutsideEvent(path);
+            JsonAccess.knownKeys(object, Set.of("type"), source, path, report);
+            return new CompiledCondition.EventItemEdible();
+        }
         if (CompiledCondition.EventBlock.TYPE.equals(type)) {
             rejectOutsideEvent(path);
             JsonAccess.knownKeys(object, Set.of("type", "block"), source, path, report);
@@ -230,10 +306,57 @@ final class ConditionCompiler {
                     object, "tag", "minecraft:logs", true, source, path, report
             ));
         }
+        if (CompiledCondition.CuriosEquipped.TYPE.equals(type)) {
+            JsonAccess.knownKeys(object, Set.of("type", "item"), source, path, report);
+            ResourceLocation item = JsonAccess.requiredId(
+                    object, "item", "minecraft:air", true, source, path, report
+            );
+            if (!environment.hasItem(item)) {
+                if (missingMods.isEmpty()) report.error("UNKNOWN_CURIOS_ITEM", source,
+                        JsonAccess.child(path, "item"), "Curios item is not registered: " + item);
+                else report.warning("CURIOS_ITEM_UNAVAILABLE_WITH_MISSING_MOD", source,
+                        JsonAccess.child(path, "item"),
+                        "Curios item is unavailable while required mods are missing: " + item);
+            }
+            if (!environment.isModLoaded("curios")) {
+                if (missingMods.contains("curios")) report.warning("CURIOS_UNAVAILABLE", source, path,
+                        "Curios condition is inactive because the optional Curios mod is not loaded");
+                else report.error("CURIOS_REQUIRED", source, path,
+                        "curios_equipped requires Curios; add curios to requiredMods");
+            }
+            return new CompiledCondition.CuriosEquipped(item);
+        }
+        if (CompiledCondition.ExpressionCompare.TYPE.equals(type)) {
+            rejectOutsideEvent(path);
+            JsonAccess.knownKeys(object, Set.of("type", "left", "operator", "right"), source, path, report);
+            NumericExpression left = expression(object, "left", "0", path);
+            NumericExpression right = expression(object, "right", "0", path);
+            ComparisonOperator operator;
+            try {
+                operator = ComparisonOperator.parse(JsonAccess.string(
+                        object, "operator", "gte", false, source, path, report
+                ));
+            } catch (IllegalArgumentException exception) {
+                report.error("INVALID_COMPARISON_OPERATOR", source, JsonAccess.child(path, "operator"),
+                        "Expected lt, lte, eq, neq, gte, or gt");
+                operator = ComparisonOperator.GTE;
+            }
+            return new CompiledCondition.ExpressionCompare(left, operator, right);
+        }
 
         report.error("UNKNOWN_CONDITION_TYPE", source, JsonAccess.child(path, "type"),
                 "Unknown condition type '" + rawType + "'");
         return new CompiledCondition.Always(false);
+    }
+
+    private NumericExpression expression(JsonObject object, String field, String fallback, String path) {
+        String value = JsonAccess.string(object, field, fallback, true, source, path, report);
+        try {
+            return NumericExpression.compile(value);
+        } catch (IllegalArgumentException exception) {
+            report.error("INVALID_NUMERIC_EXPRESSION", source, JsonAccess.child(path, field), exception.getMessage());
+            return NumericExpression.compile("0");
+        }
     }
 
     private void rejectOutsideEvent(String path) {

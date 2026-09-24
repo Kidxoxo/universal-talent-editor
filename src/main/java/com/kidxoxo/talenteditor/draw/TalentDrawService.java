@@ -10,6 +10,10 @@ import com.kidxoxo.talenteditor.domain.QueueDrawConstraintAction;
 import com.kidxoxo.talenteditor.player.PlayerTalents;
 import com.kidxoxo.talenteditor.runtime.RuntimeSnapshot;
 import com.kidxoxo.talenteditor.runtime.ConditionEvaluator;
+import com.kidxoxo.talenteditor.runtime.TalentEventTypes;
+import com.kidxoxo.talenteditor.runtime.TalentLifecycleService;
+import com.kidxoxo.talenteditor.runtime.TalentAttributeRuntime;
+import com.kidxoxo.talenteditor.network.EditorNetwork;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.ai.attributes.Attribute;
@@ -36,6 +40,7 @@ public final class TalentDrawService {
 
         DrawSession existing = sessions.get(player.getUUID());
         Set<ResourceLocation> owned = PlayerTalents.owned(player);
+        Set<ResourceLocation> history = PlayerTalents.talentHistory(player);
         ConditionEvaluator.Context conditionContext = ConditionEvaluator.context(player);
         if (existing != null
                 && existing.poolId().equals(poolId)
@@ -45,14 +50,17 @@ public final class TalentDrawService {
         }
         double luck = luckValue(player, pool);
         boolean pityActive = pityActive(player, pool);
-        List<ResourceLocation> offers = generateOffers(
-                snapshot, pool, owned, conditionContext, luck, pityActive,
-                new Random(player.getRandom().nextLong())
+        Random random = new Random(player.getRandom().nextLong());
+        var constraints = PlayerTalents.drawConstraintsForPool(player, pool.id(), pool.choices());
+        List<ResourceLocation> offers = generateOffersWithConstraints(
+                snapshot, pool, owned, history, conditionContext, luck, pityActive, constraints, random
         );
         if (offers.isEmpty()) return DrawResult.failed(DrawResult.Status.NO_ELIGIBLE_TALENT);
+        PlayerTalents.consumeDrawConstraints(player, pool.id(), constraints.size());
         DrawSession session = new DrawSession(
                 UUID.randomUUID(), player.getUUID(), poolId, snapshot.revision(),
-                offers, Math.min(1_000, pool.refreshes() + refreshBonus(snapshot, owned, poolId))
+                offers, Math.min(1_000, pool.refreshes()
+                + refreshBonus(snapshot, player, PlayerTalents.activeSources(player), poolId))
         );
         sessions.put(player.getUUID(), session);
         return DrawResult.session(DrawResult.Status.READY, session);
@@ -70,26 +78,26 @@ public final class TalentDrawService {
         DrawResult validation = validateStart(player, pool);
         if (validation != null) return validation;
         Set<ResourceLocation> owned = PlayerTalents.owned(player);
+        Set<ResourceLocation> history = PlayerTalents.talentHistory(player);
         ConditionEvaluator.Context context = ConditionEvaluator.context(player);
         double luck = luckValue(player, pool);
         boolean pity = pityActive(player, pool);
         Random random = new Random(player.getRandom().nextLong());
-        var constraint = PlayerTalents.nextDrawConstraint(player, pool.id());
-        List<ResourceLocation> offers = constraint
-                .map(value -> generateOffersWithConstraint(
-                        snapshot, pool, owned, context, luck, pity, value, random
-                ))
-                .orElseGet(() -> generateOffers(snapshot, pool, owned, context, luck, pity, random));
+        var constraints = PlayerTalents.drawConstraintsForPool(player, pool.id(), pool.choices());
+        List<ResourceLocation> offers = generateOffersWithConstraints(
+                snapshot, pool, owned, history, context, luck, pity, constraints, random
+        );
         if (offers.isEmpty()) return DrawResult.failed(DrawResult.Status.NO_ELIGIBLE_TALENT);
         if (!freeRefresh && !PlayerTalents.consumeDrawToken(player)) {
             return DrawResult.failed(DrawResult.Status.PAID_REFRESH_REQUIRES_TWO_TOKENS);
         }
-        if (constraint.isPresent()) PlayerTalents.consumeNextDrawConstraint(player, pool.id());
+        PlayerTalents.consumeDrawConstraints(player, pool.id(), constraints.size());
         DrawSession refreshed = new DrawSession(
                 current.id(), current.playerId(), current.poolId(), current.definitionRevision(),
                 offers, freeRefresh ? current.refreshesRemaining() - 1 : 0
         );
         sessions.put(player.getUUID(), refreshed);
+        TalentEditorMod.TRIGGERS.fire(TalentEventTypes.DRAW_REFRESHED, player, null, null);
         return DrawResult.session(DrawResult.Status.REFRESHED, refreshed);
     }
 
@@ -103,7 +111,8 @@ public final class TalentDrawService {
         if (validation != null) return validation;
         TalentDefinition talent = snapshot.talents().get(talentId);
         if (talent == null || !eligibleForPool(
-                talent, snapshot, pool, PlayerTalents.owned(player), ConditionEvaluator.context(player)
+                talent, snapshot, pool, PlayerTalents.owned(player), PlayerTalents.talentHistory(player),
+                ConditionEvaluator.context(player)
         )) {
             return DrawResult.failed(DrawResult.Status.OFFER_INVALID);
         }
@@ -113,6 +122,7 @@ public final class TalentDrawService {
             }
             if (pool.duplicatePolicy() == DuplicatePolicy.REFUND_TOKEN) {
                 sessions.remove(player.getUUID());
+                finishSelection(player, talentId);
                 return DrawResult.resolved(DrawResult.Status.DUPLICATE_REFUNDED, talentId);
             }
             ResourceLocation counter = pool.duplicateCounter().orElseThrow();
@@ -121,15 +131,33 @@ public final class TalentDrawService {
             }
             sessions.remove(player.getUUID());
             recordPityOutcome(player, snapshot, pool, talent);
+            finishSelection(player, talentId);
             return DrawResult.resolved(DrawResult.Status.DUPLICATE_COUNTER_GRANTED, talentId);
         }
+        if (PlayerTalents.drawTokens(player) <= 0) {
+            return DrawResult.failed(DrawResult.Status.NO_DRAW_TOKEN);
+        }
+        PlayerTalents.recordDrawSelection(player);
         if (!PlayerTalents.acquireWithDrawToken(player, talentId)) {
             return DrawResult.failed(DrawResult.Status.NO_DRAW_TOKEN);
         }
         sessions.remove(player.getUUID());
         recordPityOutcome(player, snapshot, pool, talent);
         TalentEditorMod.PRESENTATIONS.acquired(player, talent, false);
+        TalentAttributeRuntime.refresh(player);
+        EditorNetwork.sendPlayerState(player, false);
+        finishSelectionAfterRecorded(player, talentId);
         return DrawResult.acquired(talentId);
+    }
+
+    private static void finishSelection(ServerPlayer player, ResourceLocation talentId) {
+        PlayerTalents.recordDrawSelection(player);
+        finishSelectionAfterRecorded(player, talentId);
+    }
+
+    private static void finishSelectionAfterRecorded(ServerPlayer player, ResourceLocation talentId) {
+        TalentEditorMod.TRIGGERS.fireTalent(TalentEventTypes.DRAW_SELECTED, player, talentId);
+        TalentLifecycleService.process(player);
     }
 
     public synchronized void removeSession(ServerPlayer player) {
@@ -152,7 +180,7 @@ public final class TalentDrawService {
             ConditionEvaluator.Context conditionContext,
             RandomGenerator random
     ) {
-        return generateOffers(snapshot, pool, owned, conditionContext, 0.0D, false, random);
+        return generateOffers(snapshot, pool, owned, owned, conditionContext, 0.0D, false, random);
     }
 
     public static List<ResourceLocation> generateOffers(
@@ -164,8 +192,21 @@ public final class TalentDrawService {
             boolean pityActive,
             RandomGenerator random
     ) {
+        return generateOffers(snapshot, pool, owned, owned, conditionContext, luck, pityActive, random);
+    }
+
+    public static List<ResourceLocation> generateOffers(
+            RuntimeSnapshot snapshot,
+            TalentPoolDefinition pool,
+            Set<ResourceLocation> owned,
+            Set<ResourceLocation> history,
+            ConditionEvaluator.Context conditionContext,
+            double luck,
+            boolean pityActive,
+            RandomGenerator random
+    ) {
         ArrayList<TalentDefinition> candidates = eligibleCandidates(
-                snapshot, pool, owned, conditionContext
+                snapshot, pool, owned, history, conditionContext
         );
         return selectCandidates(snapshot, pool, candidates, pool.choices(), luck, pityActive, random).stream()
                 .map(TalentDefinition::id)
@@ -182,23 +223,57 @@ public final class TalentDrawService {
             QueueDrawConstraintAction constraint,
             RandomGenerator random
     ) {
-        if (!constraint.appliesTo(pool.id())) return List.of();
-        ArrayList<TalentDefinition> candidates = eligibleCandidates(
-                snapshot, pool, owned, conditionContext
+        return generateOffersWithConstraint(
+                snapshot, pool, owned, owned, conditionContext, luck, pityActive, constraint, random
         );
-        ArrayList<TalentDefinition> matches = candidates.stream()
-                .filter(constraint::matches)
-                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
-        if (matches.isEmpty()) return List.of();
+    }
 
-        int requiredCount = Math.min(pool.choices(), constraint.guaranteed());
-        ArrayList<TalentDefinition> selected = new ArrayList<>(selectCandidates(
-                snapshot, pool, matches, requiredCount, luck, pityActive, random
-        ));
+    public static List<ResourceLocation> generateOffersWithConstraint(
+            RuntimeSnapshot snapshot,
+            TalentPoolDefinition pool,
+            Set<ResourceLocation> owned,
+            Set<ResourceLocation> history,
+            ConditionEvaluator.Context conditionContext,
+            double luck,
+            boolean pityActive,
+            QueueDrawConstraintAction constraint,
+            RandomGenerator random
+    ) {
+        return generateOffersWithConstraints(snapshot, pool, owned, history, conditionContext,
+                luck, pityActive, List.of(constraint), random);
+    }
+
+    public static List<ResourceLocation> generateOffersWithConstraints(
+            RuntimeSnapshot snapshot,
+            TalentPoolDefinition pool,
+            Set<ResourceLocation> owned,
+            Set<ResourceLocation> history,
+            ConditionEvaluator.Context conditionContext,
+            double luck,
+            boolean pityActive,
+            List<QueueDrawConstraintAction> constraints,
+            RandomGenerator random
+    ) {
+        ArrayList<TalentDefinition> candidates = eligibleCandidates(
+                snapshot, pool, owned, history, conditionContext
+        );
+        ArrayList<TalentDefinition> selected = new ArrayList<>();
+        for (QueueDrawConstraintAction constraint : constraints) {
+            if (!constraint.appliesTo(pool.id()) || selected.size() >= pool.choices()) continue;
+            ArrayList<TalentDefinition> matches = candidates.stream().filter(constraint::matches)
+                    .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+            if (matches.isEmpty()) continue;
+            int requiredCount = Math.min(pool.choices() - selected.size(), constraint.guaranteed());
+            boolean pitySatisfied = pityActive && selected.stream().anyMatch(
+                    talent -> satisfiesPity(snapshot, pool, talent));
+            List<TalentDefinition> reserved = selectCandidates(snapshot, pool, matches, requiredCount,
+                    luck, pityActive && !pitySatisfied, random);
+            selected.addAll(reserved);
+            candidates.removeAll(reserved);
+        }
         boolean pitySatisfied = pityActive && selected.stream().anyMatch(
                 talent -> satisfiesPity(snapshot, pool, talent)
         );
-        candidates.removeAll(selected);
         if (selected.size() < pool.choices()) {
             selected.addAll(selectCandidates(
                     snapshot, pool, candidates, pool.choices() - selected.size(), luck,
@@ -212,10 +287,11 @@ public final class TalentDrawService {
             RuntimeSnapshot snapshot,
             TalentPoolDefinition pool,
             Set<ResourceLocation> owned,
+            Set<ResourceLocation> history,
             ConditionEvaluator.Context conditionContext
     ) {
         return snapshot.talents().values().stream()
-                .filter(talent -> eligibleForPool(talent, snapshot, pool, owned, conditionContext))
+                .filter(talent -> eligibleForPool(talent, snapshot, pool, owned, history, conditionContext))
                 .sorted(Comparator.comparing(talent -> talent.id().toString()))
                 .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
     }
@@ -283,11 +359,23 @@ public final class TalentDrawService {
             Set<ResourceLocation> owned,
             ResourceLocation poolId
     ) {
+        return refreshBonus(snapshot, null, owned, poolId);
+    }
+
+    private static int refreshBonus(
+            RuntimeSnapshot snapshot,
+            ServerPlayer player,
+            Set<ResourceLocation> owned,
+            ResourceLocation poolId
+    ) {
         long total = 0L;
         for (ResourceLocation talentId : owned) {
             TalentDefinition talent = snapshot.talents().get(talentId);
             if (talent == null || !talent.enabled() || !talent.available()) continue;
-            for (var action : talent.activeEffects()) {
+            for (var configured : talent.activeEffects()) {
+                if (player != null && !com.kidxoxo.talenteditor.runtime.ActionConditionRuntime.active(
+                        configured, player, talentId)) continue;
+                var action = com.kidxoxo.talenteditor.domain.ConditionalAction.unwrap(configured);
                 if (action instanceof DrawRefreshBonusAction bonus && bonus.appliesTo(poolId)) {
                     total += bonus.amount();
                     if (total >= 1_000L) return 1_000;
@@ -311,9 +399,10 @@ public final class TalentDrawService {
             ServerPlayer player
     ) {
         Set<ResourceLocation> owned = PlayerTalents.owned(player);
+        Set<ResourceLocation> history = PlayerTalents.talentHistory(player);
         ConditionEvaluator.Context context = ConditionEvaluator.context(player);
         Set<ResourceLocation> eligibleRarities = snapshot.talents().values().stream()
-                .filter(talent -> eligibleForPool(talent, snapshot, pool, owned, context))
+                .filter(talent -> eligibleForPool(talent, snapshot, pool, owned, history, context))
                 .map(TalentDefinition::rarity)
                 .collect(java.util.stream.Collectors.toSet());
         return rarityProbabilities(snapshot, pool, luckValue(player, pool), eligibleRarities);
@@ -368,11 +457,13 @@ public final class TalentDrawService {
             RuntimeSnapshot snapshot,
             TalentPoolDefinition pool,
             Set<ResourceLocation> owned,
+            Set<ResourceLocation> history,
             ConditionEvaluator.Context conditionContext
     ) {
         if (!talent.enabled() || !talent.available() || !talent.offer().enabled()
                 || talent.offer().weight() <= 0.0D) return false;
         if (!talent.offer().pools().isEmpty() && !talent.offer().pools().contains(pool.id())) return false;
+        if (!owned.contains(talent.id()) && history.contains(talent.id())) return false;
         if (pool.duplicatePolicy() == DuplicatePolicy.EXCLUDE && owned.contains(talent.id())) return false;
         if (!ConditionEvaluator.test(talent.acquireCondition(), conditionContext)) return false;
         RarityDefinition rarity = snapshot.rarities().get(talent.rarity());

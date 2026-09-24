@@ -15,6 +15,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.Map;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 
 public final class TalentDraft {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -42,7 +43,8 @@ public final class TalentDraft {
     private static final Set<String> EDITABLE_TRIGGER_EVENTS = Set.of(
             "damage_dealt_pre", "damage_taken_pre", "damage_dealt", "damage_taken", "interact_entity",
             "kill", "death", "item_use_finish", "interact_block", "player_tick", "player_second",
-            "player_move_distance"
+            "player_move_distance", "level_up", "draw_selected", "draw_refreshed", "counter_changed",
+            "fatal_damage", "nearby_entity_death", "item_submitted"
     );
     private static final Set<String> EDITABLE_TRIGGER_KEYS = Set.of(
             "id", "event", "priority", "chance", "chanceAttribute", "chanceCounter", "chanceCategory", "chancePerPoint",
@@ -50,7 +52,8 @@ public final class TalentDraft {
             "actionFailurePolicy", "failureActions"
     );
     private static final Set<String> EDITABLE_ADD_EFFECT_KEYS = Set.of(
-            "type", "effect", "durationTicks", "amplifier", "target", "ambient", "showParticles", "showIcon"
+            "type", "effect", "durationTicks", "amplifier", "target", "ambient", "showParticles", "showIcon",
+            "enabledWhen", "disabledWhen"
     );
     private static final Set<String> EDITABLE_REMOVE_EFFECT_KEYS = Set.of("type", "effect", "target");
     private static final Set<String> EDITABLE_MODIFY_DAMAGE_KEYS = Set.of(
@@ -72,7 +75,29 @@ public final class TalentDraft {
     );
     private static final Set<String> EDITABLE_DYNAMIC_ATTRIBUTE_KEYS = Set.of(
             "type", "attribute", "source", "counter", "base", "scale", "minimum", "maximum",
-            "operation", "modifierKey", "showInDescription"
+            "operation", "modifierKey", "showInDescription", "enabledWhen", "disabledWhen"
+    );
+    private static final Set<String> ADVANCED_ACTION_TYPES = Set.of(
+            "modify_state", "modify_damage_expression", "affect_health_expression",
+            "modify_attribute_base_expression", "timed_attribute_modifier", "grant_talent",
+            "revoke_talent", "give_item", "give_draw_tokens", "modify_counter", "take_item",
+            "hud_resource", "player_render", "open_item_submission"
+    );
+    private static final Set<String> ACTIVE_ADVANCED_ACTION_TYPES = Set.of(
+            "hud_resource", "player_render"
+    );
+    private static final Set<String> VISUAL_ROOT_KEYS = Set.of(
+            "schema", "enabled", "text", "rarity", "categories", "icon", "offer", "capacityCost",
+            "acquireCondition", "synthesis", "activeEffects", "triggers", "lifecycle",
+            "onAcquire", "onSynthesize", "onRemove"
+    );
+    private static final Set<String> VISUAL_TEXT_KEYS = Set.of("name", "description", "showGeneratedEffects");
+    private static final Set<String> VISUAL_OFFER_KEYS = Set.of("enabled", "weight", "pools");
+    private static final Set<String> VISUAL_SYNTHESIS_KEYS = Set.of(
+            "enabled", "consumeTalents", "consumeCounters", "consumeItems"
+    );
+    private static final Set<String> VISUAL_LIFECYCLE_KEYS = Set.of(
+            "durationTicks", "removeAfterDraws", "retainEffects", "retainCategoryContribution", "retainTriggers"
     );
 
     private final JsonObject root;
@@ -98,6 +123,13 @@ public final class TalentDraft {
         text.addProperty("showGeneratedEffects", true);
         root.add("text", text);
         root.addProperty("rarity", TalentEditorMod.MOD_ID + ":common");
+        JsonObject offer = new JsonObject();
+        offer.addProperty("enabled", true);
+        offer.addProperty("weight", 1.0D);
+        JsonArray pools = new JsonArray();
+        pools.add(TalentEditorMod.MOD_ID + ":default");
+        offer.add("pools", pools);
+        root.add("offer", offer);
         root.add("activeEffects", new JsonArray());
         return new TalentDraft(root);
     }
@@ -106,6 +138,46 @@ public final class TalentDraft {
         JsonElement parsed = JsonParser.parseString(json);
         if (!parsed.isJsonObject()) throw new IllegalArgumentException("Talent root must be an object");
         return new TalentDraft(parsed.getAsJsonObject());
+    }
+
+    public LifecycleDraft lifecycle() {
+        JsonObject lifecycle = object(root, "lifecycle");
+        if (lifecycle == null) return new LifecycleDraft(0, 0, false, false, false);
+        return new LifecycleDraft(
+                integer(lifecycle, "durationTicks", 0),
+                integer(lifecycle, "removeAfterDraws", 0),
+                booleanValue(lifecycle, "retainEffects", false),
+                booleanValue(lifecycle, "retainCategoryContribution", false),
+                booleanValue(lifecycle, "retainTriggers", false)
+        );
+    }
+
+    public void updateLifecycle(LifecycleDraft draft) {
+        if (draft.durationTicks() == 0 && draft.removeAfterDraws() == 0
+                && !draft.retainEffects() && !draft.retainCategoryContribution()
+                && !draft.retainTriggers()) {
+            root.remove("lifecycle");
+            return;
+        }
+        JsonObject lifecycle = new JsonObject();
+        lifecycle.addProperty("durationTicks", draft.durationTicks());
+        lifecycle.addProperty("removeAfterDraws", draft.removeAfterDraws());
+        lifecycle.addProperty("retainEffects", draft.retainEffects());
+        lifecycle.addProperty("retainCategoryContribution", draft.retainCategoryContribution());
+        lifecycle.addProperty("retainTriggers", draft.retainTriggers());
+        root.add("lifecycle", lifecycle);
+    }
+
+    public void replaceAllFrom(TalentDraft source) {
+        root.entrySet().clear();
+        source.root.entrySet().forEach(entry -> root.add(entry.getKey(), entry.getValue().deepCopy()));
+        effects.clear();
+        JsonElement active = root.get("activeEffects");
+        if (active != null && active.isJsonArray()) {
+            active.getAsJsonArray().forEach(element -> {
+                if (element.isJsonObject()) effects.add(element.getAsJsonObject().deepCopy());
+            });
+        }
     }
 
     public String name() {
@@ -170,12 +242,12 @@ public final class TalentDraft {
         }
         ResourceLocation rarity = ResourceLocation.tryParse(string(root, "rarity"));
         if (rarity == null) rarity = new ResourceLocation(TalentEditorMod.MOD_ID, "common");
-        ResourceLocation icon = ResourceLocation.tryParse(string(root, "icon"));
+        String rawIcon = string(root, "icon");
+        ResourceLocation icon = rawIcon.isBlank() ? null : ResourceLocation.tryParse(rawIcon);
         JsonObject text = object(root, "text");
         return new MetadataDraft(
                 booleanValue(root, "enabled", true),
                 rarity,
-                descriptionEditorText(descriptionLines()),
                 text == null || booleanValue(text, "showGeneratedEffects", true),
                 categories,
                 Optional.ofNullable(icon),
@@ -186,7 +258,6 @@ public final class TalentDraft {
     public void updateMetadata(
             boolean enabled,
             ResourceLocation rarity,
-            List<String> descriptions,
             boolean showGeneratedEffects,
             List<ResourceLocation> categories,
             Optional<ResourceLocation> icon,
@@ -198,11 +269,6 @@ public final class TalentDraft {
         if (text == null) {
             text = new JsonObject();
             root.add("text", text);
-        }
-        if (!descriptions.equals(descriptionLines())) {
-            JsonArray values = new JsonArray();
-            descriptions.forEach(values::add);
-            text.add("description", values);
         }
         text.addProperty("showGeneratedEffects", showGeneratedEffects);
         JsonArray serializedCategories = new JsonArray();
@@ -318,6 +384,16 @@ public final class TalentDraft {
             ));
         }
         return List.copyOf(rows);
+    }
+
+    public List<EffectRow> basicEffectRows() {
+        return effectRows().stream().filter(row -> row.editableAttribute()
+                || row.editableImmunity() || row.editableMaintainedEffect()).toList();
+    }
+
+    public List<EffectRow> specialEffectRows() {
+        return effectRows().stream().filter(row -> row.editableDynamicAttribute()
+                || row.editableDrawRefreshBonus() || row.editableCreativeFlight()).toList();
     }
 
     public boolean isEditableEventEffect(EffectRow row) {
@@ -471,6 +547,189 @@ public final class TalentDraft {
         return new OfferDraft(enabled, weight, pools);
     }
 
+    public boolean hasOfferDefinition() {
+        return root.has("offer") && root.get("offer").isJsonObject();
+    }
+
+    public EditorOverview editorOverview() {
+        LinkedHashMap<EditorSection, EditorSectionState> states = new LinkedHashMap<>();
+        TextStylesDraft text = textStyles();
+        boolean styledName = !text.name().translation().isBlank() || text.name().color().isPresent()
+                || text.name().bold() || text.name().italic();
+        states.put(EditorSection.TEXT, new EditorSectionState(
+                styledName || !text.descriptions().isEmpty(), text.descriptions().size(), false
+        ));
+
+        MetadataDraft metadata = metadata();
+        int metadataChanges = 0;
+        if (!metadata.enabled()) metadataChanges++;
+        if (!metadata.rarity().equals(new ResourceLocation(TalentEditorMod.MOD_ID, "common"))) metadataChanges++;
+        if (!metadata.showGeneratedEffects()) metadataChanges++;
+        if (!metadata.categories().isEmpty()) metadataChanges++;
+        if (metadata.icon().isPresent()) metadataChanges++;
+        if (metadata.capacityCost() != 1) metadataChanges++;
+        states.put(EditorSection.METADATA, new EditorSectionState(metadataChanges > 0, metadataChanges, false));
+
+        int presentationCount = presentationActionCount("onAcquire") + presentationActionCount("onSynthesize");
+        states.put(EditorSection.PRESENTATION, new EditorSectionState(
+                presentationCount > 0, presentationCount,
+                !presentation(PresentationPhase.ACQUIRE).editable()
+                        || !presentation(PresentationPhase.SYNTHESIZE).editable()
+        ));
+
+        OfferDraft offer = offer();
+        List<ResourceLocation> defaultPools = List.of(new ResourceLocation(TalentEditorMod.MOD_ID, "default"));
+        boolean defaultOffer = hasOfferDefinition() && offer.enabled()
+                && Double.compare(offer.weight(), 1.0D) == 0 && offer.pools().equals(defaultPools);
+        states.put(EditorSection.OFFER, new EditorSectionState(!defaultOffer, offer.pools().size(), false));
+
+        RequirementsDraft requirements = requirements();
+        states.put(EditorSection.REQUIREMENTS, new EditorSectionState(
+                root.has("acquireCondition"), requirements.rows().size(),
+                root.has("acquireCondition") && !requirements.editable()
+        ));
+
+        SynthesisDraft synthesis = synthesis();
+        int synthesisCosts = synthesis.consumeTalents().size()
+                + synthesis.consumeCounters().size() + synthesis.consumeItems().size();
+        states.put(EditorSection.SYNTHESIS, new EditorSectionState(
+                synthesis.enabled() || synthesisCosts > 0, synthesisCosts, false
+        ));
+
+        LifecycleDraft lifecycle = lifecycle();
+        boolean lifecycleConfigured = lifecycle.durationTicks() > 0 || lifecycle.removeAfterDraws() > 0
+                || lifecycle.retainEffects() || lifecycle.retainCategoryContribution() || lifecycle.retainTriggers();
+        states.put(EditorSection.LIFECYCLE, new EditorSectionState(lifecycleConfigured,
+                (lifecycle.durationTicks() > 0 ? 1 : 0) + (lifecycle.removeAfterDraws() > 0 ? 1 : 0), false));
+
+        List<EffectRow> basic = basicEffectRows();
+        List<EffectRow> special = specialEffectRows();
+        List<AdvancedActionRow> activeInterfaces = advancedActionRows(AdvancedActionLocation.ACTIVE_EFFECTS, -1);
+        states.put(EditorSection.BASIC_EFFECTS, new EditorSectionState(!basic.isEmpty(), basic.size(), false));
+        states.put(EditorSection.SPECIAL_EFFECTS, new EditorSectionState(!special.isEmpty(), special.size(), false));
+        states.put(EditorSection.ACTIVE_INTERFACES, new EditorSectionState(
+                !activeInterfaces.isEmpty(), activeInterfaces.size(),
+                activeInterfaces.stream().anyMatch(row -> !row.editable())
+        ));
+
+        List<TriggerRow> triggers = triggerRows();
+        states.put(EditorSection.TRIGGERS, new EditorSectionState(
+                !triggers.isEmpty(), triggers.size(), triggers.stream().anyMatch(row -> !row.editable())
+        ));
+        putActionState(states, EditorSection.ON_ACQUIRE_ACTIONS, AdvancedActionLocation.ON_ACQUIRE);
+        putActionState(states, EditorSection.ON_SYNTHESIZE_ACTIONS, AdvancedActionLocation.ON_SYNTHESIZE);
+        putActionState(states, EditorSection.ON_REMOVE_ACTIONS, AdvancedActionLocation.ON_REMOVE);
+
+        boolean advancedJson = hasAdvancedJsonOnlyContent();
+        states.put(EditorSection.RAW_JSON, new EditorSectionState(advancedJson, advancedJson ? 1 : 0, advancedJson));
+        return new EditorOverview(states);
+    }
+
+    private void putActionState(
+            Map<EditorSection, EditorSectionState> states,
+            EditorSection section,
+            AdvancedActionLocation location
+    ) {
+        List<AdvancedActionRow> rows = advancedActionRows(location, -1);
+        long presentationRows = rows.stream().filter(row -> row.type().equals("play_sound")
+                || row.type().equals("show_message")).count();
+        int behaviorCount = (int) Math.max(0L, rows.size() - presentationRows);
+        states.put(section, new EditorSectionState(
+                behaviorCount > 0, behaviorCount,
+                rows.stream().anyMatch(row -> !row.editable()
+                        && !row.type().equals("play_sound") && !row.type().equals("show_message"))
+        ));
+    }
+
+    private int presentationActionCount(String field) {
+        JsonElement raw = root.get(field);
+        if (raw == null || !raw.isJsonArray()) return 0;
+        int count = 0;
+        for (JsonElement element : raw.getAsJsonArray()) {
+            if (!element.isJsonObject()) continue;
+            String actionType = normalizeLocalId(type(element.getAsJsonObject()));
+            if (actionType.equals("play_sound") || actionType.equals("show_message")) count++;
+        }
+        return count;
+    }
+
+    private boolean hasAdvancedJsonOnlyContent() {
+        if (!VISUAL_ROOT_KEYS.containsAll(root.keySet())) return true;
+        if (hasUnknownKeys(object(root, "text"), VISUAL_TEXT_KEYS)
+                || hasUnknownKeys(object(root, "offer"), VISUAL_OFFER_KEYS)
+                || hasUnknownKeys(object(root, "synthesis"), VISUAL_SYNTHESIS_KEYS)
+                || hasUnknownKeys(object(root, "lifecycle"), VISUAL_LIFECYCLE_KEYS)) return true;
+        if (root.has("acquireCondition") && !requirements().editable()) return true;
+        for (EffectRow row : effectRows()) {
+            if (!row.editableAttribute() && !row.editableImmunity() && !row.editableMaintainedEffect()
+                    && !row.editableDrawRefreshBonus() && !row.editableDynamicAttribute()
+                    && !row.editableCreativeFlight()) {
+                String actionType = normalizeLocalId(row.idOrType());
+                if (!ACTIVE_ADVANCED_ACTION_TYPES.contains(actionType)) return true;
+            }
+        }
+        JsonElement rawTriggers = root.get("triggers");
+        if (rawTriggers != null) {
+            if (!rawTriggers.isJsonArray()) return true;
+            for (JsonElement trigger : rawTriggers.getAsJsonArray()) {
+                if (!trigger.isJsonObject() || !isVisualTrigger(trigger.getAsJsonObject())) return true;
+            }
+        }
+        for (AdvancedActionLocation location : List.of(
+                AdvancedActionLocation.ON_ACQUIRE,
+                AdvancedActionLocation.ON_SYNTHESIZE,
+                AdvancedActionLocation.ON_REMOVE
+        )) {
+            for (AdvancedActionRow row : advancedActionRows(location, -1)) {
+                if (!row.editable() && !row.type().equals("play_sound") && !row.type().equals("show_message")) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean isVisualTrigger(JsonObject trigger) {
+        if (!EDITABLE_TRIGGER_KEYS.containsAll(trigger.keySet()) || string(trigger, "id").isBlank()
+                || !EDITABLE_TRIGGER_EVENTS.contains(normalizeLocalId(string(trigger, "event")))) return false;
+        JsonElement conditionValue = trigger.get("condition");
+        if (conditionValue != null) {
+            if (!conditionValue.isJsonObject()) return false;
+            JsonObject condition = conditionValue.getAsJsonObject();
+            String conditionType = normalizeLocalId(string(condition, "type"));
+            if (conditionType.equals("expression_compare")) {
+                if (!Set.of("type", "left", "operator", "right").containsAll(condition.keySet())) return false;
+            } else {
+                TriggerFilter filter = TriggerFilter.fromSerialized(conditionType);
+                Set<String> expectedKeys = filter.requiresValue()
+                        ? Set.of("type", filter.field()) : Set.of("type");
+                if (!condition.keySet().equals(expectedKeys)) return false;
+            }
+        }
+        JsonElement actions = trigger.get("actions");
+        if (actions == null || !actions.isJsonArray() || actions.getAsJsonArray().isEmpty()
+                || !visualActionArray(actions.getAsJsonArray())) return false;
+        JsonElement failureActions = trigger.get("failureActions");
+        return failureActions == null || failureActions.isJsonArray()
+                && visualActionArray(failureActions.getAsJsonArray());
+    }
+
+    private boolean visualActionArray(JsonArray actions) {
+        for (JsonElement actionValue : actions) {
+            if (!actionValue.isJsonObject()) return false;
+            JsonObject action = actionValue.getAsJsonObject();
+            String actionType = normalizeLocalId(type(action));
+            if (parseEditableTriggerAction(action) == null && !ADVANCED_ACTION_TYPES.contains(actionType)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean hasUnknownKeys(JsonObject value, Set<String> known) {
+        return value != null && !known.containsAll(value.keySet());
+    }
+
     public void updateOffer(boolean enabled, double weight, List<ResourceLocation> pools) {
         JsonObject offer = object(root, "offer");
         if (offer == null) {
@@ -529,6 +788,10 @@ public final class TalentDraft {
             if (row.type() == RequirementType.ITEM || row.type() == RequirementType.CATEGORY) {
                 child.addProperty("count", row.amount());
             }
+            if (row.type() == RequirementType.ATTRIBUTE) {
+                child.addProperty("operator", row.operator());
+                child.addProperty("value", row.attributeValue());
+            }
             children.add(child);
         }
         group.add("children", children);
@@ -584,7 +847,7 @@ public final class TalentDraft {
     public PresentationDraft presentation(PresentationPhase phase) {
         JsonElement raw = root.get(phase.field());
         if (raw == null) return PresentationDraft.defaults();
-        if (!raw.isJsonArray() || raw.getAsJsonArray().size() > 2) return PresentationDraft.unsupported();
+        if (!raw.isJsonArray() || raw.getAsJsonArray().size() > 256) return PresentationDraft.unsupported();
         boolean soundEnabled = false;
         ResourceLocation sound = new ResourceLocation("minecraft", "entity.player.levelup");
         String soundSource = "players";
@@ -625,8 +888,6 @@ public final class TalentDraft {
                 fadeInTicks = integer(action, "fadeInTicks", 10);
                 stayTicks = integer(action, "stayTicks", 70);
                 fadeOutTicks = integer(action, "fadeOutTicks", 20);
-            } else {
-                return PresentationDraft.unsupported();
             }
         }
         return new PresentationDraft(
@@ -639,6 +900,17 @@ public final class TalentDraft {
     public void updatePresentation(PresentationPhase phase, PresentationDraft draft) {
         if (!draft.editable()) throw new IllegalArgumentException("Presentation action list is not editable");
         JsonArray actions = new JsonArray();
+        JsonElement current = root.get(phase.field());
+        if (current != null && current.isJsonArray()) {
+            for (JsonElement element : current.getAsJsonArray()) {
+                if (!element.isJsonObject()) continue;
+                String type = normalizeLocalId(string(element.getAsJsonObject(), "type"));
+                if (!type.equals(normalizeLocalId(PLAY_SOUND_TYPE))
+                        && !type.equals(normalizeLocalId(SHOW_MESSAGE_TYPE))) {
+                    actions.add(element.deepCopy());
+                }
+            }
+        }
         if (draft.soundEnabled()) {
             JsonObject sound = new JsonObject();
             sound.addProperty("type", PLAY_SOUND_TYPE);
@@ -683,6 +955,239 @@ public final class TalentDraft {
         return List.copyOf(rows);
     }
 
+    public List<AdvancedTriggerRow> advancedTriggerRows() {
+        JsonElement source = root.get("triggers");
+        if (source == null || !source.isJsonArray()) return List.of();
+        ArrayList<AdvancedTriggerRow> rows = new ArrayList<>();
+        JsonArray triggers = source.getAsJsonArray();
+        for (int index = 0; index < triggers.size(); index++) {
+            JsonElement value = triggers.get(index);
+            if (!value.isJsonObject()) {
+                rows.add(new AdvancedTriggerRow(index, "?", "?", false, false, 0, 0));
+                continue;
+            }
+            JsonObject trigger = value.getAsJsonObject();
+            JsonObject condition = object(trigger, "condition");
+            boolean expression = condition != null
+                    && normalizeLocalId(string(condition, "type")).equals("expression_compare");
+            rows.add(new AdvancedTriggerRow(
+                    index,
+                    string(trigger, "id").isBlank() ? "?" : string(trigger, "id"),
+                    normalizeLocalId(string(trigger, "event")),
+                    true,
+                    expression,
+                    actionArray(trigger, "actions").size(),
+                    actionArray(trigger, "failureActions").size()
+            ));
+        }
+        return List.copyOf(rows);
+    }
+
+    public ExpressionConditionDraft triggerExpressionCondition(int rawIndex) {
+        JsonObject trigger = triggerObject(rawIndex);
+        JsonObject condition = object(trigger, "condition");
+        if (condition == null) return new ExpressionConditionDraft(false, false, "0", "gte", "0");
+        if (!normalizeLocalId(string(condition, "type")).equals("expression_compare")) {
+            return new ExpressionConditionDraft(false, true, "0", "gte", "0");
+        }
+        String operator = string(condition, "operator");
+        if (operator.isBlank()) operator = "gte";
+        return new ExpressionConditionDraft(
+                true, true, stringOr(condition, "left", "0"), operator, stringOr(condition, "right", "0")
+        );
+    }
+
+    public void updateTriggerExpressionCondition(
+            int rawIndex, String left, String operator, String right
+    ) {
+        JsonObject condition = new JsonObject();
+        condition.addProperty("type", TalentEditorMod.MOD_ID + ":expression_compare");
+        condition.addProperty("left", left);
+        condition.addProperty("operator", operator);
+        condition.addProperty("right", right);
+        triggerObject(rawIndex).add("condition", condition);
+    }
+
+    public void clearTriggerCondition(int rawIndex) {
+        triggerObject(rawIndex).remove("condition");
+    }
+
+    public List<AdvancedActionRow> advancedActionRows(
+            AdvancedActionLocation location, int triggerRawIndex
+    ) {
+        ArrayList<AdvancedActionRow> rows = new ArrayList<>();
+        if (location == AdvancedActionLocation.ACTIVE_EFFECTS) {
+            for (int index = 0; index < effects.size(); index++) {
+                String actionType = normalizeLocalId(type(effects.get(index)));
+                if (ACTIVE_ADVANCED_ACTION_TYPES.contains(actionType)) {
+                    rows.add(new AdvancedActionRow(index, actionType, true));
+                }
+            }
+            return List.copyOf(rows);
+        }
+        JsonArray actions = advancedActionArray(location, triggerRawIndex, false);
+        for (int index = 0; index < actions.size(); index++) {
+            JsonElement value = actions.get(index);
+            String actionType = value.isJsonObject() ? normalizeLocalId(type(value.getAsJsonObject())) : "?";
+            rows.add(new AdvancedActionRow(
+                    index, actionType.isBlank() ? "?" : actionType,
+                    value.isJsonObject() && ADVANCED_ACTION_TYPES.contains(actionType)
+            ));
+        }
+        return List.copyOf(rows);
+    }
+
+    public List<ResourceLocation> numericStateIds() {
+        LinkedHashSet<ResourceLocation> result = new LinkedHashSet<>();
+        collectNumericStateIds(root, result);
+        return result.stream().sorted(java.util.Comparator.comparing(ResourceLocation::toString)).toList();
+    }
+
+    private static void collectNumericStateIds(JsonElement element, Set<ResourceLocation> result) {
+        if (element == null) return;
+        if (element.isJsonArray()) {
+            element.getAsJsonArray().forEach(child -> collectNumericStateIds(child, result));
+            return;
+        }
+        if (!element.isJsonObject()) return;
+        JsonObject object = element.getAsJsonObject();
+        String actionType = normalizeLocalId(string(object, "type"));
+        if (actionType.equals("modify_state") || actionType.equals("hud_resource")) {
+            ResourceLocation state = ResourceLocation.tryParse(string(object, "state"));
+            if (state != null) result.add(state);
+        }
+        object.entrySet().forEach(entry -> collectNumericStateIds(entry.getValue(), result));
+    }
+
+    public JsonObject advancedAction(
+            AdvancedActionLocation location, int triggerRawIndex, int actionIndex
+    ) {
+        if (location == AdvancedActionLocation.ACTIVE_EFFECTS) {
+            if (actionIndex < 0 || actionIndex >= effects.size()) {
+                throw new IllegalArgumentException("Invalid active effect index " + actionIndex);
+            }
+            return effects.get(actionIndex).deepCopy();
+        }
+        JsonArray actions = advancedActionArray(location, triggerRawIndex, false);
+        if (actionIndex < 0 || actionIndex >= actions.size() || !actions.get(actionIndex).isJsonObject()) {
+            throw new IllegalArgumentException("Invalid advanced action index " + actionIndex);
+        }
+        return actions.get(actionIndex).getAsJsonObject().deepCopy();
+    }
+
+    public void putAdvancedAction(
+            AdvancedActionLocation location, int triggerRawIndex, int actionIndex, JsonObject action
+    ) {
+        if (location == AdvancedActionLocation.ACTIVE_EFFECTS) {
+            if (actionIndex == effects.size() || actionIndex == -1) effects.add(action.deepCopy());
+            else if (actionIndex >= 0 && actionIndex < effects.size()) effects.set(actionIndex, action.deepCopy());
+            else throw new IllegalArgumentException("Invalid active effect index " + actionIndex);
+            return;
+        }
+        JsonArray actions = advancedActionArray(location, triggerRawIndex, true);
+        if (actionIndex == actions.size() || actionIndex == -1) actions.add(action.deepCopy());
+        else if (actionIndex >= 0 && actionIndex < actions.size()) actions.set(actionIndex, action.deepCopy());
+        else throw new IllegalArgumentException("Invalid advanced action index " + actionIndex);
+    }
+
+    public void removeAdvancedAction(
+            AdvancedActionLocation location, int triggerRawIndex, int actionIndex
+    ) {
+        if (location == AdvancedActionLocation.ACTIVE_EFFECTS) {
+            if (actionIndex < 0 || actionIndex >= effects.size()) throw new IllegalArgumentException(
+                    "Invalid active effect index " + actionIndex);
+            effects.remove(actionIndex);
+            return;
+        }
+        JsonArray actions = advancedActionArray(location, triggerRawIndex, false);
+        if (actionIndex < 0 || actionIndex >= actions.size()) {
+            throw new IllegalArgumentException("Invalid advanced action index " + actionIndex);
+        }
+        if (location == AdvancedActionLocation.TRIGGER_ACTIONS && actions.size() <= 1) {
+            throw new IllegalStateException("A trigger requires at least one primary action");
+        }
+        actions.remove(actionIndex);
+        cleanupEmptyActionArray(location, triggerRawIndex, actions);
+    }
+
+    public void moveAdvancedAction(
+            AdvancedActionLocation location, int triggerRawIndex, int actionIndex, int offset
+    ) {
+        if (location == AdvancedActionLocation.ACTIVE_EFFECTS) {
+            List<AdvancedActionRow> rows = advancedActionRows(location, triggerRawIndex);
+            int visibleIndex = -1;
+            for (int index = 0; index < rows.size(); index++) {
+                if (rows.get(index).rawIndex() == actionIndex) {
+                    visibleIndex = index;
+                    break;
+                }
+            }
+            int destinationIndex = visibleIndex + offset;
+            if (visibleIndex < 0 || destinationIndex < 0 || destinationIndex >= rows.size()) return;
+            int destination = rows.get(destinationIndex).rawIndex();
+            JsonObject moving = effects.get(actionIndex);
+            effects.set(actionIndex, effects.get(destination));
+            effects.set(destination, moving);
+            return;
+        }
+        JsonArray actions = advancedActionArray(location, triggerRawIndex, false);
+        int destination = actionIndex + offset;
+        if (actionIndex < 0 || actionIndex >= actions.size()
+                || destination < 0 || destination >= actions.size()) return;
+        JsonElement moving = actions.get(actionIndex);
+        JsonElement displaced = actions.get(destination);
+        actions.set(destination, moving);
+        actions.set(actionIndex, displaced);
+    }
+
+    private JsonArray advancedActionArray(
+            AdvancedActionLocation location, int triggerRawIndex, boolean create
+    ) {
+        JsonObject owner;
+        String field;
+        if (location.triggerScoped()) {
+            owner = triggerObject(triggerRawIndex);
+            field = location == AdvancedActionLocation.TRIGGER_ACTIONS ? "actions" : "failureActions";
+        } else {
+            owner = root;
+            field = location.rootField();
+        }
+        JsonElement current = owner.get(field);
+        if (current != null && current.isJsonArray()) return current.getAsJsonArray();
+        if (!create) return new JsonArray();
+        JsonArray created = new JsonArray();
+        owner.add(field, created);
+        return created;
+    }
+
+    private void cleanupEmptyActionArray(
+            AdvancedActionLocation location, int triggerRawIndex, JsonArray actions
+    ) {
+        if (!actions.isEmpty() || location == AdvancedActionLocation.TRIGGER_ACTIONS) return;
+        if (location.triggerScoped()) triggerObject(triggerRawIndex).remove("failureActions");
+        else root.remove(location.rootField());
+    }
+
+    private JsonObject triggerObject(int rawIndex) {
+        JsonElement source = root.get("triggers");
+        if (source == null || !source.isJsonArray() || rawIndex < 0
+                || rawIndex >= source.getAsJsonArray().size()
+                || !source.getAsJsonArray().get(rawIndex).isJsonObject()) {
+            throw new IllegalArgumentException("Invalid trigger index " + rawIndex);
+        }
+        return source.getAsJsonArray().get(rawIndex).getAsJsonObject();
+    }
+
+    private static JsonArray actionArray(JsonObject owner, String field) {
+        JsonElement current = owner.get(field);
+        return current != null && current.isJsonArray() ? current.getAsJsonArray() : new JsonArray();
+    }
+
+    private static String stringOr(JsonObject object, String key, String fallback) {
+        String value = string(object, key);
+        return value.isBlank() ? fallback : value;
+    }
+
     public int addEffectTrigger() {
         JsonArray triggers = triggerArray();
         int index = triggers.size();
@@ -721,10 +1226,13 @@ public final class TalentDraft {
         trigger.addProperty("cooldownTicks", draft.cooldownTicks());
         trigger.addProperty("activationLimit", draft.activationLimit());
         trigger.addProperty("actionFailurePolicy", draft.actionFailurePolicy());
-        if (draft.filter() != TriggerFilter.NONE && draft.filterValue() != null) {
+        if (draft.filter() != TriggerFilter.NONE
+                && (!draft.filter().requiresValue() || draft.filterValue() != null)) {
             JsonObject condition = new JsonObject();
             condition.addProperty("type", draft.filter().serializedName());
-            condition.addProperty(draft.filter().field(), draft.filterValue().toString());
+            if (draft.filter().requiresValue()) {
+                condition.addProperty(draft.filter().field(), draft.filterValue().toString());
+            }
             trigger.add("condition", condition);
         }
         JsonArray actions = new JsonArray();
@@ -819,9 +1327,14 @@ public final class TalentDraft {
             if (!trigger.get("condition").isJsonObject()) return null;
             JsonObject condition = trigger.getAsJsonObject("condition");
             filter = TriggerFilter.fromSerialized(normalizeLocalId(string(condition, "type")));
-            if (filter == null || !condition.keySet().equals(Set.of("type", filter.field()))) return null;
-            filterValue = ResourceLocation.tryParse(string(condition, filter.field()));
-            if (filterValue == null) return null;
+            if (filter == null) return null;
+            Set<String> expectedKeys = filter.requiresValue()
+                    ? Set.of("type", filter.field()) : Set.of("type");
+            if (!condition.keySet().equals(expectedKeys)) return null;
+            if (filter.requiresValue()) {
+                filterValue = ResourceLocation.tryParse(string(condition, filter.field()));
+                if (filterValue == null) return null;
+            }
         }
         JsonElement actionsValue = trigger.get("actions");
         if (actionsValue == null || !actionsValue.isJsonArray() || actionsValue.getAsJsonArray().isEmpty()
@@ -1110,7 +1623,7 @@ public final class TalentDraft {
     private static boolean isCreativeFlight(JsonObject effect) {
         String value = type(effect);
         return (value.equals("creative_flight") || value.equals(CREATIVE_FLIGHT_TYPE))
-                && effect.keySet().equals(Set.of("type"));
+                && Set.of("type", "enabledWhen", "disabledWhen").containsAll(effect.keySet());
     }
 
     private String nextModifierKey() {
@@ -1193,8 +1706,20 @@ public final class TalentDraft {
             case TALENT -> 1L;
             case COUNTER, COUNTER_CATEGORY -> longValue(object, "value", -1L);
             case ITEM, CATEGORY -> longValue(object, "count", -1L);
+            case ATTRIBUTE -> 1L;
         };
         if (amount < 0L) return null;
+        if (type == RequirementType.ATTRIBUTE) {
+            String operator = string(object, "operator");
+            if (!java.util.Set.of("lt", "lte", "eq", "neq", "gte", "gt").contains(operator)) return null;
+            try {
+                double value = object.get("value").getAsDouble();
+                if (!Double.isFinite(value) || value < -1.0E9D || value > 1.0E9D) return null;
+                return new RequirementRow(type, target, amount, operator, value);
+            } catch (RuntimeException exception) {
+                return null;
+            }
+        }
         return new RequirementRow(type, target, amount);
     }
 
@@ -1255,7 +1780,6 @@ public final class TalentDraft {
     public record MetadataDraft(
             boolean enabled,
             ResourceLocation rarity,
-            String descriptionEditorText,
             boolean showGeneratedEffects,
             List<ResourceLocation> categories,
             Optional<ResourceLocation> icon,
@@ -1264,6 +1788,37 @@ public final class TalentDraft {
         public MetadataDraft {
             categories = List.copyOf(categories);
             icon = icon == null ? Optional.empty() : icon;
+        }
+    }
+
+    public enum EditorSection {
+        TEXT,
+        METADATA,
+        PRESENTATION,
+        OFFER,
+        REQUIREMENTS,
+        SYNTHESIS,
+        LIFECYCLE,
+        BASIC_EFFECTS,
+        SPECIAL_EFFECTS,
+        ACTIVE_INTERFACES,
+        TRIGGERS,
+        ON_ACQUIRE_ACTIONS,
+        ON_SYNTHESIZE_ACTIONS,
+        ON_REMOVE_ACTIONS,
+        RAW_JSON
+    }
+
+    public record EditorSectionState(boolean configured, int count, boolean advancedOnly) {
+    }
+
+    public record EditorOverview(Map<EditorSection, EditorSectionState> sections) {
+        public EditorOverview {
+            sections = Map.copyOf(sections);
+        }
+
+        public EditorSectionState section(EditorSection section) {
+            return sections.getOrDefault(section, new EditorSectionState(false, 0, false));
         }
     }
 
@@ -1306,6 +1861,58 @@ public final class TalentDraft {
         public DynamicAttributeDraft {
             counter = counter == null ? Optional.empty() : counter;
         }
+    }
+
+    public record LifecycleDraft(
+            int durationTicks,
+            int removeAfterDraws,
+            boolean retainEffects,
+            boolean retainCategoryContribution,
+            boolean retainTriggers
+    ) {
+    }
+
+    public record AdvancedTriggerRow(
+            int rawIndex,
+            String id,
+            String event,
+            boolean editable,
+            boolean expressionCondition,
+            int actionCount,
+            int failureActionCount
+    ) {
+    }
+
+    public record ExpressionConditionDraft(
+            boolean expression,
+            boolean hadCondition,
+            String left,
+            String operator,
+            String right
+    ) {
+    }
+
+    public record AdvancedActionRow(int rawIndex, String type, boolean editable) {
+    }
+
+    public enum AdvancedActionLocation {
+        ACTIVE_EFFECTS("activeEffects", false),
+        ON_ACQUIRE("onAcquire", false),
+        ON_SYNTHESIZE("onSynthesize", false),
+        ON_REMOVE("onRemove", false),
+        TRIGGER_ACTIONS("", true),
+        TRIGGER_FAILURE_ACTIONS("", true);
+
+        private final String rootField;
+        private final boolean triggerScoped;
+
+        AdvancedActionLocation(String rootField, boolean triggerScoped) {
+            this.rootField = rootField;
+            this.triggerScoped = triggerScoped;
+        }
+
+        public String rootField() { return rootField; }
+        public boolean triggerScoped() { return triggerScoped; }
     }
 
     public record TriggerRow(int rawIndex, boolean editable, TriggerDraft draft, String id, String event) {
@@ -1554,11 +2161,17 @@ public final class TalentDraft {
         NONE("", ""),
         ENTITY_TYPE("event_entity_type", "entityType"),
         ENTITY_TAG("event_entity_tag", "tag"),
+        ENTITY_EFFECT("event_entity_effect", "effect"),
         DAMAGE_TAG("damage_type_tag", "tag"),
+        EVENT_TALENT("event_talent", "talent"),
+        EVENT_TALENT_CATEGORY("event_talent_category", "category"),
+        EVENT_TALENT_RARITY("event_talent_rarity", "rarity"),
         ITEM("event_item", "item"),
         ITEM_TAG("event_item_tag", "tag"),
+        ITEM_EDIBLE("event_item_edible", ""),
         BLOCK("event_block", "block"),
-        BLOCK_TAG("event_block_tag", "tag");
+        BLOCK_TAG("event_block_tag", "tag"),
+        CURIOS_EQUIPPED("curios_equipped", "item");
 
         private final String serializedName;
         private final String field;
@@ -1570,6 +2183,7 @@ public final class TalentDraft {
 
         public String serializedName() { return serializedName; }
         public String field() { return field; }
+        public boolean requiresValue() { return !field.isBlank(); }
 
         static TriggerFilter fromSerialized(String value) {
             for (TriggerFilter filter : values()) {
@@ -1608,7 +2222,8 @@ public final class TalentDraft {
         COUNTER("counter_at_least", "counter", Set.of("type", "counter", "value")),
         COUNTER_CATEGORY("counter_category_total_at_least", "category", Set.of("type", "category", "value")),
         CATEGORY("category_count_at_least", "category", Set.of("type", "category", "count")),
-        ITEM("has_item", "item", Set.of("type", "item", "count"));
+        ITEM("has_item", "item", Set.of("type", "item", "count")),
+        ATTRIBUTE("attribute_compare", "attribute", Set.of("type", "attribute", "operator", "value"));
 
         private final String serializedName;
         private final String targetKey;
@@ -1642,7 +2257,11 @@ public final class TalentDraft {
         }
     }
 
-    public record RequirementRow(RequirementType type, ResourceLocation target, long amount) {
+    public record RequirementRow(RequirementType type, ResourceLocation target, long amount,
+                                 String operator, double attributeValue) {
+        public RequirementRow(RequirementType type, ResourceLocation target, long amount) {
+            this(type, target, amount, "gte", amount);
+        }
     }
 
     public record RequirementsDraft(

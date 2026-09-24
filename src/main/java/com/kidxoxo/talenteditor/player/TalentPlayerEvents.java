@@ -2,6 +2,7 @@ package com.kidxoxo.talenteditor.player;
 
 import com.kidxoxo.talenteditor.TalentEditorMod;
 import com.kidxoxo.talenteditor.runtime.TalentAttributeRuntime;
+import com.kidxoxo.talenteditor.runtime.PlayerMotionTracker;
 import com.kidxoxo.talenteditor.network.EditorNetwork;
 import com.kidxoxo.talenteditor.domain.CounterResetTrigger;
 import net.minecraft.resources.ResourceLocation;
@@ -62,6 +63,7 @@ public final class TalentPlayerEvents {
             TalentEditorMod.COUNTERS.resetForTrigger(player, CounterResetTrigger.LOGIN);
             refreshAndSync(player);
             EditorNetwork.sendResourceRequirements(player);
+            EditorNetwork.sendConfiguredItemCatalog(player);
         }
     }
 
@@ -76,9 +78,19 @@ public final class TalentPlayerEvents {
     }
 
     @SubscribeEvent
+    public static void startTracking(PlayerEvent.StartTracking event) {
+        if (event.getEntity() instanceof ServerPlayer viewer && event.getTarget() instanceof ServerPlayer target) {
+            EditorNetwork.sendPlayerVisualState(target, viewer);
+        }
+    }
+
+    @SubscribeEvent
     public static void playerTick(TickEvent.PlayerTickEvent event) {
         if (event.phase != TickEvent.Phase.END || !(event.player instanceof ServerPlayer player)) return;
         if (player.tickCount % 10 == 0) TalentAttributeRuntime.refreshDynamic(player);
+        if (player.tickCount % 20 == 0 && com.kidxoxo.talenteditor.network.PlayerTalentStateFactory.hasRenderAction(
+                TalentEditorMod.SNAPSHOTS.active(), PlayerTalents.activeSources(player)
+        )) EditorNetwork.sendPlayerVisualState(player);
         if (player.tickCount % 20 == 0 && TalentEditorMod.SETTINGS.automaticSynthesis()
                 && TalentEditorMod.SYNTHESES.synthesizeReady(player, 64) > 0) {
             TalentAttributeRuntime.refresh(player);
@@ -93,6 +105,8 @@ public final class TalentPlayerEvents {
             TalentEditorMod.DRAWS.removeSession(player);
             TalentEditorMod.COUNTERS.removePlayer(player);
             TalentEditorMod.CLIENT_RESOURCES.remove(player.getUUID());
+            TalentEditorMod.SUBMISSIONS.remove(player);
+            PlayerMotionTracker.remove(player);
         }
     }
 
@@ -101,10 +115,12 @@ public final class TalentPlayerEvents {
         if (event.getPlayer() != null) {
             refreshAndSync(event.getPlayer());
             EditorNetwork.sendResourceRequirements(event.getPlayer());
+            EditorNetwork.sendConfiguredItemCatalog(event.getPlayer());
         } else {
             event.getPlayerList().getPlayers().forEach(player -> {
                 refreshAndSync(player);
                 EditorNetwork.sendResourceRequirements(player);
+                EditorNetwork.sendConfiguredItemCatalog(player);
             });
         }
     }

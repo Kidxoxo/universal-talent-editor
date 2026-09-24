@@ -1,14 +1,20 @@
 package com.kidxoxo.talenteditor.runtime;
 
 import com.kidxoxo.talenteditor.domain.CompiledCondition;
+import com.kidxoxo.talenteditor.domain.CompiledAction;
 import com.kidxoxo.talenteditor.domain.DefinitionKind;
 import com.kidxoxo.talenteditor.domain.DefinitionReference;
 import com.kidxoxo.talenteditor.domain.DefinitionTarget;
 import com.kidxoxo.talenteditor.domain.CounterRuleDefinition;
 import com.kidxoxo.talenteditor.domain.DrawRefreshBonusAction;
 import com.kidxoxo.talenteditor.domain.DynamicAttributeModifierAction;
+import com.kidxoxo.talenteditor.domain.GiveItemAction;
+import com.kidxoxo.talenteditor.domain.GrantTalentAction;
+import com.kidxoxo.talenteditor.domain.ModifyCounterAction;
 import com.kidxoxo.talenteditor.domain.RarityDefinition;
 import com.kidxoxo.talenteditor.domain.QueueDrawConstraintAction;
+import com.kidxoxo.talenteditor.domain.RevokeTalentAction;
+import com.kidxoxo.talenteditor.domain.TakeItemAction;
 import com.kidxoxo.talenteditor.domain.TalentDefinition;
 import com.kidxoxo.talenteditor.domain.TalentBookLayoutDefinition;
 import com.kidxoxo.talenteditor.domain.TalentPoolDefinition;
@@ -73,21 +79,8 @@ final class DefinitionReferenceIndex {
                     DefinitionKind.TALENT, talent.id(), "offer_pool", "$.offer.pools[" + index + "]");
         }
         for (int actionIndex = 0; actionIndex < talent.activeEffects().size(); actionIndex++) {
-            var action = talent.activeEffects().get(actionIndex);
-            if (action instanceof DrawRefreshBonusAction bonus) {
-                for (int poolIndex = 0; poolIndex < bonus.pools().size(); poolIndex++) {
-                    add(references, DefinitionKind.POOL, bonus.pools().get(poolIndex),
-                            DefinitionKind.TALENT, talent.id(), "refresh_bonus_pool",
-                            "$.activeEffects[" + actionIndex + "].pools[" + poolIndex + "]");
-                }
-            }
-            if (action instanceof DynamicAttributeModifierAction dynamic) {
-                if (dynamic.counter().isPresent()) {
-                    add(references, DefinitionKind.COUNTER, dynamic.counter().orElseThrow(),
-                            DefinitionKind.TALENT, talent.id(), "dynamic_attribute_counter",
-                            "$.activeEffects[" + actionIndex + "].counter");
-                }
-            }
+            indexAction(references, talent.id(), talent.activeEffects().get(actionIndex),
+                    "$.activeEffects[" + actionIndex + "]", configuredItems);
         }
         indexCondition(references, talent.id(), talent.acquireCondition(), "$.acquireCondition", configuredItems);
         for (int index = 0; index < talent.synthesis().consumeTalents().size(); index++) {
@@ -120,19 +113,73 @@ final class DefinitionReferenceIndex {
             indexCondition(references, talent.id(), trigger.condition(),
                     "$.triggers[" + index + "].condition", configuredItems);
             for (int actionIndex = 0; actionIndex < trigger.actions().size(); actionIndex++) {
-                if (trigger.actions().get(actionIndex)
-                        instanceof QueueDrawConstraintAction constraint) {
-                    indexDrawConstraint(references, talent.id(), constraint,
-                            "$.triggers[" + index + "].actions[" + actionIndex + "]");
-                }
+                indexAction(references, talent.id(), trigger.actions().get(actionIndex),
+                        "$.triggers[" + index + "].actions[" + actionIndex + "]", configuredItems);
             }
             for (int actionIndex = 0; actionIndex < trigger.failureActions().size(); actionIndex++) {
-                if (trigger.failureActions().get(actionIndex)
-                        instanceof QueueDrawConstraintAction constraint) {
-                    indexDrawConstraint(references, talent.id(), constraint,
-                            "$.triggers[" + index + "].failureActions[" + actionIndex + "]");
-                }
+                indexAction(references, talent.id(), trigger.failureActions().get(actionIndex),
+                        "$.triggers[" + index + "].failureActions[" + actionIndex + "]", configuredItems);
             }
+        }
+        indexActions(references, talent.id(), talent.onAcquire(), "$.onAcquire", configuredItems);
+        indexActions(references, talent.id(), talent.onSynthesize(), "$.onSynthesize", configuredItems);
+        indexActions(references, talent.id(), talent.onRemove(), "$.onRemove", configuredItems);
+    }
+
+    private static void indexActions(
+            Map<DefinitionTarget, List<DefinitionReference>> references,
+            ResourceLocation sourceId,
+            List<CompiledAction> actions,
+            String path,
+            Set<ResourceLocation> configuredItems
+    ) {
+        for (int index = 0; index < actions.size(); index++) {
+            indexAction(references, sourceId, actions.get(index), path + "[" + index + "]", configuredItems);
+        }
+    }
+
+    private static void indexAction(
+            Map<DefinitionTarget, List<DefinitionReference>> references,
+            ResourceLocation sourceId,
+            CompiledAction action,
+            String path,
+            Set<ResourceLocation> configuredItems
+    ) {
+        if (action instanceof com.kidxoxo.talenteditor.domain.ConditionalAction gate) {
+            gate.enabledWhen().ifPresent(condition -> indexCondition(references, sourceId,
+                    condition, path + ".enabledWhen", configuredItems));
+            gate.disabledWhen().ifPresent(condition -> indexCondition(references, sourceId,
+                    condition, path + ".disabledWhen", configuredItems));
+            action = gate.delegate();
+        }
+        if (action instanceof DrawRefreshBonusAction bonus) {
+            for (int poolIndex = 0; poolIndex < bonus.pools().size(); poolIndex++) {
+                add(references, DefinitionKind.POOL, bonus.pools().get(poolIndex),
+                        DefinitionKind.TALENT, sourceId, "refresh_bonus_pool",
+                        path + ".pools[" + poolIndex + "]");
+            }
+        } else if (action instanceof DynamicAttributeModifierAction dynamic) {
+            dynamic.counter().ifPresent(counter -> add(
+                    references, DefinitionKind.COUNTER, counter,
+                    DefinitionKind.TALENT, sourceId, "dynamic_attribute_counter", path + ".counter"
+            ));
+        } else if (action instanceof QueueDrawConstraintAction constraint) {
+            indexDrawConstraint(references, sourceId, constraint, path);
+        } else if (action instanceof GrantTalentAction grant) {
+            add(references, DefinitionKind.TALENT, grant.talent(), DefinitionKind.TALENT, sourceId,
+                    "grant_talent", path + ".talent");
+        } else if (action instanceof RevokeTalentAction revoke) {
+            add(references, DefinitionKind.TALENT, revoke.talent(), DefinitionKind.TALENT, sourceId,
+                    "revoke_talent", path + ".talent");
+        } else if (action instanceof ModifyCounterAction modify) {
+            add(references, DefinitionKind.COUNTER, modify.counter(), DefinitionKind.TALENT, sourceId,
+                    "modify_counter", path + ".counter");
+        } else if (action instanceof GiveItemAction give && configuredItems.contains(give.item())) {
+            add(references, DefinitionKind.ITEM, give.item(), DefinitionKind.TALENT, sourceId,
+                    "give_item", path + ".item");
+        } else if (action instanceof TakeItemAction take && configuredItems.contains(take.item())) {
+            add(references, DefinitionKind.ITEM, take.item(), DefinitionKind.TALENT, sourceId,
+                    "take_item", path + ".item");
         }
     }
 
@@ -253,6 +300,15 @@ final class DefinitionReferenceIndex {
         if (condition instanceof CompiledCondition.HasTalent value) {
             add(references, DefinitionKind.TALENT, value.talent(), DefinitionKind.TALENT, sourceId,
                     "condition_talent", path + ".talent");
+        } else if (condition instanceof CompiledCondition.EventTalent value) {
+            add(references, DefinitionKind.TALENT, value.talent(), DefinitionKind.TALENT, sourceId,
+                    "condition_event_talent", path + ".talent");
+        } else if (condition instanceof CompiledCondition.EventTalentCategory value) {
+            add(references, DefinitionKind.TALENT_CATEGORY, value.category(), DefinitionKind.TALENT, sourceId,
+                    "condition_event_talent_category", path + ".category");
+        } else if (condition instanceof CompiledCondition.EventTalentRarity value) {
+            add(references, DefinitionKind.RARITY, value.rarity(), DefinitionKind.TALENT, sourceId,
+                    "condition_event_talent_rarity", path + ".rarity");
         } else if (condition instanceof CompiledCondition.CounterAtLeast value) {
             add(references, DefinitionKind.COUNTER, value.counter(), DefinitionKind.TALENT, sourceId,
                     "condition_counter", path + ".counter");

@@ -2,6 +2,7 @@ package com.kidxoxo.talenteditor.runtime;
 
 import com.kidxoxo.talenteditor.TalentEditorMod;
 import com.kidxoxo.talenteditor.domain.CompiledCondition;
+import com.kidxoxo.talenteditor.domain.NumericExpression;
 import com.kidxoxo.talenteditor.domain.TalentDefinition;
 import com.kidxoxo.talenteditor.item.ConfiguredItem;
 import com.kidxoxo.talenteditor.player.PlayerTalents;
@@ -28,14 +29,20 @@ public final class ConditionEvaluator {
     }
 
     public static boolean test(CompiledCondition condition, Context context) {
+        return test(condition, context, null);
+    }
+
+    public static boolean test(
+            CompiledCondition condition, Context context, NumericExpression.Resolver expressionResolver
+    ) {
         if (condition instanceof CompiledCondition.Always always) return always.value();
         if (condition instanceof CompiledCondition.All all) {
-            return all.children().stream().allMatch(child -> test(child, context));
+            return all.children().stream().allMatch(child -> test(child, context, expressionResolver));
         }
         if (condition instanceof CompiledCondition.Any any) {
-            return any.children().stream().anyMatch(child -> test(child, context));
+            return any.children().stream().anyMatch(child -> test(child, context, expressionResolver));
         }
-        if (condition instanceof CompiledCondition.Not not) return !test(not.child(), context);
+        if (condition instanceof CompiledCondition.Not not) return !test(not.child(), context, expressionResolver);
         if (condition instanceof CompiledCondition.HasTalent hasTalent) {
             return context.talents().contains(hasTalent.talent());
         }
@@ -51,14 +58,32 @@ public final class ConditionEvaluator {
         if (condition instanceof CompiledCondition.HasItem hasItem) {
             return context.itemCounts().getOrDefault(hasItem.item(), 0) >= hasItem.count();
         }
+        if (condition instanceof CompiledCondition.AttributeCompare compare) {
+            if (context.player() == null) return false;
+            var attribute = ForgeRegistries.ATTRIBUTES.getValue(compare.attribute());
+            return attribute != null && context.player().getAttribute(attribute) != null
+                    && compare.operator().test(context.player().getAttributeValue(attribute), compare.value());
+        }
         if (condition instanceof CompiledCondition.EventEntityType entityType) {
             return context.eventEntityType().filter(entityType.entityType()::equals).isPresent();
         }
         if (condition instanceof CompiledCondition.EventEntityTag entityTag) {
             return context.eventEntityTags().contains(entityTag.tag());
         }
+        if (condition instanceof CompiledCondition.EventEntityEffect entityEffect) {
+            return context.eventEntityEffects().contains(entityEffect.effect());
+        }
         if (condition instanceof CompiledCondition.DamageTypeTag damageTag) {
             return context.damageTypeTags().contains(damageTag.tag());
+        }
+        if (condition instanceof CompiledCondition.EventTalent eventTalent) {
+            return context.eventTalent().filter(eventTalent.talent()::equals).isPresent();
+        }
+        if (condition instanceof CompiledCondition.EventTalentCategory category) {
+            return context.eventTalentCategories().contains(category.category());
+        }
+        if (condition instanceof CompiledCondition.EventTalentRarity rarity) {
+            return context.eventTalentRarity().filter(rarity.rarity()::equals).isPresent();
         }
         if (condition instanceof CompiledCondition.EventItem item) {
             return context.eventItem().filter(item.item()::equals).isPresent();
@@ -66,11 +91,25 @@ public final class ConditionEvaluator {
         if (condition instanceof CompiledCondition.EventItemTag itemTag) {
             return context.eventItemTags().contains(itemTag.tag());
         }
+        if (condition instanceof CompiledCondition.EventItemEdible) {
+            return context.eventItem().map(ForgeRegistries.ITEMS::getValue)
+                    .map(item -> item.isEdible()).orElse(false);
+        }
         if (condition instanceof CompiledCondition.EventBlock block) {
             return context.eventBlock().filter(block.block()::equals).isPresent();
         }
         if (condition instanceof CompiledCondition.EventBlockTag blockTag) {
             return context.eventBlockTags().contains(blockTag.tag());
+        }
+        if (condition instanceof CompiledCondition.CuriosEquipped curios) {
+            return context.player() != null
+                    && com.kidxoxo.talenteditor.compat.CuriosIntegration.hasEquipped(context.player(), curios.item());
+        }
+        if (condition instanceof CompiledCondition.ExpressionCompare compare) {
+            if (expressionResolver == null) return false;
+            return compare.operator().test(
+                    compare.left().evaluate(expressionResolver), compare.right().evaluate(expressionResolver)
+            );
         }
         return false;
     }
@@ -91,7 +130,7 @@ public final class ConditionEvaluator {
         Set<ResourceLocation> owned = PlayerTalents.owned(player);
         LinkedHashMap<ResourceLocation, Integer> categoryCounts = new LinkedHashMap<>();
         RuntimeSnapshot snapshot = TalentEditorMod.SNAPSHOTS.active();
-        for (ResourceLocation id : owned) {
+        for (ResourceLocation id : PlayerTalents.categorySources(player)) {
             TalentDefinition talent = snapshot.talents().get(id);
             if (talent == null || !talent.enabled() || !talent.available()) continue;
             talent.categories().forEach(category -> categoryCounts.merge(category, 1, Integer::sum));
@@ -110,7 +149,7 @@ public final class ConditionEvaluator {
             }
             if (total > 0L) counterCategoryTotals.put(category, total);
         });
-        return new Context(owned, counters, items, categoryCounts, counterCategoryTotals);
+        return new Context(owned, counters, items, categoryCounts, counterCategoryTotals, player);
     }
 
     public static Context eventContext(ServerPlayer player, Entity eventEntity, DamageSource damageSource) {
@@ -124,10 +163,27 @@ public final class ConditionEvaluator {
             ItemStack eventItem,
             BlockState eventBlock
     ) {
+        return eventContext(player, eventEntity, damageSource, eventItem, eventBlock, null);
+    }
+
+    public static Context eventContext(
+            ServerPlayer player,
+            Entity eventEntity,
+            DamageSource damageSource,
+            ItemStack eventItem,
+            BlockState eventBlock,
+            ResourceLocation eventTalent
+    ) {
         Context base = context(player);
         ResourceLocation type = eventEntity == null ? null : ForgeRegistries.ENTITY_TYPES.getKey(eventEntity.getType());
         Set<ResourceLocation> entityTags = eventEntity == null ? Set.of() : eventEntity.getType()
                 .builtInRegistryHolder().tags().map(tag -> tag.location()).collect(Collectors.toUnmodifiableSet());
+        Set<ResourceLocation> entityEffects = eventEntity instanceof net.minecraft.world.entity.LivingEntity living
+                ? living.getActiveEffects().stream()
+                .map(instance -> ForgeRegistries.MOB_EFFECTS.getKey(instance.getEffect()))
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toUnmodifiableSet())
+                : Set.of();
         Set<ResourceLocation> damageTags = damageSource == null ? Set.of() : damageSource.typeHolder().tags()
                 .map(tag -> tag.location()).collect(Collectors.toUnmodifiableSet());
         ItemStack effectiveItem = eventItem == null ? ItemStack.EMPTY : eventItem;
@@ -138,10 +194,16 @@ public final class ConditionEvaluator {
         ResourceLocation block = eventBlock == null ? null : ForgeRegistries.BLOCKS.getKey(eventBlock.getBlock());
         Set<ResourceLocation> blockTags = eventBlock == null ? Set.of() : eventBlock.getBlock()
                 .builtInRegistryHolder().tags().map(tag -> tag.location()).collect(Collectors.toUnmodifiableSet());
+        TalentDefinition selectedTalent = eventTalent == null
+                ? null : TalentEditorMod.SNAPSHOTS.active().talents().get(eventTalent);
+        Set<ResourceLocation> selectedCategories = selectedTalent == null
+                ? Set.of() : Set.copyOf(selectedTalent.categories());
+        ResourceLocation selectedRarity = selectedTalent == null ? null : selectedTalent.rarity();
         return new Context(
                 base.talents(), base.counters(), base.itemCounts(), base.categoryCounts(),
-                base.counterCategoryTotals(), Optional.ofNullable(type), entityTags, damageTags,
-                Optional.ofNullable(item), itemTags, Optional.ofNullable(block), blockTags
+                base.counterCategoryTotals(), Optional.ofNullable(type), entityTags, entityEffects, damageTags,
+                Optional.ofNullable(eventTalent), selectedCategories, Optional.ofNullable(selectedRarity),
+                Optional.ofNullable(item), itemTags, Optional.ofNullable(block), blockTags, player
         );
     }
 
@@ -153,11 +215,16 @@ public final class ConditionEvaluator {
             Map<ResourceLocation, Long> counterCategoryTotals,
             Optional<ResourceLocation> eventEntityType,
             Set<ResourceLocation> eventEntityTags,
+            Set<ResourceLocation> eventEntityEffects,
             Set<ResourceLocation> damageTypeTags,
+            Optional<ResourceLocation> eventTalent,
+            Set<ResourceLocation> eventTalentCategories,
+            Optional<ResourceLocation> eventTalentRarity,
             Optional<ResourceLocation> eventItem,
             Set<ResourceLocation> eventItemTags,
             Optional<ResourceLocation> eventBlock,
-            Set<ResourceLocation> eventBlockTags
+            Set<ResourceLocation> eventBlockTags,
+            ServerPlayer player
     ) {
         public Context {
             talents = Set.copyOf(talents);
@@ -167,7 +234,11 @@ public final class ConditionEvaluator {
             counterCategoryTotals = Map.copyOf(counterCategoryTotals);
             eventEntityType = eventEntityType == null ? Optional.empty() : eventEntityType;
             eventEntityTags = Set.copyOf(eventEntityTags);
+            eventEntityEffects = Set.copyOf(eventEntityEffects);
             damageTypeTags = Set.copyOf(damageTypeTags);
+            eventTalent = eventTalent == null ? Optional.empty() : eventTalent;
+            eventTalentCategories = Set.copyOf(eventTalentCategories);
+            eventTalentRarity = eventTalentRarity == null ? Optional.empty() : eventTalentRarity;
             eventItem = eventItem == null ? Optional.empty() : eventItem;
             eventItemTags = Set.copyOf(eventItemTags);
             eventBlock = eventBlock == null ? Optional.empty() : eventBlock;
@@ -182,11 +253,56 @@ public final class ConditionEvaluator {
                 Map<ResourceLocation, Long> counterCategoryTotals,
                 Optional<ResourceLocation> eventEntityType,
                 Set<ResourceLocation> eventEntityTags,
+                Set<ResourceLocation> eventEntityEffects,
+                Set<ResourceLocation> damageTypeTags,
+                Optional<ResourceLocation> eventTalent,
+                Set<ResourceLocation> eventTalentCategories,
+                Optional<ResourceLocation> eventTalentRarity,
+                Optional<ResourceLocation> eventItem,
+                Set<ResourceLocation> eventItemTags,
+                Optional<ResourceLocation> eventBlock,
+                Set<ResourceLocation> eventBlockTags
+        ) {
+            this(talents, counters, itemCounts, categoryCounts, counterCategoryTotals,
+                    eventEntityType, eventEntityTags, eventEntityEffects, damageTypeTags,
+                    eventTalent, eventTalentCategories, eventTalentRarity,
+                    eventItem, eventItemTags, eventBlock, eventBlockTags, null);
+        }
+
+        public Context(
+                Set<ResourceLocation> talents,
+                Map<ResourceLocation, Long> counters,
+                Map<ResourceLocation, Integer> itemCounts,
+                Map<ResourceLocation, Integer> categoryCounts,
+                Map<ResourceLocation, Long> counterCategoryTotals,
+                Optional<ResourceLocation> eventEntityType,
+                Set<ResourceLocation> eventEntityTags,
                 Set<ResourceLocation> damageTypeTags
         ) {
             this(talents, counters, itemCounts, categoryCounts, counterCategoryTotals,
-                    eventEntityType, eventEntityTags, damageTypeTags,
-                    Optional.empty(), Set.of(), Optional.empty(), Set.of());
+                    eventEntityType, eventEntityTags, Set.of(), damageTypeTags,
+                    Optional.empty(), Set.of(), Optional.empty(),
+                    Optional.empty(), Set.of(), Optional.empty(), Set.of(), null);
+        }
+
+        public Context(
+                Set<ResourceLocation> talents,
+                Map<ResourceLocation, Long> counters,
+                Map<ResourceLocation, Integer> itemCounts,
+                Map<ResourceLocation, Integer> categoryCounts,
+                Map<ResourceLocation, Long> counterCategoryTotals,
+                Optional<ResourceLocation> eventEntityType,
+                Set<ResourceLocation> eventEntityTags,
+                Set<ResourceLocation> damageTypeTags,
+                Optional<ResourceLocation> eventItem,
+                Set<ResourceLocation> eventItemTags,
+                Optional<ResourceLocation> eventBlock,
+                Set<ResourceLocation> eventBlockTags
+        ) {
+            this(talents, counters, itemCounts, categoryCounts, counterCategoryTotals,
+                    eventEntityType, eventEntityTags, Set.of(), damageTypeTags,
+                    Optional.empty(), Set.of(), Optional.empty(),
+                    eventItem, eventItemTags, eventBlock, eventBlockTags, null);
         }
 
         public Context(
@@ -197,7 +313,23 @@ public final class ConditionEvaluator {
                 Map<ResourceLocation, Long> counterCategoryTotals
         ) {
             this(talents, counters, itemCounts, categoryCounts, counterCategoryTotals,
-                    Optional.empty(), Set.of(), Set.of(), Optional.empty(), Set.of(), Optional.empty(), Set.of());
+                    Optional.empty(), Set.of(), Set.of(), Set.of(),
+                    Optional.empty(), Set.of(), Optional.empty(),
+                    Optional.empty(), Set.of(), Optional.empty(), Set.of(), null);
+        }
+
+        public Context(
+                Set<ResourceLocation> talents,
+                Map<ResourceLocation, Long> counters,
+                Map<ResourceLocation, Integer> itemCounts,
+                Map<ResourceLocation, Integer> categoryCounts,
+                Map<ResourceLocation, Long> counterCategoryTotals,
+                ServerPlayer player
+        ) {
+            this(talents, counters, itemCounts, categoryCounts, counterCategoryTotals,
+                    Optional.empty(), Set.of(), Set.of(), Set.of(),
+                    Optional.empty(), Set.of(), Optional.empty(),
+                    Optional.empty(), Set.of(), Optional.empty(), Set.of(), player);
         }
 
         public Context(

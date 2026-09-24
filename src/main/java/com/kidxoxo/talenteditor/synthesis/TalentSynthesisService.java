@@ -7,6 +7,8 @@ import com.kidxoxo.talenteditor.item.ConfiguredItem;
 import com.kidxoxo.talenteditor.player.PlayerTalentData;
 import com.kidxoxo.talenteditor.player.TalentCapabilities;
 import com.kidxoxo.talenteditor.runtime.ConditionEvaluator;
+import com.kidxoxo.talenteditor.runtime.TalentAttributeRuntime;
+import com.kidxoxo.talenteditor.network.EditorNetwork;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Inventory;
@@ -101,12 +103,18 @@ public final class TalentSynthesisService {
         if (!data.applySynthesis(targetId, consumedTalents, synthesis.consumeCounters())) {
             return SynthesisResult.failed(SynthesisResult.Status.PLAYER_DATA_UNAVAILABLE, targetId);
         }
+        consumedTalents.stream()
+                .map(TalentEditorMod.SNAPSHOTS.active().talents()::get)
+                .filter(java.util.Objects::nonNull)
+                .forEach(consumed -> TalentEditorMod.PRESENTATIONS.removed(player, consumed));
         itemPlan.forEach(consumption ->
                 player.getInventory().getItem(consumption.slot()).shrink(consumption.count())
         );
         player.getInventory().setChanged();
         player.inventoryMenu.broadcastChanges();
         TalentEditorMod.PRESENTATIONS.acquired(player, target, true);
+        TalentAttributeRuntime.refresh(player);
+        EditorNetwork.sendPlayerState(player, false);
         return SynthesisResult.success(targetId);
     }
 

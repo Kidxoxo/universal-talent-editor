@@ -7,6 +7,10 @@ public sealed interface CompiledAction permits
         AddEffectAction, RemoveEffectAction, EffectImmunityAction, ModifyDamageAction,
         CancelDamageAction, PlaySoundAction, ShowMessageAction, DrawRefreshBonusAction,
         QueueDrawConstraintAction, ModifyEntityAttributeAction, DamageEntityAction,
-        HealEntityAction {
+        HealEntityAction, ModifyNumericStateAction, ModifyDamageExpressionAction,
+        AffectHealthExpressionAction, ModifyAttributeBaseExpressionAction,
+        TimedAttributeModifierAction, GrantTalentAction, RevokeTalentAction,
+        GiveItemAction, GiveDrawTokensAction, ModifyCounterAction, TakeItemAction,
+        HudResourceAction, PlayerRenderAction, OpenItemSubmissionAction, ConditionalAction {
     ResourceLocation type();
 }

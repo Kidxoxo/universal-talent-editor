@@ -19,6 +19,43 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PlayerTalentDataTest {
     @Test
+    void globalConstraintClampsItsReservationToEachPoolSize() {
+        ResourceLocation single = new ResourceLocation("example", "single");
+        ResourceLocation triple = new ResourceLocation("example", "triple");
+        ResourceLocation dark = new ResourceLocation("example", "dark");
+        QueueDrawConstraintAction global = new QueueDrawConstraintAction(
+                List.of(), List.of(dark), List.of(), List.of(), List.of(), 3);
+        PlayerTalentData data = new PlayerTalentData();
+        assertTrue(data.queueDrawConstraint(global, Map.of(single, 1, triple, 3)));
+        assertEquals(1, data.drawConstraintsForPool(single, 1).size());
+        assertEquals(1, data.drawConstraintsForPool(triple, 3).size());
+    }
+
+    @Test
+    void filledThreeChoiceSearchKeepsFirstThreeButStillCountsLaterSuccess() {
+        ResourceLocation pool = new ResourceLocation("example", "main");
+        ResourceLocation dark = new ResourceLocation("example", "dark");
+        ResourceLocation light = new ResourceLocation("example", "light");
+        ResourceLocation counter = new ResourceLocation("example", "searches");
+        PlayerTalentData data = new PlayerTalentData();
+        QueueDrawConstraintAction darkSearch = new QueueDrawConstraintAction(
+                List.of(), List.of(dark), List.of(), List.of(), List.of(pool), 1,
+                DrawConstraintQueueMode.APPEND, Optional.of(counter), 1, 0, Optional.empty());
+        QueueDrawConstraintAction lightSearch = new QueueDrawConstraintAction(
+                List.of(), List.of(light), List.of(), List.of(), List.of(pool), 1,
+                DrawConstraintQueueMode.REPLACE, Optional.of(counter), 1, 0, Optional.empty());
+        for (int index = 0; index < 3; index++) {
+            assertTrue(data.queueDrawConstraint(darkSearch, Map.of(pool, 3)));
+        }
+        assertEquals(3L, data.counter(counter));
+        assertTrue(data.queueDrawConstraint(lightSearch, Map.of(pool, 3)));
+        assertEquals(4L, data.counter(counter));
+        assertEquals(3, data.drawConstraintsForPool(pool, 3).size());
+        assertTrue(data.drawConstraintsForPool(pool, 3).stream()
+                .allMatch(constraint -> constraint.categories().equals(List.of(dark))));
+    }
+
+    @Test
     void cloneCopyPreservesOwnershipTokensCountersAndPity() {
         PlayerTalentData original = new PlayerTalentData();
         ResourceLocation talent = new ResourceLocation("example", "bound_talent");
@@ -295,5 +332,43 @@ class PlayerTalentDataTest {
         assertFalse(restored.claimTriggerDistanceInterval(trigger, Double.POSITIVE_INFINITY, 0.6D));
         assertTrue(restored.revoke(talent));
         assertEquals(0.0D, restored.triggerDistanceProgress(trigger), 1.0E-9D);
+    }
+
+    @Test
+    void persistsNumericStateHistoryAcquisitionAndVanishedSources() {
+        ResourceLocation talent = new ResourceLocation("example", "temporary");
+        ResourceLocation state = new ResourceLocation("example", "growth");
+        PlayerTalentData data = new PlayerTalentData();
+        data.advanceCounterLifecycleTick();
+        data.recordDrawSelection();
+        assertTrue(data.grant(talent));
+        assertEquals(1L, data.acquiredTick(talent));
+        assertEquals(1L, data.acquiredDraw(talent));
+        assertEquals(12.5D, data.setNumericState(state, 12.5D), 1.0E-9D);
+        assertTrue(data.expire(talent, true, true, true));
+        assertFalse(data.contains(talent));
+        assertTrue(data.activeSources().contains(talent));
+        assertTrue(data.categorySources().contains(talent));
+        assertTrue(data.triggerSources().contains(talent));
+        assertTrue(data.hasEverAcquired(talent));
+
+        PlayerTalentData restored = new PlayerTalentData();
+        restored.deserializeNBT(data.serializeNBT());
+        assertEquals(12.5D, restored.numericState(state), 1.0E-9D);
+        assertTrue(restored.activeSources().contains(talent));
+        assertTrue(restored.categorySources().contains(talent));
+        assertTrue(restored.triggerSources().contains(talent));
+        assertTrue(restored.hasEverAcquired(talent));
+        assertEquals(1L, restored.drawSelections());
+
+        PlayerTalentData copied = new PlayerTalentData();
+        copied.copyFrom(restored);
+        assertEquals(12.5D, copied.numericState(state), 1.0E-9D);
+        assertTrue(copied.activeSources().contains(talent));
+        assertTrue(copied.triggerSources().contains(talent));
+        assertTrue(copied.grant(talent));
+        assertTrue(copied.triggerSources().contains(talent));
+        assertTrue(copied.revoke(talent));
+        assertFalse(copied.triggerSources().contains(talent));
     }
 }

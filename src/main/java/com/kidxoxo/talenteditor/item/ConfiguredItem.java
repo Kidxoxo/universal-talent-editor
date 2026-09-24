@@ -29,7 +29,9 @@ import net.minecraftforge.registries.ForgeRegistries;
 
 import javax.annotation.Nullable;
 import java.util.List;
+import java.util.LinkedHashSet;
 import java.util.Optional;
+import java.util.Set;
 
 public final class ConfiguredItem extends Item {
     public static final String DEFINITION_TAG = "TalentEditorDefinition";
@@ -79,6 +81,14 @@ public final class ConfiguredItem extends Item {
         if (stack.is(ModItems.TALENT_POINT.get())) return Optional.of(ModItems.TALENT_POINT_ID);
         if (!stack.is(ModItems.CONFIGURED_ITEM.get()) || !stack.hasTag()) return Optional.empty();
         return Optional.ofNullable(ResourceLocation.tryParse(stack.getTag().getString(DEFINITION_TAG)));
+    }
+
+    /** Logical configured-item ids currently equipped in vanilla or optional Curios slots. */
+    public static Set<ResourceLocation> equippedDefinitionIds(ServerPlayer player) {
+        LinkedHashSet<ResourceLocation> result = new LinkedHashSet<>();
+        for (ItemStack stack : player.getAllSlots()) definitionId(stack).ifPresent(result::add);
+        result.addAll(com.kidxoxo.talenteditor.compat.CuriosIntegration.equippedLogicalIds(player));
+        return Set.copyOf(result);
     }
 
     @Override

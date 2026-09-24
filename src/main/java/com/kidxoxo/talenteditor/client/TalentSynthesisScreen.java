@@ -14,6 +14,7 @@ import java.util.Map;
 
 public final class TalentSynthesisScreen extends Screen {
     private final TalentEditScreen parent;
+    private final Screen returnScreen;
     private boolean enabled;
     private Button enabledButton;
     private EditBox talentsField;
@@ -25,8 +26,13 @@ public final class TalentSynthesisScreen extends Screen {
     private String status = "";
 
     public TalentSynthesisScreen(TalentEditScreen parent) {
+        this(parent, parent);
+    }
+
+    TalentSynthesisScreen(TalentEditScreen parent, Screen returnScreen) {
         super(Component.translatable("screen.talent_editor.synthesis.title"));
         this.parent = parent;
+        this.returnScreen = returnScreen;
         TalentDraft.SynthesisDraft synthesis = parent.synthesis();
         this.enabled = synthesis.enabled();
         this.talentsValue = String.join(", ", synthesis.consumeTalents().stream()
@@ -137,7 +143,7 @@ public final class TalentSynthesisScreen extends Screen {
         LinkedHashMap<ResourceLocation, Integer> items = new LinkedHashMap<>();
         rawItems.forEach((id, count) -> items.put(id, count.intValue()));
         parent.updateSynthesis(enabled, new ArrayList<>(talents), counters, items);
-        if (minecraft != null) minecraft.setScreen(parent);
+        if (minecraft != null) minecraft.setScreen(returnScreen);
     }
 
     private Map<ResourceLocation, Long> parseCosts(String value, long maximum, String errorKey) {
@@ -205,6 +211,6 @@ public final class TalentSynthesisScreen extends Screen {
 
     @Override
     public void onClose() {
-        if (minecraft != null) minecraft.setScreen(parent);
+        if (minecraft != null) minecraft.setScreen(returnScreen);
     }
 }

@@ -13,6 +13,7 @@ import net.minecraftforge.network.NetworkEvent;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Supplier;
 
 public record BootstrapPacket(EditorBootstrap bootstrap, boolean openScreen) {
@@ -23,6 +24,7 @@ public record BootstrapPacket(EditorBootstrap bootstrap, boolean openScreen) {
     private static final int MAX_COUNTERS = 4_096;
     private static final int MAX_LAYOUTS = 512;
     private static final int MAX_CONFIGURED_ITEMS = 10_000;
+    private static final int MAX_NUMERIC_STATES = 10_000;
     private static final int MAX_CATEGORIES_PER_COUNTER = 256;
     private static final int MAX_RARITY_WEIGHTS = 256;
     private static final int MAX_ATTRIBUTES = 10_000;
@@ -62,6 +64,25 @@ public record BootstrapPacket(EditorBootstrap bootstrap, boolean openScreen) {
             talent.categories().forEach(buffer::writeResourceLocation);
             buffer.writeUtf(talent.source(), MAX_TEXT);
             buffer.writeVarInt(talent.inboundReferences());
+            buffer.writeBoolean(talent.icon().isPresent());
+            talent.icon().ifPresent(buffer::writeResourceLocation);
+            if (talent.acquireTalents().size() > MAX_CATEGORIES_PER_TALENT) {
+                throw new IllegalArgumentException("Talent acquisition relation count exceeds "
+                        + MAX_CATEGORIES_PER_TALENT);
+            }
+            buffer.writeVarInt(talent.acquireTalents().size());
+            talent.acquireTalents().forEach(buffer::writeResourceLocation);
+            buffer.writeBoolean(talent.acquireRelationsEditable());
+            buffer.writeUtf(talent.acquireMode(), 16);
+            buffer.writeVarInt(talent.acquireOtherConditions());
+            buffer.writeBoolean(talent.synthesisEnabled());
+            if (talent.synthesisTalents().size() > MAX_CATEGORIES_PER_TALENT) {
+                throw new IllegalArgumentException("Talent synthesis relation count exceeds "
+                        + MAX_CATEGORIES_PER_TALENT);
+            }
+            buffer.writeVarInt(talent.synthesisTalents().size());
+            talent.synthesisTalents().forEach(buffer::writeResourceLocation);
+            buffer.writeVarInt(talent.synthesisOtherCosts());
         }
         buffer.writeVarInt(bootstrap.pools().size());
         for (EditorBootstrap.PoolSummary pool : bootstrap.pools()) {
@@ -164,6 +185,11 @@ public record BootstrapPacket(EditorBootstrap bootstrap, boolean openScreen) {
             buffer.writeUtf(item.source(), MAX_TEXT);
             buffer.writeVarInt(item.inboundReferences());
         }
+        if (bootstrap.numericStates().size() > MAX_NUMERIC_STATES) {
+            throw new IllegalArgumentException("Numeric state count exceeds " + MAX_NUMERIC_STATES);
+        }
+        buffer.writeVarInt(bootstrap.numericStates().size());
+        bootstrap.numericStates().forEach(buffer::writeResourceLocation);
         buffer.writeBoolean(packet.openScreen());
     }
 
@@ -194,9 +220,37 @@ public record BootstrapPacket(EditorBootstrap bootstrap, boolean openScreen) {
             for (int categoryIndex = 0; categoryIndex < categoryCount; categoryIndex++) {
                 categories.add(buffer.readResourceLocation());
             }
+            String source = buffer.readUtf(MAX_TEXT);
+            int inboundReferences = buffer.readVarInt();
+            Optional<ResourceLocation> icon = buffer.readBoolean()
+                    ? Optional.of(buffer.readResourceLocation()) : Optional.empty();
+            int acquireCount = boundedCount(
+                    buffer.readVarInt(), MAX_CATEGORIES_PER_TALENT, "talent acquisition relation"
+            );
+            ArrayList<ResourceLocation> acquireTalents = new ArrayList<>(acquireCount);
+            for (int relationIndex = 0; relationIndex < acquireCount; relationIndex++) {
+                acquireTalents.add(buffer.readResourceLocation());
+            }
+            boolean acquireEditable = buffer.readBoolean();
+            String acquireMode = buffer.readUtf(16);
+            int acquireOtherConditions = boundedValue(
+                    buffer.readVarInt(), 0, MAX_CATEGORIES_PER_TALENT, "other acquisition condition count"
+            );
+            boolean synthesisEnabled = buffer.readBoolean();
+            int synthesisCount = boundedCount(
+                    buffer.readVarInt(), MAX_CATEGORIES_PER_TALENT, "talent synthesis relation"
+            );
+            ArrayList<ResourceLocation> synthesisTalents = new ArrayList<>(synthesisCount);
+            for (int relationIndex = 0; relationIndex < synthesisCount; relationIndex++) {
+                synthesisTalents.add(buffer.readResourceLocation());
+            }
+            int synthesisOtherCosts = boundedValue(
+                    buffer.readVarInt(), 0, MAX_CATEGORIES_PER_TALENT, "other synthesis cost count"
+            );
             talents.add(new EditorBootstrap.TalentSummary(
-                    id, name, rarity, enabled, available, categories,
-                    buffer.readUtf(MAX_TEXT), buffer.readVarInt()
+                    id, name, rarity, enabled, available, categories, source, inboundReferences,
+                    icon, acquireTalents, acquireEditable, acquireMode, acquireOtherConditions,
+                    synthesisEnabled, synthesisTalents, synthesisOtherCosts
             ));
         }
 
@@ -256,7 +310,7 @@ public record BootstrapPacket(EditorBootstrap bootstrap, boolean openScreen) {
             int rows = boundedValue(buffer.readVarInt(), 1, 10, "layout rows");
             int slotWidth = boundedValue(buffer.readVarInt(), 24, 128, "layout slot width");
             int slotHeight = boundedValue(buffer.readVarInt(), 22, 96, "layout slot height");
-            int iconSize = boundedValue(buffer.readVarInt(), 8, 32, "layout icon size");
+            int iconSize = boundedValue(buffer.readVarInt(), 8, 64, "layout icon size");
             int freeSlotCount = boundedValue(buffer.readVarInt(), 0, 256, "layout free slot count");
             int pageCount = boundedValue(buffer.readVarInt(), 0, 64, "layout page count");
             if (iconSize > slotHeight - 4) throw new IllegalArgumentException("Layout icon exceeds slot height");
@@ -316,10 +370,17 @@ public record BootstrapPacket(EditorBootstrap bootstrap, boolean openScreen) {
                     buffer.readBoolean(), buffer.readUtf(MAX_TEXT), buffer.readVarInt()
             ));
         }
+        int numericStateCount = boundedCount(
+                buffer.readVarInt(), MAX_NUMERIC_STATES, "numeric state"
+        );
+        ArrayList<ResourceLocation> numericStates = new ArrayList<>(numericStateCount);
+        for (int index = 0; index < numericStateCount; index++) {
+            numericStates.add(buffer.readResourceLocation());
+        }
         boolean openScreen = buffer.readBoolean();
         return new BootstrapPacket(new EditorBootstrap(
                 revision, hash, rarities, talents, pools, counters, layouts, references, referencesTruncated,
-                entityTypeTags, itemTags, damageTypeTags, attributes, configuredItems
+                entityTypeTags, itemTags, damageTypeTags, attributes, configuredItems, numericStates
         ), openScreen);
     }
 

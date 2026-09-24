@@ -14,36 +14,42 @@ import net.minecraft.resources.ResourceLocation;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 
+/** Unified, key-binding-style entry point for every visual talent setting. */
 public final class TalentEditScreen extends Screen {
-    private static final int ROW_HEIGHT = 18;
-
     private final EditorBootstrap bootstrap;
     private final TalentDraft draft;
+    private final boolean returnToTalentTree;
     private boolean existing;
     private long baseRevision;
     private String idValue;
     private String nameValue;
     private EditBox idField;
     private EditBox nameField;
-    private Button editEffectButton;
-    private Button removeButton;
-    private int selectedRawIndex = -1;
-    private int effectScroll;
+    private TalentEditOptionList overviewList;
+    private double overviewScroll;
+    private String overviewSelectedKey = "";
     private String localStatus = "";
+
+    private TalentEditScreen(EditorBootstrap bootstrap, TalentDraft draft, ResourceLocation id, boolean existing) {
+        this(bootstrap, draft, id, existing, false);
+    }
 
     private TalentEditScreen(
             EditorBootstrap bootstrap,
             TalentDraft draft,
             ResourceLocation id,
-            boolean existing
+            boolean existing,
+            boolean returnToTalentTree
     ) {
         super(Component.translatable(existing
                 ? "screen.talent_editor.edit.title"
                 : "screen.talent_editor.create.title"));
         this.bootstrap = bootstrap;
         this.draft = draft;
+        this.returnToTalentTree = returnToTalentTree;
         this.existing = existing;
         this.baseRevision = bootstrap.revision();
         this.idValue = id.toString();
@@ -60,9 +66,31 @@ public final class TalentEditScreen extends Screen {
         return new TalentEditScreen(bootstrap, TalentDraft.parse(json), id, true);
     }
 
+    static Screen editExistingFromTree(
+            EditorBootstrap bootstrap,
+            ResourceLocation id,
+            String json,
+            TalentTreeEditRequest request
+    ) {
+        TalentEditScreen owner = new TalentEditScreen(
+                bootstrap, TalentDraft.parse(json), id, true, true
+        );
+        TalentRelationMutation.Result result = TalentRelationMutation.apply(owner.draft, request);
+        if (request.mutation() != TalentTreeEditRequest.Mutation.NONE) {
+            owner.localStatus = Component.translatable(
+                    "screen.talent_editor.tree.mutation." + result.name().toLowerCase(Locale.ROOT)
+            ).getString();
+        }
+        return switch (request.page()) {
+            case TALENT -> owner;
+            case ACQUISITION -> new TalentRequirementsScreen(owner, owner);
+            case SYNTHESIS -> new TalentSynthesisScreen(owner, owner);
+        };
+    }
+
     @Override
     protected void init() {
-        int formWidth = Math.min(650, width - 32);
+        int formWidth = Math.min(720, width - 32);
         int x = (width - formWidth) / 2;
         idField = new EditBox(font, x, 43, formWidth, 20,
                 Component.translatable("screen.talent_editor.form.id"));
@@ -71,30 +99,17 @@ public final class TalentEditScreen extends Screen {
         idField.setEditable(!existing);
         addRenderableWidget(idField);
 
-        int settingsWidth = Math.min(150, Math.max(104, formWidth / 3));
-        nameField = new EditBox(font, x, 76, Math.max(56, formWidth - settingsWidth - 6), 20,
+        nameField = new EditBox(font, x, 76, formWidth, 20,
                 Component.translatable("screen.talent_editor.form.name"));
         nameField.setMaxLength(512);
         nameField.setValue(nameValue);
         addRenderableWidget(nameField);
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.settings_menu.open"),
-                        button -> openSettingsMenu())
-                .bounds(x + formWidth - settingsWidth, 76, settingsWidth, 20).build());
 
-        int actionY = height - 68;
-        int actionWidth = (formWidth - 12) / 3;
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.add_effect"),
-                        button -> openEffectEditor(-1))
-                .bounds(x, actionY, actionWidth, 20).build());
-        editEffectButton = addRenderableWidget(Button.builder(
-                        Component.translatable("screen.talent_editor.edit_selected_effect"),
-                        button -> editSelectedEffect())
-                .bounds(x + actionWidth + 6, actionY, actionWidth, 20).build());
-        removeButton = addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.remove_effect"),
-                        button -> removeSelected())
-                .bounds(x + (actionWidth + 6) * 2, actionY,
-                        formWidth - (actionWidth + 6) * 2, 20)
-                .build());
+        overviewList = new TalentEditOptionList(minecraft, width, height, 108, height - 57);
+        populateOverview();
+        overviewList.setScrollAmount(overviewScroll);
+        overviewList.restoreSelectedKey(overviewSelectedKey);
+        addRenderableWidget(overviewList);
 
         int bottomY = height - 28;
         int bottomGap = 6;
@@ -115,66 +130,145 @@ public final class TalentEditScreen extends Screen {
                         button -> submit(true))
                 .bounds(x + (bottomWidth + bottomGap) * 3, bottomY,
                         formWidth - (bottomWidth + bottomGap) * 3, 20).build());
-        syncSelectionWidgets();
+    }
+
+    private void populateOverview() {
+        TalentDraft.EditorOverview overview = draft.editorOverview();
+        header("display");
+        option(TalentDraft.EditorSection.TEXT, overview, this::openTextSettings);
+        option(TalentDraft.EditorSection.METADATA, overview, this::openMetadataSettings);
+        option(TalentDraft.EditorSection.PRESENTATION, overview, this::openPresentationSettings);
+
+        header("progression");
+        option(TalentDraft.EditorSection.OFFER, overview, this::openOfferSettings);
+        option(TalentDraft.EditorSection.REQUIREMENTS, overview, this::openRequirementsSettings);
+        option(TalentDraft.EditorSection.SYNTHESIS, overview, this::openSynthesisSettings);
+        option(TalentDraft.EditorSection.LIFECYCLE, overview, this::openLifecycleSettings);
+
+        header("effects");
+        option(TalentDraft.EditorSection.BASIC_EFFECTS, overview, this::openBasicEffects);
+        option(TalentDraft.EditorSection.SPECIAL_EFFECTS, overview, this::openSpecialEffects);
+        option(TalentDraft.EditorSection.ACTIVE_INTERFACES, overview,
+                () -> openActions(TalentDraft.AdvancedActionLocation.ACTIVE_EFFECTS));
+
+        header("events");
+        option(TalentDraft.EditorSection.TRIGGERS, overview, () -> openTriggerSettings(this));
+        option(TalentDraft.EditorSection.ON_ACQUIRE_ACTIONS, overview,
+                () -> openActions(TalentDraft.AdvancedActionLocation.ON_ACQUIRE));
+        option(TalentDraft.EditorSection.ON_SYNTHESIZE_ACTIONS, overview,
+                () -> openActions(TalentDraft.AdvancedActionLocation.ON_SYNTHESIZE));
+        option(TalentDraft.EditorSection.ON_REMOVE_ACTIONS, overview,
+                () -> openActions(TalentDraft.AdvancedActionLocation.ON_REMOVE));
+
+        header("advanced");
+        option(TalentDraft.EditorSection.RAW_JSON, overview, this::openRawJson);
+    }
+
+    private void header(String key) {
+        overviewList.addHeader(Component.translatable("screen.talent_editor.overview.group." + key));
+    }
+
+    private void option(
+            TalentDraft.EditorSection section,
+            TalentDraft.EditorOverview overview,
+            Runnable action
+    ) {
+        TalentDraft.EditorSectionState state = overview.section(section);
+        String key = section.name().toLowerCase(Locale.ROOT);
+        overviewList.addOption(
+                key,
+                Component.translatable("screen.talent_editor.overview.item." + key),
+                overviewSummary(section, state),
+                state.configured(),
+                state.advancedOnly(),
+                action
+        );
+    }
+
+    private Component overviewSummary(TalentDraft.EditorSection section, TalentDraft.EditorSectionState state) {
+        String prefix = "screen.talent_editor.overview.summary.";
+        return switch (section) {
+            case TEXT -> state.configured()
+                    ? Component.translatable(prefix + "text", state.count())
+                    : Component.translatable(prefix + "default");
+            case METADATA -> state.configured()
+                    ? Component.translatable(prefix + "metadata", state.count())
+                    : Component.translatable(prefix + "metadata_default");
+            case PRESENTATION -> countSummary(prefix, "presentation", state);
+            case OFFER -> offerSummary(prefix);
+            case REQUIREMENTS -> state.advancedOnly()
+                    ? Component.translatable(prefix + "advanced")
+                    : state.count() == 0
+                    ? Component.translatable(prefix + "none")
+                    : Component.translatable(prefix + "requirements", state.count(),
+                    Component.translatable("screen.talent_editor.tree.mode."
+                            + requirements().mode().name().toLowerCase(Locale.ROOT)));
+            case SYNTHESIS -> synthesis().enabled()
+                    ? Component.translatable(prefix + "synthesis", state.count())
+                    : state.count() > 0
+                    ? Component.translatable(prefix + "synthesis_disabled", state.count())
+                    : Component.translatable(prefix + "disabled");
+            case LIFECYCLE -> state.configured()
+                    ? Component.translatable(prefix + "lifecycle",
+                    lifecycle().durationTicks(), lifecycle().removeAfterDraws())
+                    : Component.translatable(prefix + "permanent");
+            case BASIC_EFFECTS, SPECIAL_EFFECTS, ACTIVE_INTERFACES -> countSummary(prefix, "effects", state);
+            case TRIGGERS -> countSummary(prefix, "triggers", state);
+            case ON_ACQUIRE_ACTIONS, ON_SYNTHESIZE_ACTIONS, ON_REMOVE_ACTIONS ->
+                    countSummary(prefix, "actions", state);
+            case RAW_JSON -> state.configured()
+                    ? Component.translatable(prefix + "advanced")
+                    : Component.translatable(prefix + "json_fallback");
+        };
+    }
+
+    private Component offerSummary(String prefix) {
+        if (!draft.hasOfferDefinition()) return Component.translatable(prefix + "offer_legacy_disabled");
+        TalentDraft.OfferDraft value = offer();
+        if (!value.enabled()) return Component.translatable(prefix + "disabled");
+        Component pools = value.pools().isEmpty()
+                ? Component.translatable(prefix + "all_pools")
+                : value.pools().equals(List.of(new ResourceLocation("talent_editor", "default")))
+                ? Component.translatable(prefix + "default_pool")
+                : Component.translatable(prefix + "pool_count", value.pools().size());
+        return Component.translatable(prefix + "offer", compact(value.weight()), pools);
+    }
+
+    private static Component countSummary(
+            String prefix,
+            String kind,
+            TalentDraft.EditorSectionState state
+    ) {
+        return state.count() == 0
+                ? Component.translatable(prefix + "none")
+                : Component.translatable(prefix + kind, state.count());
     }
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics);
-        int formWidth = Math.min(650, width - 32);
+        int formWidth = Math.min(720, width - 32);
         int x = (width - formWidth) / 2;
         EditorTheme.panel(graphics, x - 7, 27, formWidth + 14, 75);
-        EditorTheme.panel(graphics, x - 7, 108, formWidth + 14, Math.max(1, height - 183));
-        EditorTheme.panel(graphics, x - 7, height - 75, formWidth + 14, 39);
+        EditorTheme.panel(graphics, x - 7, 104, formWidth + 14, Math.max(1, height - 160));
+        EditorTheme.panel(graphics, x - 7, height - 53, formWidth + 14, 48);
         super.render(graphics, mouseX, mouseY, partialTick);
         graphics.drawCenteredString(font, title, width / 2, 10, EditorTheme.TEXT);
         graphics.drawString(font, Component.translatable("screen.talent_editor.form.id"), x, 32,
                 EditorTheme.MUTED, false);
         graphics.drawString(font, Component.translatable("screen.talent_editor.form.name"), x, 65,
                 EditorTheme.MUTED, false);
-        graphics.drawString(font, Component.translatable("screen.talent_editor.effects", draft.allEffectRows().size()),
-                x, 103, EditorTheme.TEXT, false);
-        renderEffects(graphics, mouseX, mouseY, x, formWidth);
         renderResult(graphics, x, formWidth);
-    }
-
-    private void renderEffects(GuiGraphics graphics, int mouseX, int mouseY, int x, int formWidth) {
-        List<TalentDraft.EffectRow> rows = draft.allEffectRows();
-        int top = 119;
-        int bottom = height - 76;
-        int visibleRows = Math.max(1, (bottom - top) / ROW_HEIGHT);
-        effectScroll = Math.max(0, Math.min(effectScroll, Math.max(0, rows.size() - visibleRows)));
-        int end = Math.min(rows.size(), effectScroll + visibleRows);
-        for (int index = effectScroll; index < end; index++) {
-            TalentDraft.EffectRow row = rows.get(index);
-            int y = top + (index - effectScroll) * ROW_HEIGHT;
-            boolean selected = row.rawIndex() == selectedRawIndex;
-            boolean hovered = mouseX >= x && mouseX < x + formWidth && mouseY >= y - 3 && mouseY < y + 14;
-            if (selected || hovered) {
-                graphics.fill(x, y - 3, x + formWidth, y + 14,
-                        selected ? 0x7050A0E8 : 0x404A90E2);
-            }
-            String label = effectLabel(row);
-            graphics.drawString(font, font.plainSubstrByWidth(label, formWidth - 8), x + 4, y,
-                    row.editableAttribute() || row.editableImmunity() || row.editableMaintainedEffect()
-                            || row.editableDrawRefreshBonus() || row.editableDynamicAttribute()
-                            || row.editableCreativeFlight() || draft.isEditableEventEffect(row)
-                            ? 0xE8E8E8 : 0x909090, false);
-        }
-        if (rows.isEmpty()) {
-            graphics.drawCenteredString(font, Component.translatable("screen.talent_editor.no_effects"),
-                    width / 2, top + 8, 0x808080);
-        }
     }
 
     private void renderResult(GuiGraphics graphics, int x, int formWidth) {
         ValidationResultPacket result = ClientEditorState.validation();
         String message = localStatus;
-        int color = 0xA0A0A0;
+        int color = EditorTheme.MUTED;
         if (result != null) {
             if (result.committed()) {
                 message = Component.translatable("screen.talent_editor.result.saved", result.activeRevision()).getString();
-                color = 0x55FF55;
+                color = 0xFF55FF55;
                 if (result.activeRevision() > baseRevision) {
                     baseRevision = result.activeRevision();
                     existing = true;
@@ -182,51 +276,21 @@ public final class TalentEditScreen extends Screen {
                 }
             } else if (result.accepted()) {
                 message = Component.translatable("screen.talent_editor.result.valid").getString();
-                color = 0x55FF55;
+                color = 0xFF55FF55;
             } else if (result.conflict()) {
                 message = Component.translatable("screen.talent_editor.result.conflict",
                         result.activeRevision()).getString();
-                color = 0xFF5555;
+                color = 0xFFFF5555;
             } else {
                 ValidationIssue first = result.issues().isEmpty() ? null : result.issues().get(0);
                 message = first == null
                         ? Component.translatable("screen.talent_editor.result.invalid").getString()
                         : first.code() + " " + first.path() + ": " + first.message();
-                color = 0xFF7777;
+                color = 0xFFFF7777;
             }
         }
-        if (!message.isBlank()) {
-            graphics.drawString(font, font.plainSubstrByWidth(message, formWidth), x, height - 47, color, false);
-        }
-    }
-
-    @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (button == 0) {
-            int formWidth = Math.min(650, width - 32);
-            int x = (width - formWidth) / 2;
-            int top = 119;
-            int bottom = height - 76;
-            if (mouseX >= x && mouseX < x + formWidth && mouseY >= top && mouseY < bottom) {
-                int rowIndex = effectScroll + (int) ((mouseY - top) / ROW_HEIGHT);
-                List<TalentDraft.EffectRow> rows = draft.allEffectRows();
-                if (rowIndex >= 0 && rowIndex < rows.size()) {
-                    select(rows.get(rowIndex));
-                    return true;
-                }
-            }
-        }
-        return super.mouseClicked(mouseX, mouseY, button);
-    }
-
-    @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
-        int rows = Math.max(1, (height - 76 - 119) / ROW_HEIGHT);
-        effectScroll = Math.max(0, Math.min(
-                effectScroll - (int) Math.signum(delta) * 3,
-                Math.max(0, draft.allEffectRows().size() - rows)
-        ));
-        return true;
+        if (!message.isBlank()) graphics.drawString(font,
+                font.plainSubstrByWidth(message, formWidth), x, height - 47, color, false);
     }
 
     public void addAttribute(ResourceLocation attribute) {
@@ -234,31 +298,24 @@ public final class TalentEditScreen extends Screen {
     }
 
     int addAttributeEffect(ResourceLocation attribute) {
-        captureHeaderFields();
-        selectedRawIndex = draft.addAttribute(attribute);
-        syncSelectionWidgets();
-        ClientEditorState.clearValidation();
-        localStatus = Component.translatable("screen.talent_editor.attribute_added", attribute.toString()).getString();
-        return selectedRawIndex;
+        captureOverviewState();
+        int rawIndex = draft.addAttribute(attribute);
+        changed(Component.translatable("screen.talent_editor.attribute_added", attribute).getString());
+        return rawIndex;
     }
 
     int addEffectImmunity(ResourceLocation effect) {
-        captureHeaderFields();
-        selectedRawIndex = draft.addEffectImmunity(effect);
-        syncSelectionWidgets();
-        ClientEditorState.clearValidation();
-        localStatus = Component.translatable("screen.talent_editor.immunity_added", effect.toString()).getString();
-        return selectedRawIndex;
+        captureOverviewState();
+        int rawIndex = draft.addEffectImmunity(effect);
+        changed(Component.translatable("screen.talent_editor.immunity_added", effect).getString());
+        return rawIndex;
     }
 
     int addMaintainedEffect(ResourceLocation effect) {
-        captureHeaderFields();
-        selectedRawIndex = draft.addMaintainedEffect(effect);
-        syncSelectionWidgets();
-        ClientEditorState.clearValidation();
-        localStatus = Component.translatable("screen.talent_editor.maintained_effect_added",
-                effect.toString()).getString();
-        return selectedRawIndex;
+        captureOverviewState();
+        int rawIndex = draft.addMaintainedEffect(effect);
+        changed(Component.translatable("screen.talent_editor.maintained_effect_added", effect).getString());
+        return rawIndex;
     }
 
     public TalentDraft.OfferDraft offer() {
@@ -276,8 +333,7 @@ public final class TalentEditScreen extends Screen {
     public void updateTextStyles(LocalizedTextDraft name, List<LocalizedTextDraft> descriptions) {
         draft.updateTextStyles(name, descriptions);
         nameValue = name.fallbackText();
-        ClientEditorState.clearValidation();
-        localStatus = Component.translatable("screen.talent_editor.text_updated").getString();
+        changed(Component.translatable("screen.talent_editor.text_updated").getString());
     }
 
     public List<EditorBootstrap.RaritySummary> rarities() {
@@ -291,36 +347,27 @@ public final class TalentEditScreen extends Screen {
     public void updateMetadata(
             boolean enabled,
             ResourceLocation rarity,
-            List<String> descriptions,
             boolean showGeneratedEffects,
             List<ResourceLocation> categories,
             Optional<ResourceLocation> icon,
             int capacityCost
     ) {
-        draft.updateMetadata(
-                enabled, rarity, descriptions, showGeneratedEffects, categories, icon, capacityCost
-        );
-        ClientEditorState.clearValidation();
-        localStatus = Component.translatable("screen.talent_editor.metadata_updated").getString();
+        draft.updateMetadata(enabled, rarity, showGeneratedEffects, categories, icon, capacityCost);
+        changed(Component.translatable("screen.talent_editor.metadata_updated").getString());
     }
 
     public void updateOffer(boolean enabled, double weight, List<ResourceLocation> pools) {
         draft.updateOffer(enabled, weight, pools);
-        ClientEditorState.clearValidation();
-        localStatus = Component.translatable("screen.talent_editor.offer_updated").getString();
+        changed(Component.translatable("screen.talent_editor.offer_updated").getString());
     }
 
     public TalentDraft.RequirementsDraft requirements() {
         return draft.requirements();
     }
 
-    public void updateRequirements(
-            TalentDraft.RequirementMode mode,
-            List<TalentDraft.RequirementRow> rows
-    ) {
+    public void updateRequirements(TalentDraft.RequirementMode mode, List<TalentDraft.RequirementRow> rows) {
         draft.updateRequirements(mode, rows);
-        ClientEditorState.clearValidation();
-        localStatus = Component.translatable("screen.talent_editor.requirements_updated").getString();
+        changed(Component.translatable("screen.talent_editor.requirements_updated").getString());
     }
 
     public TalentDraft.SynthesisDraft synthesis() {
@@ -330,21 +377,16 @@ public final class TalentEditScreen extends Screen {
     public void updateSynthesis(
             boolean enabled,
             List<ResourceLocation> talents,
-            java.util.Map<ResourceLocation, Long> counters,
-            java.util.Map<ResourceLocation, Integer> items
+            Map<ResourceLocation, Long> counters,
+            Map<ResourceLocation, Integer> items
     ) {
         draft.updateSynthesis(enabled, talents, counters, items);
-        ClientEditorState.clearValidation();
-        localStatus = Component.translatable("screen.talent_editor.synthesis_updated").getString();
+        changed(Component.translatable("screen.talent_editor.synthesis_updated").getString());
     }
 
     void applyTriggerDraft(TalentDraft working, int selectedTriggerRawIndex) {
         draft.replaceTriggersFrom(working);
-        selectedRawIndex = selectedTriggerRawIndex < 0
-                ? -1 : TalentDraft.eventSelectionKey(selectedTriggerRawIndex);
-        ClientEditorState.clearValidation();
-        localStatus = Component.translatable("screen.talent_editor.triggers_updated").getString();
-        syncSelectionWidgets();
+        changed(Component.translatable("screen.talent_editor.triggers_updated").getString());
     }
 
     TalentDraft draft() {
@@ -352,16 +394,11 @@ public final class TalentEditScreen extends Screen {
     }
 
     void markComplexUpdated(String translationKey) {
-        selectedRawIndex = -1;
-        ClientEditorState.clearValidation();
-        localStatus = Component.translatable(translationKey).getString();
+        changed(Component.translatable(translationKey).getString());
     }
 
     void markEffectUpdated(int rawIndex, String translationKey) {
-        selectedRawIndex = rawIndex;
-        ClientEditorState.clearValidation();
-        localStatus = Component.translatable(translationKey).getString();
-        syncSelectionWidgets();
+        changed(Component.translatable(translationKey).getString());
     }
 
     TalentDraft.PresentationDraft presentation(TalentDraft.PresentationPhase phase) {
@@ -374,27 +411,7 @@ public final class TalentEditScreen extends Screen {
     ) {
         if (acquire.editable()) draft.updatePresentation(TalentDraft.PresentationPhase.ACQUIRE, acquire);
         if (synthesize.editable()) draft.updatePresentation(TalentDraft.PresentationPhase.SYNTHESIZE, synthesize);
-        ClientEditorState.clearValidation();
-        localStatus = Component.translatable("screen.talent_editor.presentation_updated").getString();
-    }
-
-    private void select(TalentDraft.EffectRow row) {
-        selectedRawIndex = row.rawIndex();
-        syncSelectionWidgets();
-    }
-
-    private void syncSelectionWidgets() {
-        TalentDraft.EffectRow selected = selectedRow();
-        boolean editable = isEditableEffect(selected);
-        if (editEffectButton != null) editEffectButton.active = editable;
-        if (removeButton != null) removeButton.active = editable;
-    }
-
-    private TalentDraft.EffectRow selectedRow() {
-        return draft.allEffectRows().stream()
-                .filter(row -> row.rawIndex() == selectedRawIndex)
-                .findFirst()
-                .orElse(null);
+        changed(Component.translatable("screen.talent_editor.presentation_updated").getString());
     }
 
     String effectLabel(TalentDraft.EffectRow row) {
@@ -434,51 +451,62 @@ public final class TalentEditScreen extends Screen {
         return Component.translatable("screen.talent_editor.operation." + operation).getString();
     }
 
-    private void openEffectEditor(int rawIndex) {
+    private void openBasicEffects() {
         if (minecraft == null) return;
-        captureHeaderFields();
-        minecraft.setScreen(new TalentEffectEditorScreen(this, bootstrap, rawIndex));
+        captureOverviewState();
+        minecraft.setScreen(new TalentEffectEditorScreen(this, bootstrap, -1));
     }
 
-    private void editSelectedEffect() {
-        TalentDraft.EffectRow selected = selectedRow();
-        if (!isEditableEffect(selected)) return;
-        if (TalentDraft.isEventEffect(selected)) {
-            openTriggerSettings(this, TalentDraft.eventRawIndex(selected));
-        } else {
-            openEffectEditor(selected.rawIndex());
-        }
+    private void openSpecialEffects() {
+        if (minecraft == null) return;
+        captureOverviewState();
+        minecraft.setScreen(new TalentComplexEffectsScreen(this, this, bootstrap));
     }
 
-    private boolean isEditableEffect(TalentDraft.EffectRow row) {
-        return row != null && (row.editableAttribute() || row.editableImmunity()
-                || row.editableMaintainedEffect() || row.editableDrawRefreshBonus()
-                || row.editableDynamicAttribute() || row.editableCreativeFlight()
-                || draft.isEditableEventEffect(row));
+    private void openActions(TalentDraft.AdvancedActionLocation location) {
+        if (minecraft == null) return;
+        captureOverviewState();
+        minecraft.setScreen(new TalentAdvancedActionListScreen(this, this, location, -1));
     }
 
     void openOfferSettings() {
+        openOfferSettings(this);
+    }
+
+    void openOfferSettings(Screen returnScreen) {
         if (minecraft == null) return;
-        captureHeaderFields();
-        minecraft.setScreen(new TalentOfferScreen(this));
+        captureOverviewState();
+        minecraft.setScreen(new TalentOfferScreen(this, returnScreen));
     }
 
     void openMetadataSettings() {
+        openMetadataSettings(this);
+    }
+
+    void openMetadataSettings(Screen returnScreen) {
         if (minecraft == null) return;
-        captureHeaderFields();
-        minecraft.setScreen(new TalentMetadataScreen(this));
+        captureOverviewState();
+        minecraft.setScreen(new TalentMetadataScreen(this, returnScreen));
     }
 
     void openRequirementsSettings() {
+        openRequirementsSettings(this);
+    }
+
+    void openRequirementsSettings(Screen returnScreen) {
         if (minecraft == null) return;
-        captureHeaderFields();
-        minecraft.setScreen(new TalentRequirementsScreen(this));
+        captureOverviewState();
+        minecraft.setScreen(new TalentRequirementsScreen(this, returnScreen));
     }
 
     void openSynthesisSettings() {
+        openSynthesisSettings(this);
+    }
+
+    void openSynthesisSettings(Screen returnScreen) {
         if (minecraft == null) return;
-        captureHeaderFields();
-        minecraft.setScreen(new TalentSynthesisScreen(this));
+        captureOverviewState();
+        minecraft.setScreen(new TalentSynthesisScreen(this, returnScreen));
     }
 
     void openTriggerSettings(Screen returnScreen) {
@@ -487,7 +515,7 @@ public final class TalentEditScreen extends Screen {
 
     void openTriggerSettings(Screen returnScreen, int selectedTriggerRawIndex) {
         if (minecraft == null) return;
-        captureHeaderFields();
+        captureOverviewState();
         TalentDraft working = TalentDraft.parse(draft.toJson(nameValue));
         minecraft.setScreen(new TalentTriggerScreen(
                 this, working, bootstrap, returnScreen, selectedTriggerRawIndex
@@ -495,58 +523,89 @@ public final class TalentEditScreen extends Screen {
     }
 
     void openPresentationSettings() {
+        openPresentationSettings(this);
+    }
+
+    void openPresentationSettings(Screen returnScreen) {
         if (minecraft == null) return;
+        captureOverviewState();
+        minecraft.setScreen(new TalentPresentationScreen(this, bootstrap, returnScreen));
+    }
+
+    void openLifecycleSettings() {
+        openLifecycleSettings(this);
+    }
+
+    void openLifecycleSettings(Screen returnScreen) {
+        if (minecraft == null) return;
+        captureOverviewState();
+        minecraft.setScreen(new TalentLifecycleScreen(this, returnScreen));
+    }
+
+    void openAdvancedJsonSettings() {
+        openRawJson();
+    }
+
+    void openAdvancedJsonSettings(Screen returnScreen) {
+        if (minecraft == null) return;
+        captureOverviewState();
+        minecraft.setScreen(new TalentRawJsonScreen(returnScreen, this, currentTalentJson()));
+    }
+
+    private void openRawJson() {
+        openAdvancedJsonSettings(this);
+    }
+
+    TalentDraft.LifecycleDraft lifecycle() {
+        return draft.lifecycle();
+    }
+
+    void applyLifecycle(TalentDraft.LifecycleDraft lifecycle) {
+        draft.updateLifecycle(lifecycle);
+        changed(Component.translatable("screen.talent_editor.lifecycle.updated").getString());
+    }
+
+    void applyAdvancedJson(String json) {
+        TalentDraft replacement = TalentDraft.parse(json);
+        draft.replaceAllFrom(replacement);
+        nameValue = replacement.name();
+        changed(Component.translatable("screen.talent_editor.advanced_json.updated").getString());
+    }
+
+    String currentTalentJson() {
         captureHeaderFields();
-        minecraft.setScreen(new TalentPresentationScreen(this, bootstrap));
+        return draft.toJson(nameValue);
     }
 
     void openTextSettings() {
-        if (minecraft == null) return;
-        captureHeaderFields();
-        draft.prepareNameLiteral(nameValue);
-        minecraft.setScreen(new TalentTextStyleScreen(this));
+        openTextSettings(this);
     }
 
-    private void openSettingsMenu() {
+    void openTextSettings(Screen returnScreen) {
         if (minecraft == null) return;
-        captureHeaderFields();
-        minecraft.setScreen(new TalentSettingsMenuScreen(this));
+        captureOverviewState();
+        draft.prepareNameLiteral(nameValue);
+        minecraft.setScreen(new TalentTextStyleScreen(this, returnScreen));
     }
 
     private void openReferences() {
         if (!existing || minecraft == null) return;
-        captureHeaderFields();
+        captureOverviewState();
         ResourceLocation id = ResourceLocation.tryParse(idValue.strip());
         if (id == null) return;
         int count = DefinitionReferenceScreen.inboundCount(bootstrap, DefinitionKind.TALENT, id);
         minecraft.setScreen(new DefinitionReferenceScreen(this, bootstrap, DefinitionKind.TALENT, id, count));
     }
 
-    private void removeSelected() {
-        TalentDraft.EffectRow selected = selectedRow();
-        if (!isEditableEffect(selected)) return;
-        if (TalentDraft.isEventEffect(selected)) {
-            draft.removeEffectTrigger(TalentDraft.eventRawIndex(selected));
-        } else {
-            draft.removeEditableActiveEffect(selected.rawIndex());
-        }
-        selectedRawIndex = -1;
-        syncSelectionWidgets();
-        ClientEditorState.clearValidation();
-        localStatus = Component.translatable("screen.talent_editor.effect_removed").getString();
-    }
-
     private void submit(boolean commit) {
-        captureHeaderFields();
+        captureOverviewState();
         ResourceLocation id = ResourceLocation.tryParse(idValue.strip());
         if (id == null) {
-            ClientEditorState.clearValidation();
-            localStatus = Component.translatable("screen.talent_editor.form.invalid_id").getString();
+            changed(Component.translatable("screen.talent_editor.form.invalid_id").getString());
             return;
         }
         if (nameValue.isBlank()) {
-            ClientEditorState.clearValidation();
-            localStatus = Component.translatable("screen.talent_editor.form.empty_name").getString();
+            changed(Component.translatable("screen.talent_editor.form.empty_name").getString());
             return;
         }
         ClientEditorState.clearValidation();
@@ -554,13 +613,31 @@ public final class TalentEditScreen extends Screen {
         EditorNetwork.submitTalent(baseRevision, id, draft.toJson(nameValue), commit);
     }
 
+    private void changed(String status) {
+        ClientEditorState.clearValidation();
+        localStatus = status;
+    }
+
     private void captureHeaderFields() {
         if (idField != null) idValue = idField.getValue();
         if (nameField != null) nameValue = nameField.getValue();
     }
 
+    private void captureOverviewState() {
+        captureHeaderFields();
+        if (overviewList != null) {
+            overviewScroll = overviewList.getScrollAmount();
+            overviewSelectedKey = overviewList.selectedKey();
+        }
+    }
+
     private void returnHome() {
         if (minecraft == null) return;
+        if (returnToTalentTree) {
+            ClientEditorState.openTalentTreeOnNextBootstrap();
+            EditorNetwork.requestOpen();
+            return;
+        }
         EditorBootstrap latest = ClientEditorState.bootstrap();
         minecraft.setScreen(new EditorHomeScreen(latest == null ? bootstrap : latest));
     }

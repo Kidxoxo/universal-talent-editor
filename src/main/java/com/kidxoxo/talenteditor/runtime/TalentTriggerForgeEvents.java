@@ -9,6 +9,7 @@ import net.minecraftforge.event.entity.living.LivingEntityUseItemEvent;
 import net.minecraftforge.event.entity.living.LivingHurtEvent;
 import net.minecraftforge.event.entity.living.MobEffectEvent;
 import net.minecraftforge.event.entity.player.PlayerInteractEvent;
+import net.minecraftforge.event.entity.player.PlayerXpEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
@@ -64,6 +65,17 @@ public final class TalentTriggerForgeEvents {
             amount = result.amount();
         }
         if (event.getEntity() instanceof ServerPlayer victim) {
+            if (amount >= victim.getHealth()) {
+                var fatal = TalentEditorMod.TRIGGERS.fireDamage(
+                        TalentEventTypes.FATAL_DAMAGE, victim, event.getSource().getEntity(),
+                        event.getSource(), amount
+                );
+                if (fatal.canceled()) {
+                    event.setCanceled(true);
+                    return;
+                }
+                amount = fatal.amount();
+            }
             var result = TalentEditorMod.TRIGGERS.fireDamage(
                     TalentEventTypes.DAMAGE_TAKEN, victim, event.getSource().getEntity(),
                     event.getSource(), amount
@@ -100,6 +112,28 @@ public final class TalentTriggerForgeEvents {
                     TalentEventTypes.DEATH, victim, event.getSource().getEntity(), event.getSource()
             );
         }
+        if (!event.getEntity().level().isClientSide() && event.getEntity().level() instanceof net.minecraft.server.level.ServerLevel level) {
+            level.getEntitiesOfClass(
+                    ServerPlayer.class, event.getEntity().getBoundingBox().inflate(64.0D),
+                    player -> player.isAlive() && player != event.getEntity()
+            ).forEach(player -> TalentEditorMod.TRIGGERS.fire(
+                    TalentEventTypes.NEARBY_ENTITY_DEATH, player, event.getEntity(), event.getSource()
+            ));
+        }
+    }
+
+    @SubscribeEvent
+    public static void levelChanged(PlayerXpEvent.LevelChange event) {
+        if (event.getLevels() > 0 && event.getEntity() instanceof ServerPlayer player) {
+            TalentEditorMod.TRIGGERS.fireAmount(
+                    TalentEventTypes.LEVEL_UP, player, null, null, event.getLevels()
+            );
+        }
+    }
+
+    @SubscribeEvent
+    public static void serverTick(TickEvent.ServerTickEvent event) {
+        if (event.phase == TickEvent.Phase.END) TimedAttributeModifierService.tick(event.getServer());
     }
 
     @SubscribeEvent
@@ -124,9 +158,11 @@ public final class TalentTriggerForgeEvents {
     @SubscribeEvent
     public static void playerTick(TickEvent.PlayerTickEvent event) {
         if (event.phase != TickEvent.Phase.END || !(event.player instanceof ServerPlayer player)) return;
+        PlayerMotionTracker.tick(player);
         TalentEditorMod.TRIGGERS.fire(TalentEventTypes.PLAYER_TICK, player, null, null);
         if (player.tickCount % 20 == 0) {
             TalentActiveStatusEffectService.refresh(player);
+            TalentLifecycleService.process(player);
             TalentEditorMod.TRIGGERS.fire(TalentEventTypes.PLAYER_SECOND, player, null, null);
         }
     }

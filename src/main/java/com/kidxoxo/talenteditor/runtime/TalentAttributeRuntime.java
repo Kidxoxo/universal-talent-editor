@@ -38,7 +38,7 @@ public final class TalentAttributeRuntime {
 
     public static void refresh(ServerPlayer player) {
         removeModifiers(player, STATIC_APPLIED);
-        Set<ResourceLocation> owned = PlayerTalents.owned(player);
+        Set<ResourceLocation> owned = PlayerTalents.activeSources(player);
         RuntimeSnapshot snapshot = TalentEditorMod.SNAPSHOTS.active();
         ArrayList<AppliedModifier> applied = new ArrayList<>();
         if (!owned.isEmpty()) {
@@ -48,6 +48,8 @@ public final class TalentAttributeRuntime {
                 if (instance == null) return;
                 for (ActiveAttributeBinding binding : bindings) {
                     if (!owned.contains(binding.talentId())) continue;
+                    if (!ActionConditionRuntime.active(binding.enabledWhen(), binding.disabledWhen(),
+                            player, binding.talentId())) continue;
                     AttributeModifierAction action = binding.action();
                     UUID modifierId = modifierId(binding.talentId(), attributeId, action.modifierKey());
                     instance.removeModifier(modifierId);
@@ -67,14 +69,16 @@ public final class TalentAttributeRuntime {
 
     /** Reconciles changing formula values and flight without rebuilding constant attribute modifiers. */
     public static void refreshDynamic(ServerPlayer player) {
-        Set<ResourceLocation> owned = PlayerTalents.owned(player);
+        Set<ResourceLocation> owned = PlayerTalents.activeSources(player);
         RuntimeSnapshot snapshot = TalentEditorMod.SNAPSHOTS.active();
         ArrayList<DesiredModifier> desired = new ArrayList<>();
         boolean creativeFlight = false;
         for (ResourceLocation talentId : owned) {
             var talent = snapshot.talents().get(talentId);
             if (talent == null || !talent.enabled() || !talent.available()) continue;
-            for (var action : talent.activeEffects()) {
+            for (var configured : talent.activeEffects()) {
+                if (!ActionConditionRuntime.active(configured, player, talentId)) continue;
+                var action = com.kidxoxo.talenteditor.domain.ConditionalAction.unwrap(configured);
                 if (action instanceof DynamicAttributeModifierAction dynamic) {
                     double source = switch (dynamic.source()) {
                         case COUNTER -> PlayerTalents.counter(player, dynamic.counter().orElseThrow());

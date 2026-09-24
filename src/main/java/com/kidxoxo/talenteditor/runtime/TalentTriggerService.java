@@ -15,6 +15,7 @@ import com.kidxoxo.talenteditor.domain.HealEntityAction;
 import com.kidxoxo.talenteditor.domain.LivingEntityTarget;
 import com.kidxoxo.talenteditor.domain.ModifyEntityAttributeAction;
 import com.kidxoxo.talenteditor.player.PlayerTalents;
+import com.kidxoxo.talenteditor.item.ConfiguredItem;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
@@ -60,15 +61,43 @@ public final class TalentTriggerService {
             ItemStack eventItem,
             BlockState eventBlock
     ) {
-        return executeEvent(event, owner, eventEntity, damageSource, eventItem, eventBlock, 0.0D, null);
+        return executeEvent(event, owner, eventEntity, damageSource, eventItem, eventBlock,
+                null, 0.0D, null);
+    }
+
+    /** Fires an event whose subject is a talent definition, such as a selected draw result. */
+    public int fireTalent(
+            ResourceLocation event,
+            ServerPlayer owner,
+            ResourceLocation eventTalent
+    ) {
+        return executeEvent(event, owner, null, null, ItemStack.EMPTY, null,
+                eventTalent, 0.0D, null);
     }
 
     public int fireMovement(ServerPlayer owner, double horizontalDistance) {
         if (!Double.isFinite(horizontalDistance) || horizontalDistance <= 0.0D) return 0;
         return executeEvent(
                 TalentEventTypes.PLAYER_MOVE_DISTANCE, owner, null, null,
-                ItemStack.EMPTY, null, horizontalDistance, null
+                ItemStack.EMPTY, null, null, horizontalDistance, null
         );
+    }
+
+    public int fireSubmission(ServerPlayer owner, ItemStack submitted, int count) {
+        return executeEvent(TalentEventTypes.ITEM_SUBMITTED, owner, null, null,
+                submitted, null, null, count, null);
+    }
+
+    public int fireAmount(
+            ResourceLocation event,
+            ServerPlayer owner,
+            Entity eventEntity,
+            DamageSource damageSource,
+            double eventAmount
+    ) {
+        if (!Double.isFinite(eventAmount)) eventAmount = 0.0D;
+        return executeEvent(event, owner, eventEntity, damageSource, owner.getMainHandItem(), null,
+                null, eventAmount, null);
     }
 
     public DamageResult fireDamage(
@@ -80,7 +109,8 @@ public final class TalentTriggerService {
     ) {
         DamageState damage = new DamageState(amount);
         int applied = executeEvent(
-                event, owner, eventEntity, damageSource, owner.getMainHandItem(), null, 0.0D, damage
+                event, owner, eventEntity, damageSource, owner.getMainHandItem(), null,
+                null, amount, damage
         );
         return new DamageResult(applied, damage.amount, damage.canceled);
     }
@@ -92,14 +122,16 @@ public final class TalentTriggerService {
             DamageSource damageSource,
             ItemStack eventItem,
             BlockState eventBlock,
+            ResourceLocation eventTalent,
             double eventAmount,
             DamageState damage
     ) {
         var bindings = TalentEditorMod.SNAPSHOTS.active().triggersByEvent().get(event);
         if (bindings == null || bindings.isEmpty()) return 0;
         eventCalls.increment();
-        Set<ResourceLocation> owned = PlayerTalents.owned(owner);
-        if (bindings.stream().noneMatch(binding -> owned.contains(binding.talentId()))) return 0;
+        Set<ResourceLocation> triggerSources = new HashSet<>(PlayerTalents.triggerSources(owner));
+        triggerSources.addAll(ConfiguredItem.equippedDefinitionIds(owner));
+        if (bindings.stream().noneMatch(binding -> triggerSources.contains(binding.talentId()))) return 0;
         ExecutionKey key = new ExecutionKey(owner.getUUID(), event);
         Set<ExecutionKey> active = activeExecutions.get();
         if (!active.add(key)) {
@@ -108,11 +140,11 @@ public final class TalentTriggerService {
         }
         try {
             var context = ConditionEvaluator.eventContext(
-                    owner, eventEntity, damageSource, eventItem, eventBlock
+                    owner, eventEntity, damageSource, eventItem, eventBlock, eventTalent
             );
             int applied = 0;
             long currentTick = PlayerTalents.counterLifecycleTicks(owner);
-            var candidates = TalentTriggerEngine.ownedBindings(bindings, owned);
+            var candidates = TalentTriggerEngine.ownedBindings(bindings, triggerSources);
             for (TriggerBinding binding : candidates) {
                 double chance = effectiveChance(owner, binding);
                 String cooldownKey = cooldownKey(binding);
@@ -121,7 +153,13 @@ public final class TalentTriggerService {
                         owner, cooldownKey, eventAmount, binding.trigger().distanceInterval())) {
                     continue;
                 }
-                if (!ConditionEvaluator.test(binding.trigger().condition(), context)) {
+                if (!ConditionEvaluator.test(
+                        binding.trigger().condition(), context,
+                        NumericExpressionRuntime.resolver(
+                                owner, eventEntity, eventAmount, damage == null ? 0.0D : damage.amount,
+                                binding.talentId()
+                        )
+                )) {
                     trace(owner, event, binding, TriggerTraceEntry.Outcome.CONDITION_MISS, chance, 0);
                     continue;
                 }
@@ -153,7 +191,11 @@ public final class TalentTriggerService {
                 ActionChainEngine.Result chain = ActionChainEngine.execute(
                         binding.trigger().actions(), binding.trigger().failureActions(),
                         binding.trigger().actionFailurePolicy(),
-                        action -> execute(action, owner, eventEntity, damageSource, damage), trace.enabled()
+                        action -> ActionConditionRuntime.active(action, context,
+                                NumericExpressionRuntime.resolver(owner, eventEntity, eventAmount,
+                                        damage == null ? 0.0D : damage.amount, binding.talentId())),
+                        action -> execute(action, owner, eventEntity, damageSource, eventAmount,
+                                binding.talentId(), damage), trace.enabled()
                 );
                 boolean activated = chain.activated();
                 int triggerApplied = chain.appliedActions();
@@ -182,90 +224,21 @@ public final class TalentTriggerService {
             ServerPlayer owner,
             Entity eventEntity,
             DamageSource damageSource,
+            double eventAmount,
+            ResourceLocation talentId,
             DamageState damage
     ) {
-        if (action instanceof AddEffectAction addEffect) {
-            Entity target = addEffect.target() == ActionTarget.SELF ? owner : eventEntity;
-            if (!(target instanceof LivingEntity living)) return false;
-            var effect = ForgeRegistries.MOB_EFFECTS.getValue(addEffect.effect());
-            if (effect == null) return false;
-            return living.addEffect(new MobEffectInstance(
-                    effect, addEffect.durationTicks(), addEffect.amplifier(), addEffect.ambient(),
-                    addEffect.showParticles(), addEffect.showIcon()
-            ));
-        }
-        if (action instanceof RemoveEffectAction removeEffect) {
-            Entity target = removeEffect.target() == ActionTarget.SELF ? owner : eventEntity;
-            if (!(target instanceof LivingEntity living)) return false;
-            var effect = ForgeRegistries.MOB_EFFECTS.getValue(removeEffect.effect());
-            return effect != null && living.removeEffect(effect);
-        }
-        if (action instanceof ModifyDamageAction modifyDamage) {
-            if (damage == null) return false;
-            float previous = damage.amount;
-            damage.amount = modifyDamage.apply(previous);
-            return Float.compare(previous, damage.amount) != 0;
-        }
-        if (action instanceof CancelDamageAction) {
-            if (damage == null || damage.canceled) return false;
-            damage.amount = 0.0F;
-            damage.canceled = true;
-            return true;
-        }
-        if (action instanceof ModifyEntityAttributeAction modifyAttribute) {
-            Attribute attribute = ForgeRegistries.ATTRIBUTES.getValue(modifyAttribute.attribute());
-            if (attribute == null) return false;
-            boolean changed = false;
-            for (LivingEntity living : targets(
-                    modifyAttribute.target(), owner, eventEntity, damageSource, modifyAttribute.radius()
-            )) {
-                var instance = living.getAttribute(attribute);
-                if (instance == null) continue;
-                double previous = instance.getBaseValue();
-                double next = modifyAttribute.apply(previous);
-                if (Double.compare(previous, next) != 0) {
-                    instance.setBaseValue(next);
-                    changed = true;
-                }
-            }
-            return changed;
-        }
-        if (action instanceof DamageEntityAction damageEntity) {
-            boolean changed = false;
-            for (LivingEntity living : targets(
-                    damageEntity.target(), owner, eventEntity, damageSource, damageEntity.radius()
-            )) {
-                changed |= living.hurt(
-                        living == owner ? owner.damageSources().magic() : owner.damageSources().thorns(owner),
-                        damageEntity.amount()
-                );
-            }
-            return changed;
-        }
-        if (action instanceof HealEntityAction healEntity) {
-            boolean changed = false;
-            for (LivingEntity living : targets(
-                    healEntity.target(), owner, eventEntity, damageSource, healEntity.radius()
-            )) {
-                float previous = living.getHealth();
-                living.heal(healEntity.amount());
-                changed |= Float.compare(previous, living.getHealth()) != 0;
-            }
-            return changed;
-        }
-        if (action instanceof QueueDrawConstraintAction constraint) {
-            boolean queued = PlayerTalents.queueDrawConstraint(owner, constraint);
-            if (queued) {
-                constraint.successCounter().ifPresent(counter ->
-                        TalentEditorMod.COUNTERS.markExternalChange(owner, counter));
-            }
-            return queued;
-        }
-        if (action instanceof PlaySoundAction || action instanceof ShowMessageAction) {
-            return TalentPresentationService.execute(owner, List.of(action)) > 0;
-        }
-        TalentEditorMod.LOGGER.warn("Ignored unsupported runtime trigger action {}", action.type());
-        return false;
+        RuntimeActionExecutor.DamageAccess access = damage == null ? null : new RuntimeActionExecutor.DamageAccess() {
+            @Override public float amount() { return damage.amount; }
+            @Override public void amount(float value) { damage.amount = value; }
+            @Override public boolean canceled() { return damage.canceled; }
+            @Override public void cancel() { damage.canceled = true; }
+        };
+        return RuntimeActionExecutor.execute(
+                com.kidxoxo.talenteditor.domain.ConditionalAction.unwrap(action),
+                new RuntimeActionExecutor.Context(
+                owner, eventEntity, damageSource, eventAmount, talentId, access
+        ));
     }
 
     private static List<LivingEntity> targets(
@@ -314,7 +287,7 @@ public final class TalentTriggerService {
         }
         if (binding.trigger().chanceCategory().isPresent()) {
             ResourceLocation category = binding.trigger().chanceCategory().orElseThrow();
-            long count = PlayerTalents.owned(owner).stream()
+            long count = PlayerTalents.categorySources(owner).stream()
                     .map(TalentEditorMod.SNAPSHOTS.active().talents()::get)
                     .filter(java.util.Objects::nonNull)
                     .filter(talent -> talent.enabled() && talent.available())

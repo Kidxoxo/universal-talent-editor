@@ -8,6 +8,9 @@ import com.kidxoxo.talenteditor.domain.CounterRuleDefinition;
 import com.kidxoxo.talenteditor.domain.ConfiguredItemDefinition;
 import com.kidxoxo.talenteditor.domain.DefinitionKind;
 import com.kidxoxo.talenteditor.domain.DefinitionReference;
+import com.kidxoxo.talenteditor.domain.CompiledAction;
+import com.kidxoxo.talenteditor.domain.ModifyNumericStateAction;
+import com.kidxoxo.talenteditor.domain.HudResourceAction;
 import com.kidxoxo.talenteditor.editor.EditorSubmissionResult;
 import com.kidxoxo.talenteditor.editor.EditorTransactionSummary;
 import com.kidxoxo.talenteditor.editor.DefinitionService;
@@ -37,10 +40,11 @@ import net.minecraftforge.network.simple.SimpleChannel;
 
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 
 public final class EditorNetwork {
-    private static final String PROTOCOL = "31";
+    private static final String PROTOCOL = "39";
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final int MAX_CATALOG_ENTRIES = 10_000;
     private static final int MAX_POOL_ENTRIES = 2_048;
@@ -182,10 +186,20 @@ public final class EditorNetwork {
                 .decoder(EditorManagementActionPacket::decode)
                 .consumerMainThread(EditorManagementActionPacket::handle)
                 .add();
+        CHANNEL.messageBuilder(SubmitItemSubmissionPacket.class, nextMessageId++, NetworkDirection.PLAY_TO_SERVER)
+                .encoder(SubmitItemSubmissionPacket::encode)
+                .decoder(SubmitItemSubmissionPacket::decode)
+                .consumerMainThread(SubmitItemSubmissionPacket::handle)
+                .add();
         CHANNEL.messageBuilder(BootstrapPacket.class, nextMessageId++, NetworkDirection.PLAY_TO_CLIENT)
                 .encoder(BootstrapPacket::encode)
                 .decoder(BootstrapPacket::decode)
                 .consumerMainThread(BootstrapPacket::handle)
+                .add();
+        CHANNEL.messageBuilder(ConfiguredItemCatalogPacket.class, nextMessageId++, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(ConfiguredItemCatalogPacket::encode)
+                .decoder(ConfiguredItemCatalogPacket::decode)
+                .consumerMainThread(ConfiguredItemCatalogPacket::handle)
                 .add();
         CHANNEL.messageBuilder(ValidationResultPacket.class, nextMessageId++, NetworkDirection.PLAY_TO_CLIENT)
                 .encoder(ValidationResultPacket::encode)
@@ -284,6 +298,26 @@ public final class EditorNetwork {
                 .decoder(SynthesisSoundPacket::decode)
                 .consumerMainThread(SynthesisSoundPacket::handle)
                 .add();
+        CHANNEL.messageBuilder(ItemSubmissionOpenPacket.class, nextMessageId++, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(ItemSubmissionOpenPacket::encode)
+                .decoder(ItemSubmissionOpenPacket::decode)
+                .consumerMainThread(ItemSubmissionOpenPacket::handle)
+                .add();
+        CHANNEL.messageBuilder(ItemSubmissionResultPacket.class, nextMessageId++, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(ItemSubmissionResultPacket::encode)
+                .decoder(ItemSubmissionResultPacket::decode)
+                .consumerMainThread(ItemSubmissionResultPacket::handle)
+                .add();
+        CHANNEL.messageBuilder(PlayerVisualStatePacket.class, nextMessageId++, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(PlayerVisualStatePacket::encode)
+                .decoder(PlayerVisualStatePacket::decode)
+                .consumerMainThread(PlayerVisualStatePacket::handle)
+                .add();
+        CHANNEL.messageBuilder(HudResourceStatePacket.class, nextMessageId++, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(HudResourceStatePacket::encode)
+                .decoder(HudResourceStatePacket::decode)
+                .consumerMainThread(HudResourceStatePacket::handle)
+                .add();
     }
 
     public static void requestOpen() {
@@ -308,6 +342,18 @@ public final class EditorNetwork {
 
     public static void requestSynthesis(ResourceLocation target) {
         CHANNEL.sendToServer(new SynthesizeTalentPacket(target));
+    }
+
+    public static void submitItemSubmission(java.util.UUID sessionId, boolean confirm) {
+        CHANNEL.sendToServer(new SubmitItemSubmissionPacket(sessionId, confirm));
+    }
+
+    public static void sendItemSubmissionOpen(ServerPlayer player, ItemSubmissionOpenPacket packet) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), packet);
+    }
+
+    public static void sendItemSubmissionResult(ServerPlayer player, ItemSubmissionResultPacket packet) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), packet);
     }
 
     public static void submitTalent(long baseRevision, ResourceLocation id, String json, boolean commit) {
@@ -448,7 +494,7 @@ public final class EditorNetwork {
                 .sorted(Comparator.comparing(talent -> talent.id().toString()))
                 .limit(MAX_CATALOG_ENTRIES)
                 .map(talent -> summarize(
-                        talent, source(raw.talentSources(), talent.id()),
+                        talent, raw.talents().get(talent.id()), source(raw.talentSources(), talent.id()),
                         snapshot.referencesTo(DefinitionKind.TALENT, talent.id()).size()
                 ))
                 .toList();
@@ -492,9 +538,63 @@ public final class EditorNetwork {
                 tagIds(player.serverLevel().registryAccess().registryOrThrow(Registries.ITEM)),
                 tagIds(player.serverLevel().registryAccess().registryOrThrow(Registries.DAMAGE_TYPE)),
                 AttributeCatalog.capture(player).stream().limit(MAX_CATALOG_ENTRIES).toList(),
-                configuredItems
+                configuredItems,
+                numericStates(snapshot, player)
         );
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new BootstrapPacket(bootstrap, openScreen));
+        sendConfiguredItemCatalog(player);
+    }
+
+    public static void sendConfiguredItemCatalog(ServerPlayer player) {
+        RuntimeSnapshot snapshot = TalentEditorMod.SNAPSHOTS.active();
+        List<ConfiguredItemCatalogPacket.Entry> items = snapshot.configuredItems().values().stream()
+                .filter(item -> item.enabled() && item.available())
+                .sorted(Comparator.comparing(item -> item.id().toString()))
+                .limit(MAX_CONFIGURED_ITEM_ENTRIES)
+                .map(item -> new ConfiguredItemCatalogPacket.Entry(
+                        item.id(), clipCatalogText(item.name().fallbackText()),
+                        item.description().stream().limit(32)
+                                .map(line -> clipCatalogText(line.fallbackText())).toList(),
+                        item.customModelData(), item.glint()
+                ))
+                .toList();
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
+                new ConfiguredItemCatalogPacket(snapshot.revision(), items));
+    }
+
+    private static List<ResourceLocation> numericStates(RuntimeSnapshot snapshot, ServerPlayer player) {
+        LinkedHashSet<ResourceLocation> states = new LinkedHashSet<>();
+        snapshot.talents().values().stream()
+                .sorted(Comparator.comparing(talent -> talent.id().toString()))
+                .forEach(talent -> {
+                    collectNumericStates(states, talent.activeEffects());
+                    collectNumericStates(states, talent.onAcquire());
+                    collectNumericStates(states, talent.onSynthesize());
+                    collectNumericStates(states, talent.onRemove());
+                    talent.triggers().forEach(trigger -> {
+                        collectNumericStates(states, trigger.actions());
+                        collectNumericStates(states, trigger.failureActions());
+                    });
+                });
+        states.addAll(PlayerTalents.numericStates(player).keySet());
+        return states.stream().sorted(Comparator.comparing(ResourceLocation::toString))
+                .limit(MAX_CATALOG_ENTRIES).toList();
+    }
+
+    private static void collectNumericStates(
+            java.util.Set<ResourceLocation> states,
+            List<CompiledAction> actions
+    ) {
+        actions.stream().map(com.kidxoxo.talenteditor.domain.ConditionalAction::unwrap)
+                .filter(ModifyNumericStateAction.class::isInstance)
+                .map(ModifyNumericStateAction.class::cast)
+                .map(ModifyNumericStateAction::state)
+                .forEach(states::add);
+        actions.stream().map(com.kidxoxo.talenteditor.domain.ConditionalAction::unwrap)
+                .filter(HudResourceAction.class::isInstance)
+                .map(HudResourceAction.class::cast)
+                .map(HudResourceAction::state)
+                .forEach(states::add);
     }
 
     public static void sendValidation(ServerPlayer player, EditorSubmissionResult result) {
@@ -599,8 +699,36 @@ public final class EditorNetwork {
     }
 
     public static void sendPlayerState(ServerPlayer player, boolean openScreen) {
+        PlayerTalentState state = buildPlayerState(player);
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new PlayerTalentStatePacket(
-                buildPlayerState(player), TalentEditorMod.SNAPSHOTS.active().bookLayout(), openScreen
+                state, TalentEditorMod.SNAPSHOTS.active().bookLayout(), openScreen
+        ));
+        CHANNEL.send(PacketDistributor.TRACKING_ENTITY_AND_SELF.with(() -> player),
+                new PlayerVisualStatePacket(player.getUUID(), state.render()));
+    }
+
+    public static void sendPlayerVisualState(ServerPlayer subject, ServerPlayer recipient) {
+        PlayerTalentState.RenderView render = PlayerTalentStateFactory.renderView(
+                TalentEditorMod.SNAPSHOTS.active(), subject, PlayerTalents.activeSources(subject)
+        );
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> recipient),
+                new PlayerVisualStatePacket(subject.getUUID(), render));
+    }
+
+    /** Re-evaluates dynamic render expressions and updates the subject plus all tracking clients. */
+    public static void sendPlayerVisualState(ServerPlayer subject) {
+        PlayerTalentState.RenderView render = PlayerTalentStateFactory.renderView(
+                TalentEditorMod.SNAPSHOTS.active(), subject, PlayerTalents.activeSources(subject)
+        );
+        CHANNEL.send(PacketDistributor.TRACKING_ENTITY_AND_SELF.with(() -> subject),
+                new PlayerVisualStatePacket(subject.getUUID(), render));
+    }
+
+    public static void sendHudResources(ServerPlayer player) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new HudResourceStatePacket(
+                PlayerTalentStateFactory.hudResources(
+                        TalentEditorMod.SNAPSHOTS.active(), player, PlayerTalents.activeSources(player)
+                )
         ));
     }
 
@@ -673,12 +801,21 @@ public final class EditorNetwork {
     }
 
     private static EditorBootstrap.TalentSummary summarize(
-            TalentDefinition talent, String source, int inboundReferences
+            TalentDefinition talent, JsonObject raw, String source, int inboundReferences
     ) {
+        TalentRelationSummary relations = TalentRelationSummary.from(raw);
         return new EditorBootstrap.TalentSummary(
                 talent.id(), clipCatalogText(talent.name().fallbackText()), talent.rarity(),
                 talent.enabled(), talent.available(), talent.categories().stream().limit(256).toList(),
-                source, inboundReferences
+                source, inboundReferences, talent.icon(),
+                relations.acquireTalents().stream().distinct()
+                        .sorted(Comparator.comparing(ResourceLocation::toString)).limit(256).toList(),
+                relations.acquireEditable(), relations.acquireMode(),
+                Math.min(256, relations.acquireOtherConditions()),
+                talent.synthesis().enabled(), talent.synthesis().consumeTalents().stream().distinct()
+                        .sorted(Comparator.comparing(ResourceLocation::toString)).limit(256).toList(),
+                Math.min(256, talent.synthesis().consumeCounters().size()
+                        + talent.synthesis().consumeItems().size())
         );
     }
 

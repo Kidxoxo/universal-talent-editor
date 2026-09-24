@@ -21,11 +21,13 @@ public final class TalentActiveStatusEffectService {
     }
 
     public static void refresh(ServerPlayer player) {
-        Set<ResourceLocation> owned = PlayerTalents.owned(player);
+        Set<ResourceLocation> owned = PlayerTalents.activeSources(player);
         if (owned.isEmpty()) return;
         TalentEditorMod.SNAPSHOTS.active().activeStatusEffectBindings().forEach((effectId, bindings) ->
                 bindings.stream()
                         .filter(binding -> owned.contains(binding.talentId()))
+                        .filter(binding -> ActionConditionRuntime.active(binding.enabledWhen(),
+                                binding.disabledWhen(), player, binding.talentId()))
                         .max(Comparator.comparingInt(binding -> binding.action().amplifier()))
                         .ifPresent(binding -> apply(player, effectId, binding.action()))
         );

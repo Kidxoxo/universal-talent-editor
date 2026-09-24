@@ -3,10 +3,11 @@ plugins {
     id 'idea'
     id 'maven-publish'
     id 'net.minecraftforge.gradle' version '6.0.54'
+    id 'org.spongepowered.mixin' version '0.7.+'
 }
 
 group = 'com.kidxoxo.talenteditor'
-version = '1.0.0'
+version = '1.1.0'
 
 base {
     archivesName = 'talent_editor-forge-1.20.1'
@@ -45,12 +46,20 @@ minecraft {
     }
 }
 
+// Client-side render mixins (player model alpha / scale).
+// The refmap is required in production because vanilla members are SRG-named at runtime.
+mixin {
+    add sourceSets.main, 'talent_editor.refmap.json'
+    config 'talent_editor.mixins.json'
+}
+
 repositories {
     mavenCentral()
 }
 
 dependencies {
     minecraft 'net.minecraftforge:forge:1.20.1-47.3.22'
+    annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
 
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'

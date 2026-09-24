@@ -22,6 +22,7 @@ public record PlayerTalentStatePacket(
     private static final int MAX_LAYOUT_SLOTS = 256;
     private static final int MAX_LAYOUT_PAGES = 64;
     private static final int MAX_LAYOUT_TOTAL_PAGE_SLOTS = 4_096;
+    private static final int MAX_HUD_RESOURCES = 32;
 
     public PlayerTalentStatePacket(PlayerTalentState state, boolean openScreen) {
         this(state, TalentBookLayoutDefinition.DEFAULT, openScreen);
@@ -49,6 +50,20 @@ public record PlayerTalentStatePacket(
         for (PlayerTalentState.CounterProgressView counter : state.counters()) {
             encodeCounter(buffer, counter);
         }
+        requireSize(state.hudResources().size(), MAX_HUD_RESOURCES, "HUD resource");
+        buffer.writeVarInt(state.hudResources().size());
+        for (PlayerTalentState.HudResourceView resource : state.hudResources()) {
+            buffer.writeResourceLocation(resource.state());
+            TalentViewCodec.encodeText(buffer, resource.name());
+            buffer.writeDouble(resource.value());
+            buffer.writeDouble(resource.maximum());
+            buffer.writeVarInt(resource.color());
+            buffer.writeVarInt(resource.order());
+            buffer.writeBoolean(resource.showWhenFull());
+        }
+        buffer.writeDouble(state.render().alpha());
+        buffer.writeDouble(state.render().scale());
+        buffer.writeBoolean(state.render().hideNameplate());
         encodeLayout(buffer, packet.layout());
         buffer.writeBoolean(packet.openScreen());
     }
@@ -75,11 +90,23 @@ public record PlayerTalentStatePacket(
         int counterCount = count(buffer.readVarInt(), PlayerTalentStateFactory.MAX_COUNTERS, "counter");
         ArrayList<PlayerTalentState.CounterProgressView> counters = new ArrayList<>(counterCount);
         for (int index = 0; index < counterCount; index++) counters.add(decodeCounter(buffer));
+        int hudCount = count(buffer.readVarInt(), MAX_HUD_RESOURCES, "HUD resource");
+        ArrayList<PlayerTalentState.HudResourceView> hudResources = new ArrayList<>(hudCount);
+        for (int index = 0; index < hudCount; index++) {
+            hudResources.add(new PlayerTalentState.HudResourceView(
+                    buffer.readResourceLocation(), TalentViewCodec.decodeText(buffer),
+                    buffer.readDouble(), buffer.readDouble(),
+                    buffer.readVarInt(), buffer.readVarInt(), buffer.readBoolean()
+            ));
+        }
+        PlayerTalentState.RenderView render = new PlayerTalentState.RenderView(
+                buffer.readDouble(), buffer.readDouble(), buffer.readBoolean()
+        );
         TalentBookLayoutDefinition layout = decodeLayout(buffer);
         boolean openScreen = buffer.readBoolean();
         return new PlayerTalentStatePacket(new PlayerTalentState(
                 revision, drawTokens, truncated, talents, synthesesTruncated, syntheses,
-                countersTruncated, counters
+                countersTruncated, counters, hudResources, render
         ), layout, openScreen);
     }
 
@@ -190,7 +217,7 @@ public record PlayerTalentStatePacket(
         int rows = bounded(buffer.readVarInt(), 1, 10, "rows");
         int slotWidth = bounded(buffer.readVarInt(), 24, 128, "slotWidth");
         int slotHeight = bounded(buffer.readVarInt(), 22, 96, "slotHeight");
-        int iconSize = bounded(buffer.readVarInt(), 8, 32, "iconSize");
+        int iconSize = bounded(buffer.readVarInt(), 8, 64, "iconSize");
         if (iconSize > slotHeight - 4) throw new IllegalArgumentException("Layout icon exceeds slot height");
         boolean showGeneratedEffects = buffer.readBoolean();
         int slotCount = count(buffer.readVarInt(), MAX_LAYOUT_SLOTS, "layout slot");

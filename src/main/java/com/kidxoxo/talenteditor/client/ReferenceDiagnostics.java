@@ -45,6 +45,8 @@ final class ReferenceDiagnostics {
                     .map(value -> status(value.enabled(), value.available())).orElse(Status.NOT_PRESENT);
             case COUNTER -> bootstrap.counters().stream().filter(value -> value.id().equals(id)).findFirst()
                     .map(value -> status(value.enabled(), value.available())).orElse(Status.NOT_PRESENT);
+            case NUMERIC_STATE -> bootstrap.numericStates().contains(id)
+                    ? Status.AVAILABLE : Status.NOT_PRESENT;
             case COUNTER_CATEGORY -> bootstrap.counters().stream()
                     .anyMatch(value -> value.categories().contains(id)) ? Status.AVAILABLE : Status.NOT_PRESENT;
             case CATEGORY -> bootstrap.talents().stream()

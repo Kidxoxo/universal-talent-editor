@@ -23,6 +23,7 @@ import com.kidxoxo.talenteditor.network.ClientResourceRequirementsPacket;
 import com.kidxoxo.talenteditor.network.ClientResourceStatusPacket;
 import com.kidxoxo.talenteditor.network.EditorSettingsPacket;
 import com.kidxoxo.talenteditor.network.EditorManagementResultPacket;
+import com.kidxoxo.talenteditor.network.HudResourceStatePacket;
 import com.kidxoxo.talenteditor.draw.DrawResult;
 import com.kidxoxo.talenteditor.editor.DefinitionDeletionStatus;
 import net.minecraft.client.Minecraft;
@@ -37,7 +38,9 @@ public final class ClientPacketHandlers {
         ClientEditorState.setBootstrap(packet.bootstrap());
         if (packet.openScreen()) {
             ClientEditorState.clearValidation();
-            Minecraft.getInstance().setScreen(new EditorHomeScreen(packet.bootstrap()));
+            Minecraft.getInstance().setScreen(ClientEditorState.consumeOpenTalentTreeOnNextBootstrap()
+                    ? new TalentTreeScreen(packet.bootstrap())
+                    : new EditorHomeScreen(packet.bootstrap()));
         }
     }
 
@@ -193,8 +196,13 @@ public final class ClientPacketHandlers {
             return;
         }
         ClientEditorState.clearValidation();
+        TalentTreeEditRequest treeRequest = ClientEditorState.consumeTalentTreeEdit(packet.id());
         try {
-            minecraft.setScreen(TalentEditScreen.editExisting(bootstrap, packet.id(), packet.json()));
+            minecraft.setScreen(treeRequest == null
+                    ? TalentEditScreen.editExisting(bootstrap, packet.id(), packet.json())
+                    : TalentEditScreen.editExistingFromTree(
+                            bootstrap, packet.id(), packet.json(), treeRequest
+                    ));
         } catch (RuntimeException ex) {
             if (minecraft.player != null) {
                 minecraft.player.displayClientMessage(
@@ -203,7 +211,8 @@ public final class ClientPacketHandlers {
                         ), false
                 );
             }
-            minecraft.setScreen(new EditorHomeScreen(bootstrap));
+            minecraft.setScreen(treeRequest == null
+                    ? new EditorHomeScreen(bootstrap) : new TalentTreeScreen(bootstrap));
         }
     }
 
@@ -333,6 +342,12 @@ public final class ClientPacketHandlers {
         if (state != null && minecraft.screen instanceof TalentBookScreen screen) screen.updateState(state);
     }
 
+    public static void acceptHudResourceState(HudResourceStatePacket packet) {
+        PlayerTalentState state = ClientEditorState.applyHudResources(packet);
+        Minecraft minecraft = Minecraft.getInstance();
+        if (state != null && minecraft.screen instanceof TalentBookScreen screen) screen.updateState(state);
+    }
+
     public static void acceptDrawSession(DrawSessionPacket packet) {
         ClientEditorState.setDrawSession(packet.view());
         Minecraft.getInstance().setScreen(new TalentDrawScreen(packet.view()));
@@ -343,13 +358,14 @@ public final class ClientPacketHandlers {
         if (packet.status() == DrawResult.Status.ACQUIRED
                 || packet.status() == DrawResult.Status.DUPLICATE_REFUNDED
                 || packet.status() == DrawResult.Status.DUPLICATE_COUNTER_GRANTED) {
-            if (minecraft.player != null && packet.acquired().isPresent()) {
+            if (minecraft.player != null && packet.acquired().isPresent()
+                    && packet.status() != DrawResult.Status.ACQUIRED) {
                 minecraft.player.displayClientMessage(net.minecraft.network.chat.Component.translatable(
                         packet.status() == DrawResult.Status.ACQUIRED
                                 ? "screen.talent_editor.draw.acquired"
                                 : "screen.talent_editor.draw.result."
                                 + packet.status().name().toLowerCase(java.util.Locale.ROOT),
-                        packet.acquired().orElseThrow().toString()
+                        talentName(packet.acquired().orElseThrow())
                 ), false);
             }
             if (ClientEditorState.playerTalentState() != null) {
@@ -374,9 +390,47 @@ public final class ClientPacketHandlers {
                 + packet.status().name().toLowerCase(java.util.Locale.ROOT);
         net.minecraft.network.chat.Component message = packet.detail().isPresent()
                 ? net.minecraft.network.chat.Component.translatable(
-                        key, packet.target().toString(), packet.detail().orElseThrow().toString()
+                        key, talentName(packet.target()), talentName(packet.detail().orElseThrow())
                 )
-                : net.minecraft.network.chat.Component.translatable(key, packet.target().toString());
+                : net.minecraft.network.chat.Component.translatable(key, talentName(packet.target()));
         if (minecraft.player != null) minecraft.player.displayClientMessage(message, false);
+    }
+
+    private static net.minecraft.network.chat.Component talentName(
+            net.minecraft.resources.ResourceLocation id
+    ) {
+        PlayerTalentState state = ClientEditorState.playerTalentState();
+        if (state != null) {
+            for (PlayerTalentState.TalentView talent : state.talents()) {
+                if (talent.id().equals(id)) return talent.name().component(0xFFFFFF);
+            }
+            for (PlayerTalentState.SynthesisView synthesis : state.syntheses()) {
+                if (synthesis.target().id().equals(id)) {
+                    return synthesis.target().name().component(0xFFFFFF);
+                }
+                for (PlayerTalentState.SynthesisCostView cost : synthesis.costs()) {
+                    if (cost.id().equals(id)) {
+                        return cost.name().component(0xFFFFFF);
+                    }
+                }
+            }
+            for (PlayerTalentState.CounterProgressView counter : state.counters()) {
+                if (counter.id().equals(id)) return counter.name().component(0xFFFFFF);
+            }
+        }
+        var draw = ClientEditorState.drawSession();
+        if (draw != null) for (PlayerTalentState.TalentView talent : draw.offers()) {
+            if (talent.id().equals(id)) return talent.name().component(0xFFFFFF);
+        }
+        return net.minecraft.network.chat.Component.translatable("message.talent_editor.unknown_talent");
+    }
+
+    public static void acceptItemSubmissionOpen(com.kidxoxo.talenteditor.network.ItemSubmissionOpenPacket packet) {
+        Minecraft.getInstance().setScreen(new ItemSubmissionScreen(packet));
+    }
+
+    public static void acceptItemSubmissionResult(com.kidxoxo.talenteditor.network.ItemSubmissionResultPacket packet) {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.screen instanceof ItemSubmissionScreen screen) screen.accept(packet);
     }
 }

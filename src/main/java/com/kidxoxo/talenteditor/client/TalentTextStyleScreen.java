@@ -16,6 +16,7 @@ public final class TalentTextStyleScreen extends Screen {
     private static final int MAX_DESCRIPTIONS = 64;
 
     private final TalentEditScreen parent;
+    private final Screen returnScreen;
     private final ArrayList<LocalizedTextDraft> entries = new ArrayList<>();
     private int selectedIndex;
     private int scroll;
@@ -30,8 +31,13 @@ public final class TalentTextStyleScreen extends Screen {
     private String status = "";
 
     public TalentTextStyleScreen(TalentEditScreen parent) {
+        this(parent, parent);
+    }
+
+    TalentTextStyleScreen(TalentEditScreen parent, Screen returnScreen) {
         super(Component.translatable("screen.talent_editor.text.title"));
         this.parent = parent;
+        this.returnScreen = returnScreen;
         TalentDraft.TextStylesDraft source = parent.textStyles();
         entries.add(source.name());
         entries.addAll(source.descriptions());
@@ -259,7 +265,7 @@ public final class TalentTextStyleScreen extends Screen {
     }
 
     private void returnToParent() {
-        if (minecraft != null) minecraft.setScreen(parent);
+        if (minecraft != null) minecraft.setScreen(returnScreen);
     }
 
     @Override

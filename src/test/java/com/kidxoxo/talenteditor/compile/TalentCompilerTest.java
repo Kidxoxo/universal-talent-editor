@@ -5,6 +5,8 @@ import com.google.gson.JsonParser;
 import com.kidxoxo.talenteditor.runtime.ActivationOutcome;
 import com.kidxoxo.talenteditor.runtime.SnapshotRepository;
 import com.kidxoxo.talenteditor.domain.ActionFailurePolicy;
+import com.kidxoxo.talenteditor.domain.ConditionalAction;
+import com.kidxoxo.talenteditor.domain.CompiledCondition;
 import net.minecraft.resources.ResourceLocation;
 import org.junit.jupiter.api.Test;
 
@@ -30,6 +32,194 @@ class TalentCompilerTest {
             Set.of("minecraft", "forge", "talent_editor"),
             Set.of(MAX_HEALTH, ATTACK_DAMAGE)
     );
+
+    @Test
+    void compilesConditionsOnIndividualActiveAndTriggerActions() {
+        JsonObject talent = validTalent();
+        talent.getAsJsonArray("activeEffects").get(0).getAsJsonObject().add("disabledWhen", parse("""
+                {"type":"has_talent","talent":"example:other"}
+                """));
+        talent.add("triggers", JsonParser.parseString("""
+                [{"id":"conditional_damage","event":"damage_dealt","actions":[
+                  {"type":"modify_damage_expression","operation":"multiply","expression":"1.2",
+                   "enabledWhen":{"type":"expression_compare","left":"health_percent",
+                                  "operator":"gt","right":"0.5"}}
+                ]}]
+                """));
+        CompilationResult result = compiler.compile(new RawDefinitionSet(
+                Map.of(COMMON, rarity()), Map.of(VITALITY, talent, id("example:other"), validTalent()),
+                Map.of(), Map.of(), List.of()
+        ), environment);
+        assertFalse(result.report().hasErrors(), result.report().issues().toString());
+        var compiled = result.candidate().orElseThrow().talents().get(VITALITY);
+        var active = assertInstanceOf(ConditionalAction.class, compiled.activeEffects().get(0));
+        assertInstanceOf(CompiledCondition.HasTalent.class, active.disabledWhen().orElseThrow());
+        assertInstanceOf(com.kidxoxo.talenteditor.domain.AttributeModifierAction.class, active.delegate());
+        var triggered = assertInstanceOf(ConditionalAction.class, compiled.triggers().get(0).actions().get(0));
+        assertInstanceOf(CompiledCondition.ExpressionCompare.class, triggered.enabledWhen().orElseThrow());
+    }
+
+    @Test
+    void legacyTalentWithoutOfferRemainsNonDrawable() {
+        CompilationResult result = compiler.compile(new RawDefinitionSet(
+                Map.of(COMMON, rarity()), Map.of(VITALITY, validTalent()), Map.of(), Map.of(), List.of()
+        ), environment);
+
+        assertFalse(result.report().hasErrors(), result.report().issues().toString());
+        assertFalse(result.candidate().orElseThrow().talents().get(VITALITY).offer().enabled());
+    }
+
+    @Test
+    void compilesHudRenderingSubmissionAndOptionalCuriosInterfaces() {
+        JsonObject talent = validTalent();
+        talent.add("requiredMods", JsonParser.parseString("[\"curios\"]"));
+        talent.add("acquireCondition", JsonParser.parseString("""
+                {"type":"curios_equipped","item":"minecraft:diamond"}
+                """));
+        talent.getAsJsonArray("activeEffects").add(JsonParser.parseString("""
+                {"type":"hud_resource","state":"example:energy","maximum":"100+level",
+                 "color":5614335,"order":2,"showWhenFull":false}
+                """));
+        talent.getAsJsonArray("activeEffects").add(JsonParser.parseString("""
+                {"type":"player_render","alpha":"1-counter(\\\"example:visibility\\\")/100",
+                 "scale":1.2,"hideNameplate":true}
+                """));
+        talent.add("triggers", JsonParser.parseString("""
+                [{"id":"submit","event":"interact_block","actions":[
+                  {"type":"open_item_submission","item":"minecraft:diamond","count":"2",
+                   "timeoutTicks":200,"consume":true}
+                ]}]
+                """));
+        CompilationEnvironment optionalEnvironment = new CompilationEnvironment(
+                Set.of("minecraft", "forge", "talent_editor", "curios"),
+                environment.registeredAttributes(),
+                Set.of(id("minecraft:diamond"))
+        );
+
+        CompilationResult result = compiler.compile(new RawDefinitionSet(
+                Map.of(COMMON, rarity()), Map.of(VITALITY, talent), Map.of(), Map.of(), List.of()
+        ), optionalEnvironment);
+
+        assertFalse(result.report().hasErrors(), result.report().issues().toString());
+        var compiled = result.candidate().orElseThrow().talents().get(VITALITY);
+        assertInstanceOf(com.kidxoxo.talenteditor.domain.CompiledCondition.CuriosEquipped.class,
+                compiled.acquireCondition());
+        assertInstanceOf(com.kidxoxo.talenteditor.domain.HudResourceAction.class,
+                compiled.activeEffects().get(1));
+        assertInstanceOf(com.kidxoxo.talenteditor.domain.PlayerRenderAction.class,
+                compiled.activeEffects().get(2));
+        var render = (com.kidxoxo.talenteditor.domain.PlayerRenderAction) compiled.activeEffects().get(2);
+        assertEquals("1-counter(\"example:visibility\")/100", render.alpha().source());
+        assertEquals("1.2", render.scale().source());
+        assertInstanceOf(com.kidxoxo.talenteditor.domain.OpenItemSubmissionAction.class,
+                compiled.triggers().get(0).actions().get(0));
+    }
+
+    @Test
+    void compilesLifecycleExpressionsStateTransitionsAndTimedModifiers() {
+        JsonObject talent = validTalent();
+        talent.add("lifecycle", JsonParser.parseString("""
+                {"durationTicks":1200,"removeAfterDraws":2,
+                 "retainEffects":true,"retainCategoryContribution":true,"retainTriggers":true}
+                """));
+        talent.add("triggers", JsonParser.parseString("""
+                [{
+                  "id":"formula_guard","event":"fatal_damage",
+                  "condition":{"type":"expression_compare","left":"health_percent",
+                               "operator":"lte","right":"0.5"},
+                  "actions":[
+                    {"type":"modify_state","state":"example:growth","operation":"add",
+                     "expression":"max(1, counter(\\\"example:kills\\\"))","target":"self"},
+                    {"type":"modify_damage_expression","operation":"multiply",
+                     "expression":"clamp(1-state(\\\"example:growth\\\")*0.01,0,1)"},
+                    {"type":"affect_health_expression","operation":"heal",
+                     "expression":"max_health*0.25","invertNegative":true,"target":"self"},
+                    {"type":"modify_attribute_base_expression",
+                     "attribute":"minecraft:generic.max_health","operation":"add",
+                     "expression":"1","target":"self"},
+                    {"type":"timed_attribute_modifier",
+                     "attribute":"minecraft:generic.attack_damage","expression":"2+level*0.1",
+                     "operation":"addition","modifierKey":"formula_boost","durationTicks":100,
+                     "target":"self"},
+                    {"type":"give_draw_tokens","amount":"1"},
+                    {"type":"grant_talent","talent":"example:vitality","onlyIfNeverAcquired":false},
+                    {"type":"revoke_talent","talent":"example:vitality","retainEffects":true,
+                     "retainTriggers":true},
+                    {"type":"modify_counter","counter":"example:kills","operation":"add",
+                     "expression":"1","minimum":0,"maximum":1000}
+                  ]
+                }]
+                """));
+        JsonObject counter = parse("""
+                {"schema":2,"name":"Kills","event":"manual","visibility":"condition_only"}
+                """);
+
+        CompilationResult result = compiler.compile(new RawDefinitionSet(
+                Map.of(COMMON, rarity()), Map.of(VITALITY, talent), Map.of(),
+                Map.of(id("example:kills"), counter), List.of()
+        ), environment);
+
+        assertFalse(result.report().hasErrors(), result.report().issues().toString());
+        var compiled = result.candidate().orElseThrow().talents().get(VITALITY);
+        assertEquals(1200, compiled.lifecycle().durationTicks());
+        assertEquals(2, compiled.lifecycle().removeAfterDraws());
+        assertTrue(compiled.lifecycle().retainEffects());
+        assertTrue(compiled.lifecycle().retainCategoryContribution());
+        assertTrue(compiled.lifecycle().retainTriggers());
+        assertInstanceOf(com.kidxoxo.talenteditor.domain.CompiledCondition.ExpressionCompare.class,
+                compiled.triggers().get(0).condition());
+        assertEquals(9, compiled.triggers().get(0).actions().size());
+        assertInstanceOf(com.kidxoxo.talenteditor.domain.ModifyNumericStateAction.class,
+                compiled.triggers().get(0).actions().get(0));
+        assertInstanceOf(com.kidxoxo.talenteditor.domain.TimedAttributeModifierAction.class,
+                compiled.triggers().get(0).actions().get(4));
+        var snapshot = result.candidate().orElseThrow();
+        assertTrue(snapshot.referencesTo(
+                com.kidxoxo.talenteditor.domain.DefinitionKind.TALENT, VITALITY
+        ).stream().anyMatch(reference -> reference.usage().equals("grant_talent")));
+        assertTrue(snapshot.referencesTo(
+                com.kidxoxo.talenteditor.domain.DefinitionKind.TALENT, VITALITY
+        ).stream().anyMatch(reference -> reference.usage().equals("revoke_talent")));
+        assertTrue(snapshot.referencesTo(
+                com.kidxoxo.talenteditor.domain.DefinitionKind.COUNTER, id("example:kills")
+        ).stream().anyMatch(reference -> reference.usage().equals("modify_counter")));
+        assertTrue(snapshot.counterBookIds().contains(id("example:kills")));
+    }
+
+    @Test
+    void compilesSelectedTalentAndEventEntityEffectConditions() {
+        JsonObject talent = validTalent();
+        talent.add("triggers", JsonParser.parseString("""
+                [
+                  {"id":"selected_luck","event":"draw_selected",
+                   "condition":{"type":"event_talent_category","category":"example:luck"},
+                   "actions":[{"type":"show_message","text":{"literal":"Luck"}}]},
+                  {"id":"selected_exact","event":"draw_selected",
+                   "condition":{"type":"event_talent","talent":"example:vitality"},
+                   "actions":[{"type":"show_message","text":{"literal":"Exact"}}]},
+                  {"id":"slowed_target","event":"interact_entity",
+                   "condition":{"type":"event_entity_effect","effect":"minecraft:slowness"},
+                   "actions":[{"type":"show_message","text":{"literal":"Slowed"}}]}
+                ]
+                """));
+        CompilationEnvironment eventEnvironment = new CompilationEnvironment(
+                environment.loadedMods(), environment.registeredAttributes(), Set.of(), Set.of(),
+                Set.of(id("minecraft:slowness"))
+        );
+
+        CompilationResult result = compiler.compile(new RawDefinitionSet(
+                Map.of(COMMON, rarity()), Map.of(VITALITY, talent), Map.of(), Map.of(), List.of()
+        ), eventEnvironment);
+
+        assertFalse(result.report().hasErrors(), result.report().issues().toString());
+        var triggers = result.candidate().orElseThrow().talents().get(VITALITY).triggers();
+        assertInstanceOf(com.kidxoxo.talenteditor.domain.CompiledCondition.EventTalentCategory.class,
+                triggers.get(0).condition());
+        assertInstanceOf(com.kidxoxo.talenteditor.domain.CompiledCondition.EventTalent.class,
+                triggers.get(1).condition());
+        assertInstanceOf(com.kidxoxo.talenteditor.domain.CompiledCondition.EventEntityEffect.class,
+                triggers.get(2).condition());
+    }
 
     @Test
     void compilesDynamicAttributesAndCreativeFlightWithCounterReferences() {
@@ -1292,6 +1482,52 @@ class TalentCompilerTest {
                 CanonicalJsonHasher.hash(validDefinitions()),
                 CanonicalJsonHasher.hash(definitions)
         );
+    }
+
+    @Test
+    void compilesEquippedConfiguredItemTriggersIntoTheRuntimeEventIndex() {
+        ResourceLocation itemId = id("example:equipped_relic");
+        JsonObject item = parse("""
+                {
+                  "schema":2,
+                  "name":"Equipped Relic",
+                  "triggers":[
+                    {"id":"equipped_tick","event":"player_second","actions":[
+                      {"type":"timed_attribute_modifier",
+                       "attribute":"minecraft:generic.attack_damage","expression":"2",
+                       "operation":"addition","modifierKey":"equipped_attack",
+                       "durationTicks":40,"target":"self"}
+                    ]}
+                  ]
+                }
+                """);
+
+        CompilationResult result = compiler.compile(
+                validDefinitions().withConfiguredItem(itemId, item, "test/items"), environment
+        );
+
+        assertFalse(result.report().hasErrors(), () -> result.report().issues().toString());
+        var compiled = result.candidate().orElseThrow().configuredItems().get(itemId);
+        assertEquals(1, compiled.triggers().size());
+        assertEquals(itemId, result.candidate().orElseThrow().triggersByEvent()
+                .get(id("talent_editor:player_second")).get(0).talentId());
+    }
+
+    @Test
+    void compilesDerivedCategoryCounterMetadata() {
+        ResourceLocation counterId = id("example:light_count");
+        CompilationResult result = compiler.compile(
+                validDefinitions().withCounter(counterId, parse("""
+                        {"schema":2,"name":"Light Count","event":"manual",
+                         "displayCategory":"example:light"}
+                        """), "test/counters"),
+                environment
+        );
+
+        assertFalse(result.report().hasErrors(), () -> result.report().issues().toString());
+        assertEquals(id("example:light"), result.candidate().orElseThrow().counters()
+                .get(counterId).displayCategory().orElseThrow());
+        assertTrue(result.candidate().orElseThrow().counterBookIds().contains(counterId));
     }
 
     @Test

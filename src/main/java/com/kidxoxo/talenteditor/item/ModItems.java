@@ -20,6 +20,9 @@ public final class ModItems {
     public static final RegistryObject<Item> TALENT_POINT = ITEMS.register(
             "talent_point", () -> new TalentPointItem(new Item.Properties().stacksTo(64))
     );
+    public static final RegistryObject<Item> TAB_ICON = ITEMS.register(
+            "tab_icon", () -> new Item(new Item.Properties())
+    );
 
     private ModItems() {
     }

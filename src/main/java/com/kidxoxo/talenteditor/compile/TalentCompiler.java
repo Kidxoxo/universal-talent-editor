@@ -8,6 +8,7 @@ import com.kidxoxo.talenteditor.TalentEditorMod;
 import com.kidxoxo.talenteditor.domain.AttributeModifierAction;
 import com.kidxoxo.talenteditor.domain.CancelDamageAction;
 import com.kidxoxo.talenteditor.domain.CompiledAction;
+import com.kidxoxo.talenteditor.domain.ConditionalAction;
 import com.kidxoxo.talenteditor.domain.CompiledCondition;
 import com.kidxoxo.talenteditor.domain.CompiledTrigger;
 import com.kidxoxo.talenteditor.domain.ConfiguredItemDefinition;
@@ -33,10 +34,15 @@ import com.kidxoxo.talenteditor.domain.DynamicAttributeModifierAction;
 import com.kidxoxo.talenteditor.domain.CreativeFlightAction;
 import com.kidxoxo.talenteditor.domain.LocalizedText;
 import com.kidxoxo.talenteditor.domain.ModifyDamageAction;
+import com.kidxoxo.talenteditor.domain.ModifyDamageExpressionAction;
+import com.kidxoxo.talenteditor.domain.GrantTalentAction;
+import com.kidxoxo.talenteditor.domain.RevokeTalentAction;
+import com.kidxoxo.talenteditor.domain.ModifyCounterAction;
 import com.kidxoxo.talenteditor.domain.OfferSettings;
 import com.kidxoxo.talenteditor.domain.RarityDefinition;
 import com.kidxoxo.talenteditor.domain.QueueDrawConstraintAction;
 import com.kidxoxo.talenteditor.domain.TalentDefinition;
+import com.kidxoxo.talenteditor.domain.TalentLifecycleDefinition;
 import com.kidxoxo.talenteditor.domain.TalentBookLayoutDefinition;
 import com.kidxoxo.talenteditor.domain.TalentPoolDefinition;
 import com.kidxoxo.talenteditor.domain.SynthesisDefinition;
@@ -49,6 +55,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -65,10 +72,14 @@ public final class TalentCompiler {
     private static final Set<String> TALENT_FIELDS = Set.of(
             "schema", "enabled", "text", "rarity", "categories", "icon", "offer", "capacityCost",
             "tags", "requiredMods", "acquireCondition", "synthesis", "activeEffects", "triggers",
-            "onAcquire", "onSynthesize", "onRemove"
+            "lifecycle", "onAcquire", "onSynthesize", "onRemove"
     );
     private static final Set<String> SYNTHESIS_FIELDS = Set.of(
             "enabled", "consumeTalents", "consumeCounters", "consumeItems"
+    );
+    private static final Set<String> LIFECYCLE_FIELDS = Set.of(
+            "durationTicks", "removeAfterDraws", "retainEffects", "retainCategoryContribution",
+            "retainTriggers"
     );
     private static final Set<String> POOL_FIELDS = Set.of(
             "schema", "enabled", "name", "choices", "refreshes", "maxOwned", "iconSize",
@@ -79,7 +90,7 @@ public final class TalentCompiler {
             "schema", "enabled", "name", "event", "increment", "amountMode", "amountScale", "rounding",
             "minimumIncrement", "maximum", "cooldownTicks",
             "intervalTicks", "resetOnLogin", "resetOnDeath", "resetIntervalTicks",
-            "categories", "visibility", "requiredMods", "requiredTalents", "entityTypes", "entityTags",
+            "categories", "visibility", "displayCategory", "requiredMods", "requiredTalents", "entityTypes", "entityTags",
             "items", "itemTags", "damageTags"
     );
     private static final Set<String> LAYOUT_FIELDS = Set.of(
@@ -99,7 +110,8 @@ public final class TalentCompiler {
             new ResourceLocation(TalentEditorMod.MOD_ID, "damage_dealt_pre"),
             new ResourceLocation(TalentEditorMod.MOD_ID, "damage_taken_pre"),
             new ResourceLocation(TalentEditorMod.MOD_ID, "damage_dealt"),
-            new ResourceLocation(TalentEditorMod.MOD_ID, "damage_taken")
+            new ResourceLocation(TalentEditorMod.MOD_ID, "damage_taken"),
+            new ResourceLocation(TalentEditorMod.MOD_ID, "fatal_damage")
     );
     private static final Set<String> TEXT_FIELDS = Set.of("name", "description", "showGeneratedEffects");
     private static final Set<String> OFFER_FIELDS = Set.of("enabled", "weight", "pools");
@@ -110,7 +122,7 @@ public final class TalentCompiler {
     );
     private static final Set<String> CONFIGURED_ITEM_FIELDS = Set.of(
             "schema", "enabled", "name", "description", "customModelData", "glint",
-            "attributeModifiers", "use", "loot", "requiredMods"
+            "attributeModifiers", "use", "triggers", "loot", "requiredMods"
     );
     private static final Set<String> CONFIGURED_ITEM_ATTRIBUTE_FIELDS = Set.of(
             "attribute", "amount", "operation", "slot", "modifierKey"
@@ -141,6 +153,9 @@ public final class TalentCompiler {
     public CompilationResult compile(RawDefinitionSet raw, CompilationEnvironment environment) {
         ValidationReport.Builder report = ValidationReport.builder();
         for (ValidationIssue issue : raw.loadingIssues()) report.add(issue);
+        CompilationEnvironment actionEnvironment = withAdditionalItems(
+                environment, raw.configuredItems().keySet()
+        );
 
         LinkedHashMap<ResourceLocation, RarityDefinition> rarities = new LinkedHashMap<>();
         raw.rarities().entrySet().stream()
@@ -160,7 +175,7 @@ public final class TalentCompiler {
                 .forEach(entry -> talents.put(
                         entry.getKey(),
                         compileTalent(
-                                entry.getKey(), entry.getValue(), environment, raw.talents().keySet(),
+                                entry.getKey(), entry.getValue(), actionEnvironment, raw.talents().keySet(),
                                 raw.configuredItems().keySet(), raw.counters().keySet(),
                                 rarities, pools, report
                         )
@@ -189,7 +204,10 @@ public final class TalentCompiler {
         raw.configuredItems().entrySet().stream()
                 .sorted(Map.Entry.comparingByKey(Comparator.comparing(ResourceLocation::toString)))
                 .forEach(entry -> configuredItems.put(
-                        entry.getKey(), compileConfiguredItem(entry.getKey(), entry.getValue(), environment, report)
+                        entry.getKey(), compileConfiguredItem(
+                                entry.getKey(), entry.getValue(), environment, actionEnvironment,
+                                raw.talents().keySet(), raw.configuredItems().keySet(), raw.counters().keySet(), report
+                        )
                 ));
 
         long patternLootRules = configuredItems.values().stream()
@@ -217,10 +235,26 @@ public final class TalentCompiler {
         return new CompilationResult(Optional.of(candidate), finished);
     }
 
+    private static CompilationEnvironment withAdditionalItems(
+            CompilationEnvironment environment, Set<ResourceLocation> additional
+    ) {
+        LinkedHashSet<ResourceLocation> items = new LinkedHashSet<>(environment.registeredItems());
+        items.addAll(additional);
+        return new CompilationEnvironment(
+                environment.loadedMods(), environment.registeredAttributes(), items,
+                environment.registeredEntityTypes(), environment.registeredMobEffects(),
+                environment.registeredBlocks(), environment.registeredSoundEvents()
+        );
+    }
+
     private ConfiguredItemDefinition compileConfiguredItem(
             ResourceLocation id,
             JsonObject json,
             CompilationEnvironment environment,
+            CompilationEnvironment actionEnvironment,
+            Set<ResourceLocation> knownTalents,
+            Set<ResourceLocation> knownConfiguredItems,
+            Set<ResourceLocation> knownCounters,
             ValidationReport.Builder report
     ) {
         String source = "configured item " + id;
@@ -253,13 +287,17 @@ public final class TalentCompiler {
                 json, environment, missingMods, source, report
         );
         ConfiguredItemUseDefinition use = compileConfiguredItemUse(
-                id, json, environment, missingMods, source, report
+                id, json, actionEnvironment, knownTalents, knownConfiguredItems, missingMods, source, report
         );
         if (systemItem && use.enabled()) {
             report.warning("SYSTEM_ITEM_USE_IGNORED", source, "$.use",
                     "The talent book and talent point keep their fixed built-in right-click behavior");
             use = ConfiguredItemUseDefinition.DISABLED;
         }
+        List<CompiledTrigger> triggers = compileTriggers(
+                id, json.get("triggers"), actionEnvironment, knownTalents, knownConfiguredItems, knownCounters,
+                missingMods, source, report
+        );
         List<ConfiguredItemLootRule> loot = compileConfiguredItemLoot(
                 json, environment, missingMods, source, report
         );
@@ -269,7 +307,7 @@ public final class TalentCompiler {
         }
         return new ConfiguredItemDefinition(
                 id, SCHEMA_VERSION, enabled, name, description, customModelData, glint,
-                attributeModifiers, use, loot,
+                attributeModifiers, use, triggers, loot,
                 requiredMods, missingMods.isEmpty(), missingMods
         );
     }
@@ -363,6 +401,8 @@ public final class TalentCompiler {
             ResourceLocation itemId,
             JsonObject item,
             CompilationEnvironment environment,
+            Set<ResourceLocation> knownTalents,
+            Set<ResourceLocation> knownConfiguredItems,
             List<String> missingMods,
             String source,
             ValidationReport.Builder report
@@ -379,12 +419,13 @@ public final class TalentCompiler {
         );
         List<CompiledAction> actions = compileActions(
                 itemId, use.get("actions"), "$.use.actions", ActionPlacement.ITEM_USE,
-                environment, missingMods, source, report, enabled
+                environment, knownTalents, knownConfiguredItems, missingMods, source, report, enabled
         );
         for (int index = 0; index < actions.size(); index++) {
             CompiledAction action = actions.get(index);
-            ActionTarget target = action instanceof AddEffectAction add ? add.target()
-                    : action instanceof RemoveEffectAction remove ? remove.target() : ActionTarget.SELF;
+            CompiledAction payload = ConditionalAction.unwrap(action);
+            ActionTarget target = payload instanceof AddEffectAction add ? add.target()
+                    : payload instanceof RemoveEffectAction remove ? remove.target() : ActionTarget.SELF;
             if (target != ActionTarget.SELF) {
                 report.error("ITEM_USE_TARGET_UNSUPPORTED", source, "$.use.actions[" + index + "].target",
                         "Configured item use actions can only target self");
@@ -546,12 +587,12 @@ public final class TalentCompiler {
         boolean enabled = JsonAccess.bool(json, "enabled", true, source, "$", report);
         int priority = JsonAccess.integer(json, "priority", 0, -100_000, 100_000, source, "$", report);
         ResourceLocation background = JsonAccess.optionalId(json, "background", true, source, "$", report);
-        int panelPercent = JsonAccess.integer(json, "panelPercent", 42, 25, 70, source, "$", report);
+        int panelPercent = JsonAccess.integer(json, "panelPercent", 60, 25, 70, source, "$", report);
         int columns = JsonAccess.integer(json, "columns", 2, 1, 8, source, "$", report);
-        int rows = JsonAccess.integer(json, "rows", 4, 1, 10, source, "$", report);
-        int slotWidth = JsonAccess.integer(json, "slotWidth", 58, 24, 128, source, "$", report);
-        int slotHeight = JsonAccess.integer(json, "slotHeight", 30, 22, 96, source, "$", report);
-        int iconSize = JsonAccess.integer(json, "iconSize", 16, 8, 32, source, "$", report);
+        int rows = JsonAccess.integer(json, "rows", 3, 1, 10, source, "$", report);
+        int slotWidth = JsonAccess.integer(json, "slotWidth", 120, 24, 128, source, "$", report);
+        int slotHeight = JsonAccess.integer(json, "slotHeight", 56, 22, 96, source, "$", report);
+        int iconSize = JsonAccess.integer(json, "iconSize", 48, 8, 64, source, "$", report);
         boolean showGeneratedEffects = JsonAccess.bool(
                 json, "showGeneratedEffects", true, source, "$", report
         );
@@ -811,6 +852,13 @@ public final class TalentCompiler {
                     "Expected full, condition_only, or hidden");
             return CounterVisibility.FULL;
         });
+        java.util.Optional<ResourceLocation> displayCategory = java.util.Optional.empty();
+        if (json.has("displayCategory")) {
+            ResourceLocation parsed = JsonAccess.optionalId(
+                    json, "displayCategory", true, source, "$", report
+            );
+            displayCategory = java.util.Optional.ofNullable(parsed);
+        }
         if (amountMode == CounterAmountMode.FIXED && increment > maximum) {
             report.warning("COUNTER_INCREMENT_ABOVE_MAXIMUM", source, "$.increment",
                     "The first matching event will clamp the counter to its maximum");
@@ -871,7 +919,7 @@ public final class TalentCompiler {
                 id, SCHEMA_VERSION, enabled, name, event, increment, amountMode, amountScale, rounding,
                 minimumIncrement, maximum, cooldownTicks, intervalTicks,
                 resetOnLogin, resetOnDeath, resetIntervalTicks,
-                categories, visibility,
+                categories, visibility, displayCategory,
                 requiredMods, missingMods.isEmpty(), requiredTalents, entityTypes, entityTags, items, itemTags,
                 damageTags
         );
@@ -950,7 +998,7 @@ public final class TalentCompiler {
         int choices = JsonAccess.integer(json, "choices", 3, 1, 5, source, "$", report);
         int refreshes = JsonAccess.integer(json, "refreshes", 1, 0, 100, source, "$", report);
         int maxOwned = JsonAccess.integer(json, "maxOwned", 24, 1, 10_000, source, "$", report);
-        int iconSize = JsonAccess.integer(json, "iconSize", 16, 8, 64, source, "$", report);
+        int iconSize = JsonAccess.integer(json, "iconSize", 64, 8, 64, source, "$", report);
         boolean legacyExcludeOwned = JsonAccess.bool(json, "excludeOwned", true, source, "$", report);
 
         LinkedHashMap<ResourceLocation, Double> rarityWeights = new LinkedHashMap<>();
@@ -1183,10 +1231,11 @@ public final class TalentCompiler {
         SynthesisDefinition synthesis = compileSynthesis(
                 id, json, environment, knownTalents, knownConfiguredItems, missingMods, source, report
         );
+        TalentLifecycleDefinition lifecycle = compileLifecycle(json, source, report);
 
         List<CompiledAction> activeEffects = compileActions(
                 id, json.get("activeEffects"), "$.activeEffects", ActionPlacement.ACTIVE,
-                environment, missingMods, source, report, false
+                environment, knownTalents, knownConfiguredItems, missingMods, source, report, false
         );
         validateModifierKeys(activeEffects, source, report);
         validateActiveEffectReferences(activeEffects, pools, knownCounters, source, report);
@@ -1199,16 +1248,22 @@ public final class TalentCompiler {
         );
         List<CompiledAction> onAcquire = compileActions(
                 id, json.get("onAcquire"), "$.onAcquire", ActionPlacement.ON_ACQUIRE,
-                environment, missingMods, source, report, false
+                environment, knownTalents, knownConfiguredItems, missingMods, source, report, false
         );
         List<CompiledAction> onSynthesize = compileActions(
                 id, json.get("onSynthesize"), "$.onSynthesize", ActionPlacement.ON_SYNTHESIZE,
-                environment, missingMods, source, report, false
+                environment, knownTalents, knownConfiguredItems, missingMods, source, report, false
         );
         List<CompiledAction> onRemove = compileActions(
                 id, json.get("onRemove"), "$.onRemove", ActionPlacement.ON_REMOVE,
-                environment, missingMods, source, report, false
+                environment, knownTalents, knownConfiguredItems, missingMods, source, report, false
         );
+        validateActionReferences(onAcquire, "$.onAcquire", knownTalents, knownCounters,
+                rarities, pools, source, report);
+        validateActionReferences(onSynthesize, "$.onSynthesize", knownTalents, knownCounters,
+                rarities, pools, source, report);
+        validateActionReferences(onRemove, "$.onRemove", knownTalents, knownCounters,
+                rarities, pools, source, report);
 
         if (offer.enabled()) {
             for (int index = 0; index < offer.pools().size(); index++) {
@@ -1235,7 +1290,38 @@ public final class TalentCompiler {
         return new TalentDefinition(
                 id, SCHEMA_VERSION, enabled, name, description, showGeneratedEffects, rarity,
                 categories, icon, offer, capacityCost, tags, requiredMods, available, missingMods,
-                acquireCondition, synthesis, activeEffects, triggers, onAcquire, onSynthesize, onRemove
+                acquireCondition, synthesis, lifecycle, activeEffects, triggers, onAcquire, onSynthesize, onRemove
+        );
+    }
+
+    private static TalentLifecycleDefinition compileLifecycle(
+            JsonObject talent, String source, ValidationReport.Builder report
+    ) {
+        if (!talent.has("lifecycle")) return TalentLifecycleDefinition.permanent();
+        JsonObject lifecycle = JsonAccess.object(talent, "lifecycle", false, source, "$", report);
+        JsonAccess.knownKeys(lifecycle, LIFECYCLE_FIELDS, source, "$.lifecycle", report);
+        int durationTicks = JsonAccess.integer(
+                lifecycle, "durationTicks", 0, 0, 172_800_000, source, "$.lifecycle", report
+        );
+        int removeAfterDraws = JsonAccess.integer(
+                lifecycle, "removeAfterDraws", 0, 0, 1_000_000, source, "$.lifecycle", report
+        );
+        boolean retainEffects = JsonAccess.bool(
+                lifecycle, "retainEffects", false, source, "$.lifecycle", report
+        );
+        boolean retainCategory = JsonAccess.bool(
+                lifecycle, "retainCategoryContribution", false, source, "$.lifecycle", report
+        );
+        boolean retainTriggers = JsonAccess.bool(
+                lifecycle, "retainTriggers", false, source, "$.lifecycle", report
+        );
+        if (durationTicks == 0 && removeAfterDraws == 0
+                && (retainEffects || retainCategory || retainTriggers)) {
+            report.warning("LIFECYCLE_RETENTION_UNUSED", source, "$.lifecycle",
+                    "Retention flags have no effect without durationTicks or removeAfterDraws");
+        }
+        return new TalentLifecycleDefinition(
+                durationTicks, removeAfterDraws, retainEffects, retainCategory, retainTriggers
         );
     }
 
@@ -1481,7 +1567,8 @@ public final class TalentCompiler {
                     : new CompiledCondition.Always(true);
             List<CompiledAction> actions = compileActions(
                     talentId, trigger.get("actions"), JsonAccess.child(path, "actions"),
-                    ActionPlacement.TRIGGER, environment, missingMods, source, report, true
+                    ActionPlacement.TRIGGER, environment, knownTalents, knownConfiguredItems,
+                    missingMods, source, report, true
             );
             String rawFailurePolicy = JsonAccess.string(
                     trigger, "actionFailurePolicy", "continue", false, source, path, report
@@ -1494,12 +1581,16 @@ public final class TalentCompiler {
             List<CompiledAction> failureActions = trigger.has("failureActions")
                     ? compileActions(
                             talentId, trigger.get("failureActions"), JsonAccess.child(path, "failureActions"),
-                            ActionPlacement.TRIGGER, environment, missingMods, source, report, false
+                            ActionPlacement.TRIGGER, environment, knownTalents, knownConfiguredItems,
+                            missingMods, source, report, false
                     )
                     : List.of();
             if (!DAMAGE_TRIGGER_EVENTS.contains(event)
                     && java.util.stream.Stream.concat(actions.stream(), failureActions.stream())
-                    .anyMatch(action -> action instanceof ModifyDamageAction || action instanceof CancelDamageAction)) {
+                    .map(ConditionalAction::unwrap)
+                    .anyMatch(action -> action instanceof ModifyDamageAction
+                            || action instanceof ModifyDamageExpressionAction
+                            || action instanceof CancelDamageAction)) {
                 report.error("DAMAGE_ACTION_EVENT_UNSUPPORTED", source,
                         path,
                         "modify_damage and cancel_damage require a damage event");
@@ -1519,6 +1610,8 @@ public final class TalentCompiler {
             String path,
             ActionPlacement placement,
             CompilationEnvironment environment,
+            Set<ResourceLocation> knownTalents,
+            Set<ResourceLocation> knownConfiguredItems,
             List<String> missingMods,
             String source,
             ValidationReport.Builder report,
@@ -1549,6 +1642,21 @@ public final class TalentCompiler {
                 continue;
             }
             JsonObject action = item.getAsJsonObject();
+            boolean hasEnable = action.has("enabledWhen");
+            boolean hasDisable = action.has("disabledWhen");
+            CompiledCondition enabledWhen = hasEnable ? new ConditionCompiler(
+                    source, report, environment, knownTalents, knownConfiguredItems, missingMods,
+                    true
+            ).compile(action.get("enabledWhen"), JsonAccess.child(itemPath, "enabledWhen")) : null;
+            CompiledCondition disabledWhen = hasDisable ? new ConditionCompiler(
+                    source, report, environment, knownTalents, knownConfiguredItems, missingMods,
+                    true
+            ).compile(action.get("disabledWhen"), JsonAccess.child(itemPath, "disabledWhen")) : null;
+            if (hasEnable || hasDisable) {
+                action = action.deepCopy();
+                action.remove("enabledWhen");
+                action.remove("disabledWhen");
+            }
             String rawType = JsonAccess.string(action, "type", "", true, source, itemPath, report);
             if (!rawType.contains(":")) rawType = TalentEditorMod.MOD_ID + ":" + rawType;
             ResourceLocation type = JsonAccess.parseId(
@@ -1568,7 +1676,13 @@ public final class TalentCompiler {
             ActionDecodeContext context = new ActionDecodeContext(
                     talentId, source, itemPath, placement, environment, missingMods, report
             );
-            decoder.decode(context, action).ifPresent(result::add);
+            CompiledCondition requiredCondition = enabledWhen;
+            CompiledCondition forbiddenCondition = disabledWhen;
+            decoder.decode(context, action).ifPresent(decoded -> result.add(
+                    hasEnable || hasDisable ? new ConditionalAction(decoded,
+                            java.util.Optional.ofNullable(requiredCondition),
+                            java.util.Optional.ofNullable(forbiddenCondition)) : decoded
+            ));
         }
         return List.copyOf(result);
     }
@@ -1602,7 +1716,7 @@ public final class TalentCompiler {
     ) {
         HashSet<String> keys = new HashSet<>();
         for (int index = 0; index < actions.size(); index++) {
-            CompiledAction action = actions.get(index);
+            CompiledAction action = ConditionalAction.unwrap(actions.get(index));
             String modifierKey = action instanceof AttributeModifierAction attribute
                     ? attribute.modifierKey()
                     : action instanceof DynamicAttributeModifierAction dynamic ? dynamic.modifierKey() : null;
@@ -1611,7 +1725,8 @@ public final class TalentCompiler {
                         "Duplicate modifier key '" + modifierKey + "'");
             }
         }
-        long flightActions = actions.stream().filter(CreativeFlightAction.class::isInstance).count();
+        long flightActions = actions.stream().map(ConditionalAction::unwrap)
+                .filter(CreativeFlightAction.class::isInstance).count();
         if (flightActions > 1L) {
             report.error("DUPLICATE_CREATIVE_FLIGHT", source, "$.activeEffects",
                     "A talent can contain at most one creative_flight action");
@@ -1626,7 +1741,7 @@ public final class TalentCompiler {
             ValidationReport.Builder report
     ) {
         for (int actionIndex = 0; actionIndex < actions.size(); actionIndex++) {
-            CompiledAction action = actions.get(actionIndex);
+            CompiledAction action = ConditionalAction.unwrap(actions.get(actionIndex));
             if (action instanceof DrawRefreshBonusAction bonus) {
                 for (int poolIndex = 0; poolIndex < bonus.pools().size(); poolIndex++) {
                     ResourceLocation pool = bonus.pools().get(poolIndex);
@@ -1656,23 +1771,54 @@ public final class TalentCompiler {
             ValidationReport.Builder report
     ) {
         for (int triggerIndex = 0; triggerIndex < triggers.size(); triggerIndex++) {
-            List<CompiledAction> actions = triggers.get(triggerIndex).actions();
-            for (int actionIndex = 0; actionIndex < actions.size(); actionIndex++) {
-                if (!(actions.get(actionIndex) instanceof QueueDrawConstraintAction constraint)) continue;
-                String path = "$.triggers[" + triggerIndex + "].actions[" + actionIndex + "]";
-                validateDrawConstraintSpec(
-                        constraint.spec(), talents, rarities, pools, source, path, report
-                );
-                constraint.successCounter().ifPresent(counter -> {
-                    if (!counters.contains(counter)) {
-                        report.error("UNKNOWN_COUNTER", source, path + ".successCounter",
-                                "Unknown counter '" + counter + "'");
-                    }
-                });
-                constraint.milestone().ifPresent(spec -> validateDrawConstraintSpec(
-                        spec, talents, rarities, pools, source, path + ".milestone", report
-                ));
+            validateActionReferences(triggers.get(triggerIndex).actions(),
+                    "$.triggers[" + triggerIndex + "].actions", talents, counters,
+                    rarities, pools, source, report);
+            validateActionReferences(triggers.get(triggerIndex).failureActions(),
+                    "$.triggers[" + triggerIndex + "].failureActions", talents, counters,
+                    rarities, pools, source, report);
+        }
+    }
+
+    private static void validateActionReferences(
+            List<CompiledAction> actions,
+            String arrayPath,
+            Set<ResourceLocation> talents,
+            Set<ResourceLocation> counters,
+            Map<ResourceLocation, RarityDefinition> rarities,
+            Map<ResourceLocation, TalentPoolDefinition> pools,
+            String source,
+            ValidationReport.Builder report
+    ) {
+        for (int actionIndex = 0; actionIndex < actions.size(); actionIndex++) {
+            String path = arrayPath + "[" + actionIndex + "]";
+            CompiledAction action = ConditionalAction.unwrap(actions.get(actionIndex));
+            if (action instanceof GrantTalentAction grant && !talents.contains(grant.talent())) {
+                report.error("UNKNOWN_TALENT", source, path + ".talent",
+                        "Unknown talent '" + grant.talent() + "'");
             }
+            if (action instanceof RevokeTalentAction revoke && !talents.contains(revoke.talent())) {
+                report.error("UNKNOWN_TALENT", source, path + ".talent",
+                        "Unknown talent '" + revoke.talent() + "'");
+            }
+            if (action instanceof ModifyCounterAction modifyCounter
+                    && !counters.contains(modifyCounter.counter())) {
+                report.error("UNKNOWN_COUNTER", source, path + ".counter",
+                        "Unknown counter '" + modifyCounter.counter() + "'");
+            }
+            if (!(action instanceof QueueDrawConstraintAction constraint)) continue;
+            validateDrawConstraintSpec(
+                    constraint.spec(), talents, rarities, pools, source, path, report
+            );
+            constraint.successCounter().ifPresent(counter -> {
+                if (!counters.contains(counter)) {
+                    report.error("UNKNOWN_COUNTER", source, path + ".successCounter",
+                            "Unknown counter '" + counter + "'");
+                }
+            });
+            constraint.milestone().ifPresent(spec -> validateDrawConstraintSpec(
+                    spec, talents, rarities, pools, source, path + ".milestone", report
+            ));
         }
     }
 

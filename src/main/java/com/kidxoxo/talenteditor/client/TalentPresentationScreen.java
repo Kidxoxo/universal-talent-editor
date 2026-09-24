@@ -19,6 +19,7 @@ public final class TalentPresentationScreen extends Screen {
     private static final List<String> MODES = List.of("chat", "action_bar", "title");
 
     private final TalentEditScreen parent;
+    private final Screen returnScreen;
     private final EditorBootstrap bootstrap;
     private final TalentDraft.PresentationDraft[] phases = new TalentDraft.PresentationDraft[2];
     private int phaseIndex;
@@ -59,9 +60,14 @@ public final class TalentPresentationScreen extends Screen {
     private String status = "";
 
     public TalentPresentationScreen(TalentEditScreen parent, EditorBootstrap bootstrap) {
+        this(parent, bootstrap, parent);
+    }
+
+    TalentPresentationScreen(TalentEditScreen parent, EditorBootstrap bootstrap, Screen returnScreen) {
         super(Component.translatable("screen.talent_editor.presentation.title"));
         this.parent = parent;
         this.bootstrap = bootstrap;
+        this.returnScreen = returnScreen;
         phases[0] = parent.presentation(TalentDraft.PresentationPhase.ACQUIRE);
         phases[1] = parent.presentation(TalentDraft.PresentationPhase.SYNTHESIZE);
     }
@@ -439,7 +445,7 @@ public final class TalentPresentationScreen extends Screen {
     private void apply() {
         if (!storePhase()) return;
         parent.updatePresentations(phases[0], phases[1]);
-        if (minecraft != null) minecraft.setScreen(parent);
+        if (minecraft != null) minecraft.setScreen(returnScreen);
     }
 
     private void preview() {
@@ -448,7 +454,7 @@ public final class TalentPresentationScreen extends Screen {
     }
 
     private void returnWithoutApplying() {
-        if (minecraft != null) minecraft.setScreen(parent);
+        if (minecraft != null) minecraft.setScreen(returnScreen);
     }
 
     @Override

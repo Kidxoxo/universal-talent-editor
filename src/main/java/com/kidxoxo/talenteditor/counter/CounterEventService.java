@@ -7,6 +7,7 @@ import com.kidxoxo.talenteditor.domain.CounterResetTrigger;
 import com.kidxoxo.talenteditor.item.ConfiguredItem;
 import com.kidxoxo.talenteditor.network.EditorNetwork;
 import com.kidxoxo.talenteditor.player.PlayerTalents;
+import com.kidxoxo.talenteditor.runtime.TalentEventTypes;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
@@ -58,6 +59,9 @@ public final class CounterEventService {
             lastAcceptedTicks.computeIfAbsent(player.getUUID(), ignored -> new HashMap<>())
                     .put(rule.id(), gameTime);
             markDirty(player.getUUID(), rule.id(), gameTime);
+            TalentEditorMod.TRIGGERS.fireAmount(
+                    TalentEventTypes.COUNTER_CHANGED, player, relatedEntity, damageSource, next
+            );
         }
     }
 
@@ -110,6 +114,9 @@ public final class CounterEventService {
     public boolean resetCounter(ServerPlayer player, ResourceLocation counter) {
         if (PlayerTalents.counter(player, counter) == 0L) return false;
         PlayerTalents.setCounter(player, counter, 0L);
+        TalentEditorMod.TRIGGERS.fireAmount(
+                TalentEventTypes.COUNTER_CHANGED, player, null, null, 0.0D
+        );
         Map<ResourceLocation, Long> cooldowns = lastAcceptedTicks.get(player.getUUID());
         if (cooldowns != null) {
             cooldowns.remove(counter);
@@ -121,6 +128,9 @@ public final class CounterEventService {
     /** Batches progress updates made by actions outside the automatic counter event pipeline. */
     public void markExternalChange(ServerPlayer player, ResourceLocation counter) {
         markDirty(player.getUUID(), counter, player.serverLevel().getGameTime());
+        TalentEditorMod.TRIGGERS.fireAmount(
+                TalentEventTypes.COUNTER_CHANGED, player, null, null, PlayerTalents.counter(player, counter)
+        );
     }
 
     private void refreshResetRules() {
@@ -147,6 +157,9 @@ public final class CounterEventService {
         PlayerTalents.setCounter(player, rule.id(), next);
         lastAcceptedTicks.computeIfAbsent(player.getUUID(), ignored -> new HashMap<>()).put(rule.id(), gameTime);
         markDirty(player.getUUID(), rule.id(), gameTime);
+        TalentEditorMod.TRIGGERS.fireAmount(
+                TalentEventTypes.COUNTER_CHANGED, player, null, null, next
+        );
     }
 
     private boolean coolingDown(UUID player, CounterRuleDefinition rule, long gameTime) {

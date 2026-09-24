@@ -271,7 +271,7 @@ public final class LayoutEditScreen extends Screen {
         int rows = parseInt(rowsValue, 1, 10);
         int slotWidth = parseInt(slotWidthValue, 24, 128);
         int slotHeight = parseInt(slotHeightValue, 22, 96);
-        int iconSize = parseInt(iconSizeValue, 8, 32);
+        int iconSize = parseInt(iconSizeValue, 8, 64);
         if (priority == Integer.MIN_VALUE || panel < 0 || columns < 0 || rows < 0
                 || slotWidth < 0 || slotHeight < 0 || iconSize < 0 || iconSize > slotHeight - 4) {
             return invalid("screen.talent_editor.layout.invalid_geometry");
@@ -361,7 +361,7 @@ public final class LayoutEditScreen extends Screen {
         int rows = validOr(rowsValue, 1, 10, draft.rows());
         int width = validOr(slotWidthValue, 24, 128, draft.slotWidth());
         int height = validOr(slotHeightValue, 22, 96, draft.slotHeight());
-        int icon = Math.min(validOr(iconSizeValue, 8, 32, draft.iconSize()), height - 4);
+        int icon = Math.min(validOr(iconSizeValue, 8, 64, draft.iconSize()), height - 4);
         java.util.ArrayList<LayoutDraft.SlotDraft> result = new java.util.ArrayList<>();
         for (int row = 0; row < rows; row++) {
             for (int column = 0; column < columns; column++) {

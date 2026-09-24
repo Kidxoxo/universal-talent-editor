@@ -14,38 +14,39 @@ import java.util.List;
 import java.util.Optional;
 
 public final class TalentMetadataScreen extends Screen {
-    private static final int MAX_DESCRIPTION_LINES = 64;
-
     private final TalentEditScreen parent;
+    private final Screen returnScreen;
     private final TalentDraft.MetadataDraft original;
     private final List<EditorBootstrap.RaritySummary> rarities;
     private boolean enabled;
     private boolean showGeneratedEffects;
     private int rarityIndex;
     private ResourceLocation fallbackRarity;
-    private EditBox descriptionField;
     private EditBox categoriesField;
     private EditBox iconField;
     private EditBox capacityField;
     private Button enabledButton;
     private Button rarityButton;
     private Button generatedEffectsButton;
-    private String descriptionValue;
     private String categoriesValue;
     private String iconValue;
     private String capacityValue;
     private String status = "";
 
     public TalentMetadataScreen(TalentEditScreen parent) {
+        this(parent, parent);
+    }
+
+    TalentMetadataScreen(TalentEditScreen parent, Screen returnScreen) {
         super(Component.translatable("screen.talent_editor.metadata.title"));
         this.parent = parent;
+        this.returnScreen = returnScreen;
         this.original = parent.metadata();
         this.rarities = parent.rarities();
         this.enabled = original.enabled();
         this.showGeneratedEffects = original.showGeneratedEffects();
         this.fallbackRarity = original.rarity();
         this.rarityIndex = findRarity(original.rarity());
-        this.descriptionValue = original.descriptionEditorText();
         this.categoriesValue = joinIds(original.categories());
         this.iconValue = original.icon().map(ResourceLocation::toString).orElse("");
         this.capacityValue = Integer.toString(original.capacityCost());
@@ -70,26 +71,24 @@ public final class TalentMetadataScreen extends Screen {
         }).bounds(x + (toggleWidth + gap) * 2,
                 34, formWidth - (toggleWidth + gap) * 2, 20).build());
 
-        descriptionField = field(x, 70, formWidth, descriptionValue, 8_192, value -> descriptionValue = value);
-        descriptionField.setHint(Component.translatable("screen.talent_editor.metadata.description_hint"));
         int chooseWidth = Math.min(84, Math.max(62, formWidth / 6));
-        categoriesField = field(x, 105, formWidth - chooseWidth - gap, categoriesValue, 4_096,
+        categoriesField = field(x, 70, formWidth - chooseWidth - gap, categoriesValue, 4_096,
                 value -> categoriesValue = value);
         categoriesField.setHint(Component.translatable("screen.talent_editor.metadata.categories_hint"));
         addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.reference_picker.choose"),
                         button -> openCategoryPicker())
-                .bounds(x + formWidth - chooseWidth, 105, chooseWidth, 20).build());
+                .bounds(x + formWidth - chooseWidth, 70, chooseWidth, 20).build());
 
         int capacityWidth = Math.min(130, Math.max(80, formWidth / 4));
         int iconAreaWidth = formWidth - capacityWidth - gap;
         int iconChooseWidth = Math.min(72, Math.max(52, iconAreaWidth / 4));
-        iconField = field(x, 140, iconAreaWidth - iconChooseWidth - gap,
+        iconField = field(x, 105, iconAreaWidth - iconChooseWidth - gap,
                 iconValue, 512, value -> iconValue = value);
         iconField.setHint(Component.translatable("screen.talent_editor.metadata.icon_hint"));
         addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.reference_picker.choose"),
                         button -> openIconPicker())
-                .bounds(x + iconAreaWidth - iconChooseWidth, 140, iconChooseWidth, 20).build());
-        capacityField = field(x + formWidth - capacityWidth, 140, capacityWidth,
+                .bounds(x + iconAreaWidth - iconChooseWidth, 105, iconChooseWidth, 20).build());
+        capacityField = field(x + formWidth - capacityWidth, 105, capacityWidth,
                 capacityValue, 6, value -> capacityValue = value);
 
         int buttonWidth = Math.max(90, Math.min(160, (formWidth - gap) / 2));
@@ -123,15 +122,14 @@ public final class TalentMetadataScreen extends Screen {
         int x = (width - formWidth) / 2;
         int capacityWidth = Math.min(130, Math.max(80, formWidth / 4));
         graphics.drawCenteredString(font, title, width / 2, 10, 0xFFFFFF);
-        label(graphics, "screen.talent_editor.metadata.description", x, 59);
-        label(graphics, "screen.talent_editor.metadata.categories", x, 94);
-        label(graphics, "screen.talent_editor.metadata.icon", x, 129);
+        label(graphics, "screen.talent_editor.metadata.categories", x, 59);
+        label(graphics, "screen.talent_editor.metadata.icon", x, 94);
         label(graphics, "screen.talent_editor.metadata.capacity",
-                x + formWidth - capacityWidth, 129);
+                x + formWidth - capacityWidth, 94);
         graphics.drawString(font, font.plainSubstrByWidth(
                 Component.translatable("screen.talent_editor.metadata.help").getString(), formWidth
-        ), x, 166, 0x808080, false);
-        renderIconDiagnostic(graphics, x, 178, formWidth);
+        ), x, 131, 0x808080, false);
+        renderIconDiagnostic(graphics, x, 143, formWidth);
         if (!status.isBlank()) {
             graphics.drawString(font, font.plainSubstrByWidth(status, formWidth),
                     x, height - 47, 0xFF7777, false);
@@ -184,11 +182,6 @@ public final class TalentMetadataScreen extends Screen {
     }
 
     private void apply() {
-        List<String> descriptions = TalentDraft.parseDescriptionEditorText(descriptionField.getValue());
-        if (descriptions.size() > MAX_DESCRIPTION_LINES || descriptions.stream().anyMatch(String::isBlank)) {
-            status = Component.translatable("screen.talent_editor.metadata.invalid_description").getString();
-            return;
-        }
         List<ResourceLocation> categories = parseIds(categoriesField.getValue(),
                 "screen.talent_editor.metadata.invalid_category");
         if (categories == null) return;
@@ -212,7 +205,7 @@ public final class TalentMetadataScreen extends Screen {
         }
 
         parent.updateMetadata(
-                enabled, currentRarity(), descriptions, showGeneratedEffects,
+                enabled, currentRarity(), showGeneratedEffects,
                 categories, icon, capacity
         );
         returnToParent();
@@ -286,7 +279,7 @@ public final class TalentMetadataScreen extends Screen {
     }
 
     private void returnToParent() {
-        if (minecraft != null) minecraft.setScreen(parent);
+        if (minecraft != null) minecraft.setScreen(returnScreen);
     }
 
     @Override

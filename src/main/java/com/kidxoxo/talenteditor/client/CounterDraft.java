@@ -105,7 +105,10 @@ public final class CounterDraft {
     }
 
     public MetadataSettings metadataSettings() {
-        return new MetadataSettings(ids("categories"), string(root, "visibility", "full"));
+        String rawDisplayCategory = string(root, "displayCategory", "").strip();
+        ResourceLocation displayCategory = rawDisplayCategory.isEmpty()
+                ? null : ResourceLocation.tryParse(rawDisplayCategory);
+        return new MetadataSettings(ids("categories"), string(root, "visibility", "full"), displayCategory);
     }
 
     public List<String> requiredMods() {
@@ -152,6 +155,8 @@ public final class CounterDraft {
         root.addProperty("resetIntervalTicks", resetSettings.intervalTicks());
         putIds("categories", metadataSettings.categories());
         root.addProperty("visibility", metadataSettings.visibility());
+        if (metadataSettings.displayCategory() == null) root.remove("displayCategory");
+        else root.addProperty("displayCategory", metadataSettings.displayCategory().toString());
         putStrings("requiredMods", requiredMods);
         putIds("requiredTalents", requiredTalents);
         putIds("entityTypes", filters.entityTypes());
@@ -255,7 +260,15 @@ public final class CounterDraft {
     public record ResetSettings(boolean onLogin, boolean onDeath, int intervalTicks) {
     }
 
-    public record MetadataSettings(List<ResourceLocation> categories, String visibility) {
+    public record MetadataSettings(
+            List<ResourceLocation> categories,
+            String visibility,
+            ResourceLocation displayCategory
+    ) {
+        public MetadataSettings(List<ResourceLocation> categories, String visibility) {
+            this(categories, visibility, null);
+        }
+
         public MetadataSettings {
             categories = List.copyOf(categories);
             visibility = visibility == null ? "full" : visibility;

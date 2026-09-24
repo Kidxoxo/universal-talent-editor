@@ -28,7 +28,7 @@ public final class PoolDraft {
         root.addProperty("choices", 3);
         root.addProperty("refreshes", 1);
         root.addProperty("maxOwned", 24);
-        root.addProperty("iconSize", 16);
+        root.addProperty("iconSize", 64);
         root.addProperty("excludeOwned", true);
         root.addProperty("duplicatePolicy", "exclude");
         root.addProperty("duplicateCounterAmount", 1L);
@@ -71,7 +71,7 @@ public final class PoolDraft {
     }
 
     public int iconSize() {
-        return integer(root, "iconSize", 16);
+        return integer(root, "iconSize", 64);
     }
 
     public boolean excludeOwned() {

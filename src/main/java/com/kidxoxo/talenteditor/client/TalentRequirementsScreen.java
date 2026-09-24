@@ -13,8 +13,10 @@ import java.util.List;
 public final class TalentRequirementsScreen extends Screen {
     private static final int ROW_HEIGHT = 18;
     private static final int MAX_ROWS = 256;
+    private static final List<String> OPERATORS = List.of("lt", "lte", "eq", "neq", "gte", "gt");
 
     private final TalentEditScreen parent;
+    private final Screen returnScreen;
     private final ArrayList<TalentDraft.RequirementRow> rows = new ArrayList<>();
     private TalentDraft.RequirementMode mode;
     private final boolean editable;
@@ -26,13 +28,19 @@ public final class TalentRequirementsScreen extends Screen {
     private Button removeButton;
     private Button applyButton;
     private Button chooseButton;
+    private Button operatorButton;
     private EditBox targetField;
     private EditBox amountField;
     private String status = "";
 
     public TalentRequirementsScreen(TalentEditScreen parent) {
+        this(parent, parent);
+    }
+
+    TalentRequirementsScreen(TalentEditScreen parent, Screen returnScreen) {
         super(Component.translatable("screen.talent_editor.requirements.title"));
         this.parent = parent;
+        this.returnScreen = returnScreen;
         TalentDraft.RequirementsDraft draft = parent.requirements();
         this.mode = draft.mode();
         this.editable = draft.editable();
@@ -62,10 +70,12 @@ public final class TalentRequirementsScreen extends Screen {
                         Component.translatable("screen.talent_editor.requirements.choose"), button -> openPicker())
                 .bounds(rightX + rightWidth - chooseWidth, 81, chooseWidth, 20).build());
 
-        amountField = new EditBox(font, rightX, 124, rightWidth, 20,
+        amountField = new EditBox(font, rightX, 124, rightWidth - 96, 20,
                 Component.translatable("screen.talent_editor.requirements.amount"));
         amountField.setMaxLength(16);
         addRenderableWidget(amountField);
+        operatorButton = addRenderableWidget(Button.builder(Component.empty(), button -> cycleOperator())
+                .bounds(rightX + rightWidth - 90, 124, 90, 20).build());
 
         int actionY = height - 52;
         addButton = addRenderableWidget(Button.builder(
@@ -141,7 +151,9 @@ public final class TalentRequirementsScreen extends Screen {
                 graphics.fill(x, y - 3, x + width, y + 14,
                         index == selected ? 0x7050A0E8 : 0x404A90E2);
             }
-            String suffix = row.type() == TalentDraft.RequirementType.TALENT ? "" : " >= " + row.amount();
+            String suffix = row.type() == TalentDraft.RequirementType.TALENT ? ""
+                    : row.type() == TalentDraft.RequirementType.ATTRIBUTE
+                    ? " " + row.operator() + " " + row.attributeValue() : " >= " + row.amount();
             String label = Component.translatable(typeKey(row.type())).getString()
                     + " · " + row.target() + suffix;
             graphics.drawString(font, font.plainSubstrByWidth(label, width - 8), x + 4, y,
@@ -220,8 +232,21 @@ public final class TalentRequirementsScreen extends Screen {
         TalentDraft.RequirementType[] values = TalentDraft.RequirementType.values();
         TalentDraft.RequirementType next = values[(old.type().ordinal() + 1) % values.length];
         long amount = next == TalentDraft.RequirementType.TALENT ? 1L : Math.max(1L, old.amount());
-        rows.set(selected, new TalentDraft.RequirementRow(next, old.target(), amount));
+        ResourceLocation target = next == TalentDraft.RequirementType.ATTRIBUTE
+                ? new ResourceLocation("minecraft", "generic.attack_speed") : old.target();
+        rows.set(selected, new TalentDraft.RequirementRow(next, target, amount));
         status = "";
+        syncWidgets();
+    }
+
+    private void cycleOperator() {
+        TalentDraft.RequirementRow row = selectedRow();
+        if (!editable || row == null || row.type() != TalentDraft.RequirementType.ATTRIBUTE
+                || !flushSelected()) return;
+        row = selectedRow();
+        int index = OPERATORS.indexOf(row.operator());
+        rows.set(selected, new TalentDraft.RequirementRow(row.type(), row.target(), row.amount(),
+                OPERATORS.get((index + 1) % OPERATORS.size()), row.attributeValue()));
         syncWidgets();
     }
 
@@ -234,7 +259,17 @@ public final class TalentRequirementsScreen extends Screen {
             return false;
         }
         long amount = 1L;
-        if (old.type() != TalentDraft.RequirementType.TALENT) {
+        double attributeValue = old.attributeValue();
+        if (old.type() == TalentDraft.RequirementType.ATTRIBUTE) {
+            try {
+                attributeValue = Double.parseDouble(amountField.getValue().strip());
+                if (!Double.isFinite(attributeValue) || attributeValue < -1.0E9D
+                        || attributeValue > 1.0E9D) throw new NumberFormatException();
+            } catch (NumberFormatException ignored) {
+                status = Component.translatable("screen.talent_editor.requirements.invalid_amount").getString();
+                return false;
+            }
+        } else if (old.type() != TalentDraft.RequirementType.TALENT) {
             try {
                 amount = Long.parseLong(amountField.getValue().strip());
                 boolean boundedCount = old.type() == TalentDraft.RequirementType.ITEM
@@ -247,14 +282,15 @@ public final class TalentRequirementsScreen extends Screen {
                 return false;
             }
         }
-        rows.set(selected, new TalentDraft.RequirementRow(old.type(), target, amount));
+        rows.set(selected, new TalentDraft.RequirementRow(old.type(), target, amount,
+                old.operator(), attributeValue));
         return true;
     }
 
     private void apply() {
         if (!editable || !flushSelected()) return;
         parent.updateRequirements(mode, List.copyOf(rows));
-        if (minecraft != null) minecraft.setScreen(parent);
+        if (minecraft != null) minecraft.setScreen(returnScreen);
     }
 
     private void syncWidgets() {
@@ -266,6 +302,8 @@ public final class TalentRequirementsScreen extends Screen {
         chooseButton.active = selectedEditable;
         amountField.active = selectedEditable && row.type() != TalentDraft.RequirementType.TALENT;
         amountField.visible = row != null && row.type() != TalentDraft.RequirementType.TALENT;
+        operatorButton.visible = row != null && row.type() == TalentDraft.RequirementType.ATTRIBUTE;
+        operatorButton.active = selectedEditable;
         addButton.active = editable && rows.size() < MAX_ROWS;
         removeButton.active = selectedEditable;
         applyButton.active = editable;
@@ -276,7 +314,10 @@ public final class TalentRequirementsScreen extends Screen {
             amountField.setValue("");
         } else {
             targetField.setValue(row.target().toString());
-            amountField.setValue(Long.toString(row.amount()));
+            amountField.setValue(row.type() == TalentDraft.RequirementType.ATTRIBUTE
+                    ? Double.toString(row.attributeValue()) : Long.toString(row.amount()));
+            operatorButton.setMessage(Component.translatable(
+                    "screen.talent_editor.expression_condition.operator_help." + row.operator()));
         }
     }
 
@@ -300,13 +341,15 @@ public final class TalentRequirementsScreen extends Screen {
             case COUNTER_CATEGORY -> ResourceReferencePickerScreen.Source.COUNTER_CATEGORY;
             case CATEGORY -> ResourceReferencePickerScreen.Source.CATEGORY;
             case ITEM -> ResourceReferencePickerScreen.Source.ITEM;
+            case ATTRIBUTE -> ResourceReferencePickerScreen.Source.ATTRIBUTE;
         };
     }
 
     void chooseTarget(ResourceLocation target) {
         TalentDraft.RequirementRow row = selectedRow();
         if (row == null) return;
-        rows.set(selected, new TalentDraft.RequirementRow(row.type(), target, row.amount()));
+        rows.set(selected, new TalentDraft.RequirementRow(row.type(), target, row.amount(),
+                row.operator(), row.attributeValue()));
         status = "";
     }
 
@@ -333,6 +376,6 @@ public final class TalentRequirementsScreen extends Screen {
 
     @Override
     public void onClose() {
-        if (minecraft != null) minecraft.setScreen(parent);
+        if (minecraft != null) minecraft.setScreen(returnScreen);
     }
 }

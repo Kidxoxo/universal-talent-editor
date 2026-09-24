@@ -163,13 +163,13 @@ public final class TalentBookScreen extends Screen {
             int textWidth = Math.max(12, right - textX - 3);
             graphics.drawString(font, fit(talent.name(), textWidth, nameColor),
                     textX, y + 3, nameColor, false);
-            String subline = talent.id().toString();
+            String subline = talent.rarityName().component(0x909090).getString();
             int sublineColor = 0x909090;
             if (mode == BookMode.SYNTHESIS) {
                 PlayerTalentState.SynthesisView synthesis = synthesisAt(index);
                 subline = Component.translatable(synthesis.ready()
                         ? "screen.talent_editor.book.synthesis_ready"
-                        : "screen.talent_editor.book.synthesis_blocked").getString() + " · " + subline;
+                        : "screen.talent_editor.book.synthesis_blocked").getString();
                 sublineColor = synthesis.ready() ? 0x55FF55 : 0xFFAA55;
             }
             if (bounds.height() >= 27) {
@@ -203,8 +203,7 @@ public final class TalentBookScreen extends Screen {
         }
         graphics.drawString(font, fit(talent.name(), headingWidth, rarityColor),
                 headingX, 50, rarityColor, false);
-        graphics.drawString(font, fit(talent.rarityName().component(0xA0A0A0).getString()
-                        + " · " + talent.id(), headingWidth),
+        graphics.drawString(font, fit(talent.rarityName().component(0xA0A0A0).getString(), headingWidth),
                 headingX, 64, 0xA0A0A0, false);
         int y = 84;
         if (!talent.defined()) {
@@ -243,8 +242,9 @@ public final class TalentBookScreen extends Screen {
             }
             for (PlayerTalentState.AttributeEffectView effect : visibleEffects) {
                 if (y > height - 48) break;
-                String value = effect.formula().isBlank() ? signed(effect.amount()) : effect.formula();
-                String line = effect.attribute() + "  " + value + "  "
+                String value = effect.formula().isBlank() ? signed(effect.amount())
+                        : Component.translatable("screen.talent_editor.book.dynamic_effect").getString();
+                String line = attributeName(effect.attribute()) + "  " + value + "  "
                         + Component.translatable("screen.talent_editor.operation." + effect.operation()).getString();
                 graphics.drawString(font, fit(line, contentWidth), x, y, 0x9FE59F, false);
                 y += 12;
@@ -274,7 +274,8 @@ public final class TalentBookScreen extends Screen {
             if (y > height - 48) break;
             String type = Component.translatable("screen.talent_editor.book.cost_type."
                     + cost.type().name().toLowerCase(Locale.ROOT)).getString();
-            String line = type + " · " + cost.id() + "  " + cost.current() + "/" + cost.required();
+            String line = type + " · " + cost.name().component(0xD0D0D0).getString()
+                    + "  " + cost.current() + "/" + cost.required();
             graphics.drawString(font, fit(line, contentWidth), x, y,
                     cost.satisfied() ? 0x9FE59F : 0xFF7777, false);
             y += 12;
@@ -333,6 +334,13 @@ public final class TalentBookScreen extends Screen {
 
     private int divider() {
         return Math.max(145, width * layout.panelPercent() / 100);
+    }
+
+    private static String attributeName(net.minecraft.resources.ResourceLocation id) {
+        var attribute = net.minecraftforge.registries.ForgeRegistries.ATTRIBUTES.getValue(id);
+        return attribute == null
+                ? Component.translatable("screen.talent_editor.book.unknown_attribute").getString()
+                : Component.translatable(attribute.getDescriptionId()).getString();
     }
 
     private int clampScroll(int value, int size, int visibleRows) {
@@ -482,7 +490,7 @@ public final class TalentBookScreen extends Screen {
             graphics.drawString(font, fit(counter.name(), divider - 32, color), 20, y, color, false);
             String value = counter.maximum() > 0L
                     ? counter.current() + " / " + counter.maximum() : Long.toString(counter.current());
-            graphics.drawString(font, fit(value + " · " + counter.id(), divider - 32),
+            graphics.drawString(font, fit(value, divider - 32),
                     20, y + 12, 0xA0A0A0, false);
         }
         if (counters.isEmpty()) {
@@ -498,17 +506,16 @@ public final class TalentBookScreen extends Screen {
         int contentWidth = Math.max(40, width - x - 14);
         int color = counter.active() ? 0xFF55FF55 : counter.defined() ? 0xFFFFAA55 : 0xFF808080;
         graphics.drawString(font, fit(counter.name(), contentWidth, color), x, 50, color, false);
-        graphics.drawString(font, fit(counter.id().toString(), contentWidth), x, 64, 0xA0A0A0, false);
         graphics.drawString(font, Component.translatable("screen.talent_editor.book.counter_progress",
-                counter.current(), counter.maximum()), x, 88, 0xFFFFFF, false);
+                counter.current(), counter.maximum()), x, 70, 0xFFFFFF, false);
         if (!counter.event().isBlank()) {
             graphics.drawString(font, Component.translatable("screen.talent_editor.book.counter_event",
                     Component.translatable("screen.talent_editor.counter.event." + counter.event())),
-                    x, 104, 0xA0A0A0, false);
+                    x, 86, 0xA0A0A0, false);
         }
         String status = !counter.defined() ? "missing" : counter.active() ? "active" : "inactive";
         graphics.drawString(font, Component.translatable("screen.talent_editor.book.counter_status." + status),
-                x, 120, color, false);
+                x, 102, color, false);
     }
 
     private int visibleSize() {

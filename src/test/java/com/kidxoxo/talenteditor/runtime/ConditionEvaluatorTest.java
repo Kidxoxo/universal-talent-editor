@@ -93,6 +93,27 @@ class ConditionEvaluatorTest {
                 ConditionEvaluator.Context.empty(Set.of())));
     }
 
+    @Test
+    void evaluatesSelectedTalentMetadataAndEventEntityEffects() {
+        ResourceLocation talent = id("example:selected");
+        ResourceLocation category = id("example:luck");
+        ResourceLocation rarity = id("example:ur");
+        ResourceLocation effect = id("minecraft:slowness");
+        ConditionEvaluator.Context event = new ConditionEvaluator.Context(
+                Set.of(), Map.of(), Map.of(), Map.of(), Map.of(), java.util.Optional.empty(),
+                Set.of(), Set.of(effect), Set.of(), java.util.Optional.of(talent), Set.of(category),
+                java.util.Optional.of(rarity), java.util.Optional.empty(), Set.of(),
+                java.util.Optional.empty(), Set.of()
+        );
+        assertTrue(ConditionEvaluator.test(new CompiledCondition.EventTalent(talent), event));
+        assertTrue(ConditionEvaluator.test(new CompiledCondition.EventTalentCategory(category), event));
+        assertTrue(ConditionEvaluator.test(new CompiledCondition.EventTalentRarity(rarity), event));
+        assertTrue(ConditionEvaluator.test(new CompiledCondition.EventEntityEffect(effect), event));
+        assertFalse(ConditionEvaluator.test(
+                new CompiledCondition.EventTalentCategory(id("example:dark")), event
+        ));
+    }
+
     private static ResourceLocation id(String value) {
         return new ResourceLocation(value);
     }

@@ -9,7 +9,10 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.FormattedCharSequence;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 public final class TalentDrawScreen extends Screen {
@@ -17,17 +20,21 @@ public final class TalentDrawScreen extends Screen {
     private int selectedIndex = -1;
     private Button confirmButton;
     private Button refreshButton;
+    private Button effectsButton;
+    private boolean showGeneratedEffects;
     private String status = "";
+    private final int[] cardScroll;
 
     public TalentDrawScreen(DrawSessionView view) {
         super(Component.translatable("screen.talent_editor.draw.title"));
         this.view = view;
+        this.cardScroll = new int[view.offers().size()];
     }
 
     @Override
     protected void init() {
-        int buttonWidth = Math.max(76, Math.min(120, (width - 32) / 3));
-        int total = buttonWidth * 3 + 12;
+        int buttonWidth = Math.max(64, Math.min(112, (width - 38) / 4));
+        int total = buttonWidth * 4 + 18;
         int x = (width - total) / 2;
         int y = height - 28;
         refreshButton = addRenderableWidget(Button.builder(refreshLabel(), button -> {
@@ -38,8 +45,12 @@ public final class TalentDrawScreen extends Screen {
         }).bounds(x, y, buttonWidth, 20).build());
         confirmButton = addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.draw.confirm"),
                 button -> confirm()).bounds(x + buttonWidth + 6, y, buttonWidth, 20).build());
+        effectsButton = addRenderableWidget(Button.builder(effectsLabel(), button -> {
+            showGeneratedEffects = !showGeneratedEffects;
+            effectsButton.setMessage(effectsLabel());
+        }).bounds(x + (buttonWidth + 6) * 2, y, buttonWidth, 20).build());
         addRenderableWidget(Button.builder(Component.translatable("gui.cancel"), button -> onClose())
-                .bounds(x + (buttonWidth + 6) * 2, y, buttonWidth, 20).build());
+                .bounds(x + (buttonWidth + 6) * 3, y, buttonWidth, 20).build());
         confirmButton.active = false;
         refreshButton.active = canRefresh();
     }
@@ -97,24 +108,59 @@ public final class TalentDrawScreen extends Screen {
                     (x + right) / 2, hasIcon ? top + 15 + iconSize : top + 12, rarity);
             graphics.drawCenteredString(font, fit(talent.rarityName(), cardWidth - 8, 0xA0A0A0),
                     (x + right) / 2, hasIcon ? top + 29 + iconSize : top + 27, 0xA0A0A0);
-            int y = hasIcon ? top + 47 + iconSize : top + 46;
-            for (PlayerTalentState.StyledTextView paragraph : talent.description()) {
-                if (y > bottom - 14) break;
-                graphics.drawCenteredString(font, fit(paragraph, cardWidth - 8, 0xD0D0D0),
-                        (x + right) / 2, y, 0xD0D0D0);
-                y += 12;
+            int bodyTop = hasIcon ? top + 47 + iconSize : top + 46;
+            List<CardLine> lines = cardLines(talent, cardWidth - 8);
+            int bodyHeight = Math.max(1, bottom - bodyTop - 3);
+            int contentHeight = lines.size() * 11;
+            int maximumScroll = Math.max(0, contentHeight - bodyHeight);
+            cardScroll[index] = Math.min(cardScroll[index], maximumScroll);
+            graphics.enableScissor(x + 3, bodyTop, right - 3, bottom - 3);
+            int y = bodyTop - cardScroll[index];
+            for (CardLine line : lines) {
+                if (y + 9 >= bodyTop && y < bottom) {
+                    graphics.drawCenteredString(font, line.text(), (x + right) / 2, y, line.color());
+                }
+                y += 11;
             }
-            if (talent.showGeneratedEffects()) {
-                for (PlayerTalentState.AttributeEffectView effect : talent.attributeEffects()) {
-                    if (!effect.showInDescription() || y > bottom - 14) continue;
-                    String value = effect.formula().isBlank() ? signed(effect.amount()) : effect.formula();
-                    String effectText = shortAttribute(effect.attribute().toString()) + " " + value;
-                    graphics.drawCenteredString(font, fit(effectText, cardWidth - 8),
-                            (x + right) / 2, y, 0x9FE59F);
-                    y += 12;
+            graphics.disableScissor();
+            if (maximumScroll > 0) renderCardScrollbar(
+                    graphics, right - 3, bodyTop, bodyHeight, contentHeight, cardScroll[index], maximumScroll
+            );
+        }
+    }
+
+    private List<CardLine> cardLines(PlayerTalentState.TalentView talent, int width) {
+        ArrayList<CardLine> lines = new ArrayList<>();
+        for (PlayerTalentState.StyledTextView paragraph : talent.description()) {
+            for (FormattedCharSequence line : font.split(paragraph.component(0xD0D0D0), Math.max(10, width))) {
+                lines.add(new CardLine(line, 0xD0D0D0));
+            }
+        }
+        if (showGeneratedEffects && talent.showGeneratedEffects()) {
+            for (PlayerTalentState.AttributeEffectView effect : talent.attributeEffects()) {
+                if (!effect.showInDescription()) continue;
+                String value = effect.formula().isBlank() ? signed(effect.amount())
+                        : Component.translatable("screen.talent_editor.book.dynamic_effect").getString();
+                var attribute = net.minecraftforge.registries.ForgeRegistries.ATTRIBUTES.getValue(effect.attribute());
+                String name = attribute == null
+                        ? Component.translatable("screen.talent_editor.book.unknown_attribute").getString()
+                        : Component.translatable(attribute.getDescriptionId()).getString();
+                Component text = Component.literal(name + " " + value);
+                for (FormattedCharSequence line : font.split(text, Math.max(10, width))) {
+                    lines.add(new CardLine(line, 0x9FE59F));
                 }
             }
         }
+        return lines;
+    }
+
+    private static void renderCardScrollbar(
+            GuiGraphics graphics, int x, int y, int height, int contentHeight, int scroll, int maximumScroll
+    ) {
+        graphics.fill(x, y, x + 2, y + height, 0x40202020);
+        int thumbHeight = Math.max(8, Math.min(height, height * height / Math.max(1, contentHeight)));
+        int thumbY = y + (height - thumbHeight) * scroll / Math.max(1, maximumScroll);
+        graphics.fill(x, thumbY, x + 2, thumbY + thumbHeight, 0xB0A0A0A0);
     }
 
     @Override
@@ -136,6 +182,38 @@ public final class TalentDrawScreen extends Screen {
         return super.mouseClicked(mouseX, mouseY, button);
     }
 
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        int index = cardAt(mouseX, mouseY);
+        if (index < 0) return super.mouseScrolled(mouseX, mouseY, delta);
+        int count = view.offers().size();
+        int gap = 7;
+        int cardWidth = Math.max(42, (width - 24 - gap * (count - 1)) / Math.max(1, count));
+        int top = 63;
+        int bottom = height - 39;
+        PlayerTalentState.TalentView talent = view.offers().get(index);
+        boolean hasIcon = talent.icon().isPresent();
+        int iconSize = hasIcon ? fittedIconSize(view.iconSize(), cardWidth, bottom - top) : 0;
+        int bodyTop = hasIcon ? top + 47 + iconSize : top + 46;
+        int bodyHeight = Math.max(1, bottom - bodyTop - 3);
+        int maximumScroll = Math.max(0, cardLines(talent, cardWidth - 8).size() * 11 - bodyHeight);
+        if (maximumScroll <= 0) return false;
+        cardScroll[index] = Math.max(0, Math.min(maximumScroll, cardScroll[index] - (int) Math.signum(delta) * 22));
+        return true;
+    }
+
+    private int cardAt(double mouseX, double mouseY) {
+        if (mouseY < 63 || mouseY >= height - 39 || view.offers().isEmpty()) return -1;
+        int count = view.offers().size();
+        int gap = 7;
+        int cardWidth = Math.max(42, (width - 24 - gap * (count - 1)) / count);
+        for (int index = 0; index < count; index++) {
+            int x = 12 + index * (cardWidth + gap);
+            if (mouseX >= x && mouseX < Math.min(width - 12, x + cardWidth)) return index;
+        }
+        return -1;
+    }
+
     private void confirm() {
         if (selectedIndex < 0 || selectedIndex >= view.offers().size()) return;
         confirmButton.active = false;
@@ -152,6 +230,12 @@ public final class TalentDrawScreen extends Screen {
 
     private boolean canRefresh() {
         return view.refreshesRemaining() > 0 || view.drawTokens() >= 2;
+    }
+
+    private Component effectsLabel() {
+        return Component.translatable(showGeneratedEffects
+                ? "screen.talent_editor.draw.hide_effects"
+                : "screen.talent_editor.draw.show_effects");
     }
 
     private String fit(String value, int maxWidth) {
@@ -204,4 +288,6 @@ public final class TalentDrawScreen extends Screen {
         graphics.blit(icon, 0, 0, 0.0F, 0.0F, 16, 16, 16, 16);
         graphics.pose().popPose();
     }
+
+    private record CardLine(FormattedCharSequence text, int color) { }
 }
