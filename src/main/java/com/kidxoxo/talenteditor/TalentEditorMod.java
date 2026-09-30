@@ -61,7 +61,10 @@ public final class TalentEditorMod {
     }
 
     private void commonSetup(FMLCommonSetupEvent event) {
-        event.enqueueWork(EditorNetwork::register);
+        event.enqueueWork(() -> {
+            EditorNetwork.register();
+            com.kidxoxo.talenteditor.compat.CuriosIntegration.registerConfiguredItem();
+        });
     }
 
     private void registerCapabilities(RegisterCapabilitiesEvent event) {

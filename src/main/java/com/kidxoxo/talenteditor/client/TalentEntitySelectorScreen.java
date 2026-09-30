@@ -22,6 +22,7 @@ public final class TalentEntitySelectorScreen extends Screen {
     private Button targetButton;
     private Button relationButton;
     private Button orderButton;
+    private final EditorOptionPopup options = new EditorOptionPopup();
     private String status = "";
 
     TalentEntitySelectorScreen(
@@ -46,20 +47,26 @@ public final class TalentEntitySelectorScreen extends Screen {
         int x = (width - formWidth) / 2;
         int gap = 6;
         int half = (formWidth - gap) / 2;
-        targetButton = addRenderableWidget(Button.builder(Component.empty(), button -> {
-            targetIndex = (targetIndex + 1) % TARGETS.size();
-            updateWidgets();
-        }).bounds(x, 47, formWidth, 20).build());
+        targetButton = addRenderableWidget(Button.builder(Component.empty(), button ->
+                options.open(Component.translatable("screen.talent_editor.option.choose"),
+                        TARGETS.stream().map(value -> Component.translatable(
+                                "screen.talent_editor.advanced_selector.target." + value)).toList(),
+                        targetIndex, index -> { targetIndex = index; updateWidgets(); }, height))
+                .bounds(x, 47, formWidth, 20).build());
         radiusField = field(x, 82, half, Double.toString(initialRadius));
         limitField = field(x + half + gap, 82, formWidth - half - gap, Integer.toString(initialLimit));
-        relationButton = addRenderableWidget(Button.builder(Component.empty(), button -> {
-            relationIndex = (relationIndex + 1) % RELATIONS.size();
-            updateWidgets();
-        }).bounds(x, 117, half, 20).build());
-        orderButton = addRenderableWidget(Button.builder(Component.empty(), button -> {
-            orderIndex = (orderIndex + 1) % ORDERS.size();
-            updateWidgets();
-        }).bounds(x + half + gap, 117, formWidth - half - gap, 20).build());
+        relationButton = addRenderableWidget(Button.builder(Component.empty(), button ->
+                options.open(Component.translatable("screen.talent_editor.option.choose"),
+                        RELATIONS.stream().map(value -> Component.translatable(
+                                "screen.talent_editor.advanced_selector.relation." + value)).toList(),
+                        relationIndex, index -> { relationIndex = index; updateWidgets(); }, height))
+                .bounds(x, 117, half, 20).build());
+        orderButton = addRenderableWidget(Button.builder(Component.empty(), button ->
+                options.open(Component.translatable("screen.talent_editor.option.choose"),
+                        ORDERS.stream().map(value -> Component.translatable(
+                                "screen.talent_editor.advanced_selector.order." + value)).toList(),
+                        orderIndex, index -> { orderIndex = index; updateWidgets(); }, height))
+                .bounds(x + half + gap, 117, formWidth - half - gap, 20).build());
         addRenderableWidget(Button.builder(Component.translatable("gui.cancel"), button -> returnParent())
                 .bounds(x, height - 28, 80, 20).build());
         addRenderableWidget(Button.builder(Component.translatable("gui.done"), button -> apply())
@@ -123,6 +130,24 @@ public final class TalentEntitySelectorScreen extends Screen {
         graphics.drawWordWrap(font, Component.translatable("screen.talent_editor.advanced_selector.help"),
                 x, 151, formWidth, EditorTheme.MUTED);
         if (!status.isBlank()) graphics.drawString(font, status, x, height - 47, 0xFF7777, false);
+        options.render(graphics, font, width, height);
+    }
+
+    @Override public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (options.mouseClicked(mouseX, mouseY, button, width, height)) return true;
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+    @Override public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        if (options.mouseScrolled(delta, height)) return true;
+        return super.mouseScrolled(mouseX, mouseY, delta);
+    }
+    @Override public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (options.keyPressed(keyCode, height)) return true;
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    @Override public boolean charTyped(char codePoint, int modifiers) {
+        return options.isOpen() || super.charTyped(codePoint, modifiers);
     }
 
     private void returnParent() { if (minecraft != null) minecraft.setScreen(parent); }

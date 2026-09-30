@@ -79,16 +79,17 @@ public final class TalentOfferScreen extends Screen {
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics);
-        super.render(graphics, mouseX, mouseY, partialTick);
         int formWidth = Math.min(460, width - 32);
         int x = (width - formWidth) / 2;
-        graphics.drawCenteredString(font, title, width / 2, 16, 0xFFFFFF);
+        EditorTheme.panel(graphics, x - 8, 31, formWidth + 16, 176);
+        super.render(graphics, mouseX, mouseY, partialTick);
+        graphics.drawCenteredString(font, title, width / 2, 16, EditorTheme.TEXT);
         graphics.drawString(font, Component.translatable("screen.talent_editor.offer.enabled"),
-                x, 44, 0xA0A0A0, false);
+                x, 44, EditorTheme.MUTED, false);
         graphics.drawString(font, Component.translatable("screen.talent_editor.offer.weight"),
-                x, 87, 0xA0A0A0, false);
+                x, 87, EditorTheme.MUTED, false);
         graphics.drawString(font, Component.translatable("screen.talent_editor.offer.pools"),
-                x, 130, 0xA0A0A0, false);
+                x, 130, EditorTheme.MUTED, false);
         graphics.drawString(font, Component.translatable("screen.talent_editor.offer.pool_hint"),
                 x, 169, 0x808080, false);
         ReferenceDiagnostics.Summary references = ReferenceDiagnostics.summarize(

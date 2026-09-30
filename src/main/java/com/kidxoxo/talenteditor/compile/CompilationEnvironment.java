@@ -13,7 +13,8 @@ public record CompilationEnvironment(
         Set<ResourceLocation> registeredEntityTypes,
         Set<ResourceLocation> registeredMobEffects,
         Set<ResourceLocation> registeredBlocks,
-        Set<ResourceLocation> registeredSoundEvents
+        Set<ResourceLocation> registeredSoundEvents,
+        Set<ResourceLocation> registeredParticles
 ) {
     public CompilationEnvironment {
         LinkedHashSet<String> normalizedMods = new LinkedHashSet<>();
@@ -27,6 +28,15 @@ public record CompilationEnvironment(
         registeredMobEffects = Set.copyOf(registeredMobEffects);
         registeredBlocks = Set.copyOf(registeredBlocks);
         registeredSoundEvents = Set.copyOf(registeredSoundEvents);
+        registeredParticles = Set.copyOf(registeredParticles);
+    }
+
+    public CompilationEnvironment(Set<String> loadedMods, Set<ResourceLocation> registeredAttributes,
+            Set<ResourceLocation> registeredItems, Set<ResourceLocation> registeredEntityTypes,
+            Set<ResourceLocation> registeredMobEffects, Set<ResourceLocation> registeredBlocks,
+            Set<ResourceLocation> registeredSoundEvents) {
+        this(loadedMods, registeredAttributes, registeredItems, registeredEntityTypes,
+                registeredMobEffects, registeredBlocks, registeredSoundEvents, Set.of());
     }
 
     public CompilationEnvironment(
@@ -101,6 +111,8 @@ public record CompilationEnvironment(
     public boolean hasSoundEvent(ResourceLocation id) {
         return registeredSoundEvents.contains(id);
     }
+
+    public boolean hasParticle(ResourceLocation id) { return registeredParticles.contains(id); }
 
     public static CompilationEnvironment empty() {
         return new CompilationEnvironment(Set.of(), Set.of(), Set.of(), Set.of(), Set.of(), Set.of(), Set.of());

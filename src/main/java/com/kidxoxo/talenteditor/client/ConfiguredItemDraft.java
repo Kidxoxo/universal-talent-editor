@@ -30,6 +30,9 @@ public final class ConfiguredItemDraft {
         root.add("description", new JsonArray());
         root.addProperty("customModelData", 0);
         root.addProperty("glint", false);
+        root.addProperty("curiosEquippable", true);
+        root.add("curiosSlots", new JsonArray());
+        root.addProperty("mainhandOnly", false);
         root.add("attributeModifiers", new JsonArray());
         JsonObject use = new JsonObject();
         use.addProperty("enabled", false);
@@ -37,6 +40,7 @@ public final class ConfiguredItemDraft {
         use.addProperty("consumeCount", 0);
         use.add("actions", new JsonArray());
         root.add("use", use);
+        root.add("triggers", new JsonArray());
         root.add("loot", new JsonArray());
         root.add("requiredMods", new JsonArray());
         return new ConfiguredItemDraft(root);
@@ -77,6 +81,27 @@ public final class ConfiguredItemDraft {
         return booleanValue("glint", false);
     }
 
+    public boolean curiosEquippable() {
+        return booleanValue("curiosEquippable", true);
+    }
+
+    public boolean mainhandOnly() {
+        return booleanValue("mainhandOnly", false);
+    }
+
+    /** Empty means any Curios slot, for compatibility with existing definitions. */
+    public List<String> curiosSlots() {
+        JsonElement raw = root.get("curiosSlots");
+        if (raw == null || !raw.isJsonArray()) return List.of();
+        ArrayList<String> slots = new ArrayList<>();
+        for (JsonElement element : raw.getAsJsonArray()) {
+            if (element.isJsonPrimitive() && element.getAsJsonPrimitive().isString()) {
+                slots.add(element.getAsString());
+            }
+        }
+        return List.copyOf(slots);
+    }
+
     public String requiredMods() {
         JsonElement element = root.get("requiredMods");
         if (element == null || !element.isJsonArray()) return "";
@@ -95,6 +120,22 @@ public final class ConfiguredItemDraft {
             if (child.isJsonObject()) result.add(LootRuleDraft.parse(child.getAsJsonObject()));
         }
         return List.copyOf(result);
+    }
+
+    public List<JsonObject> triggers() {
+        JsonElement element = root.get("triggers");
+        if (element == null || !element.isJsonArray()) return List.of();
+        ArrayList<JsonObject> result = new ArrayList<>();
+        for (JsonElement child : element.getAsJsonArray()) {
+            if (child.isJsonObject()) result.add(child.getAsJsonObject().deepCopy());
+        }
+        return List.copyOf(result);
+    }
+
+    public void replaceTriggers(List<JsonObject> triggers) {
+        JsonArray array = new JsonArray();
+        triggers.forEach(trigger -> array.add(trigger.deepCopy()));
+        root.add("triggers", array);
     }
 
     public List<AttributeModifierDraft> attributeModifiers() {
@@ -162,6 +203,9 @@ public final class ConfiguredItemDraft {
             boolean enabled,
             int customModelData,
             boolean glint,
+            boolean curiosEquippable,
+            boolean mainhandOnly,
+            List<String> curiosSlots,
             List<String> requiredMods
     ) {
         root.addProperty("schema", 2);
@@ -178,10 +222,28 @@ public final class ConfiguredItemDraft {
         root.addProperty("enabled", enabled);
         root.addProperty("customModelData", customModelData);
         root.addProperty("glint", glint);
+        root.addProperty("curiosEquippable", curiosEquippable);
+        root.addProperty("mainhandOnly", mainhandOnly);
+        JsonArray slots = new JsonArray();
+        curiosSlots.forEach(slots::add);
+        root.add("curiosSlots", slots);
         JsonArray mods = new JsonArray();
         requiredMods.forEach(mods::add);
         root.add("requiredMods", mods);
         return GSON.toJson(root);
+    }
+
+    public String toJson(String displayName, String descriptionText, boolean enabled,
+                         int customModelData, boolean glint, boolean curiosEquippable,
+                         boolean mainhandOnly, List<String> requiredMods) {
+        return toJson(displayName, descriptionText, enabled, customModelData, glint,
+                curiosEquippable, mainhandOnly, curiosSlots(), requiredMods);
+    }
+
+    public String toJson(String displayName, String descriptionText, boolean enabled,
+                         int customModelData, boolean glint, List<String> requiredMods) {
+        return toJson(displayName, descriptionText, enabled, customModelData, glint,
+                curiosEquippable(), mainhandOnly(), curiosSlots(), requiredMods);
     }
 
     static List<String> decodeDescription(String value) {
@@ -443,7 +505,9 @@ public final class ConfiguredItemDraft {
             root.addProperty("attribute", "minecraft:generic.max_health");
             root.addProperty("amount", 1.0D);
             root.addProperty("operation", "addition");
-            root.addProperty("slot", "mainhand");
+            JsonArray slots = new JsonArray();
+            slots.add("mainhand");
+            root.add("slots", slots);
             root.addProperty("modifierKey", modifierKey);
             return new AttributeModifierDraft(root);
         }
@@ -469,7 +533,20 @@ public final class ConfiguredItemDraft {
         }
 
         public String slot() {
-            return string("slot", "mainhand");
+            return slots().get(0);
+        }
+
+        public List<String> slots() {
+            if (root.has("slots") && root.get("slots").isJsonArray()) {
+                ArrayList<String> values = new ArrayList<>();
+                for (JsonElement element : root.getAsJsonArray("slots")) {
+                    if (element.isJsonPrimitive() && element.getAsJsonPrimitive().isString()) {
+                        values.add(element.getAsString());
+                    }
+                }
+                if (!values.isEmpty()) return List.copyOf(values);
+            }
+            return List.of(string("slot", "mainhand"));
         }
 
         public String modifierKey() {
@@ -480,16 +557,26 @@ public final class ConfiguredItemDraft {
                 ResourceLocation attribute,
                 double amount,
                 String operation,
-                String slot,
+                List<String> slots,
                 String modifierKey
         ) {
             JsonObject copy = root.deepCopy();
             copy.addProperty("attribute", attribute.toString());
             copy.addProperty("amount", amount);
             copy.addProperty("operation", operation);
-            copy.addProperty("slot", slot);
+            JsonArray slotArray = new JsonArray();
+            slots.forEach(slotArray::add);
+            copy.add("slots", slotArray);
+            copy.remove("slot");
             copy.addProperty("modifierKey", modifierKey);
             return new AttributeModifierDraft(copy);
+        }
+
+        public AttributeModifierDraft withValues(
+                ResourceLocation attribute, double amount, String operation,
+                String slot, String modifierKey
+        ) {
+            return withValues(attribute, amount, operation, List.of(slot), modifierKey);
         }
 
         JsonObject toJsonObject() {

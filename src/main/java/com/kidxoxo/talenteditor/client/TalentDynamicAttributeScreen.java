@@ -41,6 +41,7 @@ public final class TalentDynamicAttributeScreen extends Screen {
     private Button operationButton;
     private Button showButton;
     private Button chooseCounterButton;
+    private final EditorOptionPopup options = new EditorOptionPopup();
     private String status = "";
     private boolean applied;
 
@@ -85,7 +86,7 @@ public final class TalentDynamicAttributeScreen extends Screen {
                 .bounds(x + formWidth - chooseWidth, 43, chooseWidth, 20).build());
 
         int sourceWidth = Math.min(160, Math.max(100, formWidth / 4));
-        sourceButton = addRenderableWidget(Button.builder(sourceLabel(), button -> cycleSource())
+        sourceButton = addRenderableWidget(Button.builder(sourceLabel(), button -> chooseSource())
                 .bounds(x, 75, sourceWidth, 20).build());
         int counterWidth = Math.max(30, formWidth - sourceWidth - chooseWidth - gap * 2);
         counterField = field(x + sourceWidth + gap, 75, counterWidth, 256,
@@ -103,7 +104,7 @@ public final class TalentDynamicAttributeScreen extends Screen {
         maximumField = field(x + half + gap, 139, formWidth - half - gap, 48, maximumValue);
 
         int optionWidth = Math.max(88, (formWidth - gap * 2) / 3);
-        operationButton = addRenderableWidget(Button.builder(operationLabel(), button -> cycleOperation())
+        operationButton = addRenderableWidget(Button.builder(operationLabel(), button -> chooseOperation())
                 .bounds(x, 171, optionWidth, 20).build());
         keyField = field(x + optionWidth + gap, 171, optionWidth, 160, keyValue);
         showButton = addRenderableWidget(Button.builder(showLabel(), button -> toggleShow())
@@ -136,10 +137,10 @@ public final class TalentDynamicAttributeScreen extends Screen {
         super.render(graphics, mouseX, mouseY, partialTick);
         graphics.drawCenteredString(font, title, width / 2, 9, EditorTheme.TEXT);
         label(graphics, x, 32, "attribute");
-        label(graphics, x, 64, "source");
-        label(graphics, x, 96, "formula");
-        label(graphics, x, 128, "bounds");
-        label(graphics, x, 160, "options");
+        label(graphics, x, 65, "source");
+        label(graphics, x, 97, "formula");
+        label(graphics, x, 129, "bounds");
+        label(graphics, x, 161, "options");
         if (height >= 255) {
             graphics.drawString(font, Component.translatable("screen.talent_editor.dynamic.formula_help"),
                     x, 199, EditorTheme.MUTED, false);
@@ -148,6 +149,24 @@ public final class TalentDynamicAttributeScreen extends Screen {
             graphics.drawString(font, font.plainSubstrByWidth(status, formWidth), x, height - 43,
                     0xFFFF7777, false);
         }
+        options.render(graphics, font, width, height);
+    }
+
+    @Override public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (options.mouseClicked(mouseX, mouseY, button, width, height)) return true;
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+    @Override public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        if (options.mouseScrolled(delta, height)) return true;
+        return super.mouseScrolled(mouseX, mouseY, delta);
+    }
+    @Override public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (options.keyPressed(keyCode, height)) return true;
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    @Override public boolean charTyped(char codePoint, int modifiers) {
+        return options.isOpen() || super.charTyped(codePoint, modifiers);
     }
 
     private void label(GuiGraphics graphics, int x, int y, String suffix) {
@@ -181,10 +200,15 @@ public final class TalentDynamicAttributeScreen extends Screen {
         counterField.setValue(value.toString());
     }
 
-    private void cycleSource() {
-        sourceIndex = (sourceIndex + 1) % SOURCES.size();
-        sourceButton.setMessage(sourceLabel());
-        syncSourceWidgets();
+    private void chooseSource() {
+        options.open(Component.translatable("screen.talent_editor.option.choose"),
+                SOURCES.stream().map(value -> Component.translatable(
+                        "screen.talent_editor.dynamic.source." + value)).toList(),
+                sourceIndex, index -> {
+                    sourceIndex = index;
+                    sourceButton.setMessage(sourceLabel());
+                    syncSourceWidgets();
+                }, height);
     }
 
     private void syncSourceWidgets() {
@@ -193,9 +217,14 @@ public final class TalentDynamicAttributeScreen extends Screen {
         chooseCounterButton.active = usesCounter;
     }
 
-    private void cycleOperation() {
-        operationIndex = (operationIndex + 1) % OPERATIONS.size();
-        operationButton.setMessage(operationLabel());
+    private void chooseOperation() {
+        options.open(Component.translatable("screen.talent_editor.option.choose"),
+                OPERATIONS.stream().map(value -> Component.translatable(
+                        "screen.talent_editor.operation." + value)).toList(),
+                operationIndex, index -> {
+                    operationIndex = index;
+                    operationButton.setMessage(operationLabel());
+                }, height);
     }
 
     private void toggleShow() {

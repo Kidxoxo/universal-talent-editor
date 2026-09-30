@@ -88,9 +88,10 @@ public final class ConfiguredItemLootConditionScreen extends Screen {
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics);
-        super.render(graphics, mouseX, mouseY, partialTick);
         int formWidth = Math.min(680, width - 32);
         int x = (width - formWidth) / 2;
+        EditorTheme.panel(graphics, x - 8, 27, formWidth + 16, 187);
+        super.render(graphics, mouseX, mouseY, partialTick);
         graphics.drawCenteredString(font, title, width / 2, 10, 0xFFFFFF);
         label(graphics, "dimensions", x, 27);
         label(graphics, "entity_target", x, 57);

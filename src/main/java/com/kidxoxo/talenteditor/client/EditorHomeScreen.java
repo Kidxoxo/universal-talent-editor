@@ -22,6 +22,7 @@ public final class EditorHomeScreen extends Screen {
     private String talentSource = "";
     private int talentScroll;
     private String localStatus = "";
+    private final EditorOptionPopup options = new EditorOptionPopup();
 
     public EditorHomeScreen(EditorBootstrap bootstrap) {
         super(Component.translatable("screen.talent_editor.home.title"));
@@ -73,9 +74,9 @@ public final class EditorHomeScreen extends Screen {
         talentSearch.setHint(Component.translatable("screen.talent_editor.filter.search"));
         talentSearch.setResponder(ignored -> talentScroll = 0);
         addRenderableWidget(talentSearch);
-        talentStateButton = addRenderableWidget(Button.builder(talentStateLabel(), button -> cycleTalentState())
+        talentStateButton = addRenderableWidget(Button.builder(talentStateLabel(), button -> chooseTalentState())
                 .bounds(stateX, 94, stateWidth, 20).build());
-        talentSourceButton = addRenderableWidget(Button.builder(talentSourceLabel(), button -> cycleTalentSource())
+        talentSourceButton = addRenderableWidget(Button.builder(talentSourceLabel(), button -> chooseTalentSource())
                 .bounds(sourceX, 94, sourceWidth, 20).build());
         int bottomGap = 4;
         int bottomWidth = Math.max(40, (width - 32 - bottomGap * 3) / 4);
@@ -113,6 +114,7 @@ public final class EditorHomeScreen extends Screen {
         if (!localStatus.isBlank()) {
             graphics.drawString(font, fit(localStatus, width - 32), 16, height - 40, 0xA0A0A0, false);
         }
+        options.render(graphics, font, width, height);
     }
 
     private void renderTalents(GuiGraphics graphics, int mouseX, int mouseY, int x, int contentWidth) {
@@ -139,6 +141,7 @@ public final class EditorHomeScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (options.mouseClicked(mouseX, mouseY, button, width, height)) return true;
         if (button == 0) {
             int contentWidth = Math.min(900, width - 32);
             int x = (width - contentWidth) / 2;
@@ -158,6 +161,7 @@ public final class EditorHomeScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        if (options.mouseScrolled(delta, height)) return true;
         int step = (int) Math.signum(delta) * 3;
         int visibleRows = visibleRows(137);
         talentScroll = clampScroll(talentScroll - step, filteredTalents().size(), visibleRows);
@@ -225,16 +229,28 @@ public final class EditorHomeScreen extends Screen {
         );
     }
 
-    private void cycleTalentState() {
-        talentState = talentState.next(true);
-        talentScroll = 0;
-        talentStateButton.setMessage(talentStateLabel());
+    private void chooseTalentState() {
+        DefinitionListFilter.chooseState(options, talentState, true, height, value -> {
+            talentState = value;
+            talentScroll = 0;
+            talentStateButton.setMessage(talentStateLabel());
+        });
     }
 
-    private void cycleTalentSource() {
-        talentSource = DefinitionListFilter.nextSource(talentSource, talentSources);
-        talentScroll = 0;
-        talentSourceButton.setMessage(talentSourceLabel());
+    private void chooseTalentSource() {
+        DefinitionListFilter.chooseSource(options, talentSource, talentSources, height, value -> {
+            talentSource = value;
+            talentScroll = 0;
+            talentSourceButton.setMessage(talentSourceLabel());
+        });
+    }
+
+    @Override public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (options.keyPressed(keyCode, height)) return true;
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+    @Override public boolean charTyped(char codePoint, int modifiers) {
+        return options.isOpen() || super.charTyped(codePoint, modifiers);
     }
 
     private Component talentStateLabel() {

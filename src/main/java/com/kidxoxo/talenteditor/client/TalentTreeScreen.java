@@ -32,6 +32,7 @@ public final class TalentTreeScreen extends Screen {
     private final List<Edge> edges;
     private EditBox searchField;
     private Button relationFilterButton;
+    private final EditorOptionPopup options = new EditorOptionPopup();
     private Button editTalentButton;
     private Button editAcquireButton;
     private Button editSynthesisButton;
@@ -86,7 +87,7 @@ public final class TalentTreeScreen extends Screen {
         addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.tree.locate"),
                 button -> locateSearch()).bounds(x, y, locateWidth, 20).build());
         x += locateWidth + 4;
-        relationFilterButton = addRenderableWidget(Button.builder(filterLabel(), button -> cycleFilter())
+        relationFilterButton = addRenderableWidget(Button.builder(filterLabel(), button -> chooseFilter())
                 .bounds(x, y, filterWidth, 20).build());
         x += filterWidth + 4;
         addRenderableWidget(Button.builder(Component.literal("−"), button -> zoomAtCenter(1.0D / 1.2D))
@@ -166,6 +167,7 @@ public final class TalentTreeScreen extends Screen {
             graphics.drawString(font, font.plainSubstrByWidth(status, Math.max(40, right - left - 8)),
                     left + 4, top + 4, 0xFFFFAA55, false);
         }
+        options.render(graphics, font, width, height);
     }
 
     private void renderEdges(GuiGraphics graphics, int mouseX, int mouseY) {
@@ -278,6 +280,7 @@ public final class TalentTreeScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (options.mouseClicked(mouseX, mouseY, button, width, height)) return true;
         if (super.mouseClicked(mouseX, mouseY, button)) return true;
         if (!insideCanvas(mouseX, mouseY)) return false;
         EditorBootstrap.TalentSummary node = nodeAt(mouseX, mouseY);
@@ -334,6 +337,7 @@ public final class TalentTreeScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        if (options.mouseScrolled(delta, height)) return true;
         if (!insideCanvas(mouseX, mouseY)) return super.mouseScrolled(mouseX, mouseY, delta);
         double factor = delta > 0 ? 1.12D : 1.0D / 1.12D;
         setZoom(factor, mouseX, mouseY);
@@ -406,11 +410,28 @@ public final class TalentTreeScreen extends Screen {
         updateButtons();
     }
 
-    private void cycleFilter() {
-        relationFilter = relationFilter.next();
+    private void chooseFilter() {
+        RelationFilter[] values = RelationFilter.values();
+        options.open(Component.translatable("screen.talent_editor.option.choose"),
+                java.util.Arrays.stream(values).map(value -> Component.translatable(
+                        "screen.talent_editor.tree.filter." + value.serializedName())).toList(),
+                relationFilter.ordinal(), index -> selectFilter(values[index]), height);
+    }
+
+    private void selectFilter(RelationFilter value) {
+        relationFilter = value;
         selectedEdge = null;
         relationFilterButton.setMessage(filterLabel());
         updateButtons();
+    }
+
+    @Override public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (options.keyPressed(keyCode, height)) return true;
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    @Override public boolean charTyped(char codePoint, int modifiers) {
+        return options.isOpen() || super.charTyped(codePoint, modifiers);
     }
 
     private Component filterLabel() {
@@ -644,7 +665,6 @@ public final class TalentTreeScreen extends Screen {
 
         RelationFilter(String serializedName) { this.serializedName = serializedName; }
         String serializedName() { return serializedName; }
-        RelationFilter next() { return values()[(ordinal() + 1) % values().length]; }
         boolean includes(RelationType type) {
             return this == ALL || this == ACQUISITION && type == RelationType.ACQUISITION
                     || this == SYNTHESIS && type == RelationType.SYNTHESIS;

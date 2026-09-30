@@ -86,9 +86,18 @@ public final class ConfiguredItem extends Item {
     /** Logical configured-item ids currently equipped in vanilla or optional Curios slots. */
     public static Set<ResourceLocation> equippedDefinitionIds(ServerPlayer player) {
         LinkedHashSet<ResourceLocation> result = new LinkedHashSet<>();
-        for (ItemStack stack : player.getAllSlots()) definitionId(stack).ifPresent(result::add);
+        addTriggerSource(result, player.getMainHandItem(), true);
+        addTriggerSource(result, player.getOffhandItem(), false);
+        for (ItemStack stack : player.getArmorSlots()) addTriggerSource(result, stack, false);
         result.addAll(com.kidxoxo.talenteditor.compat.CuriosIntegration.equippedLogicalIds(player));
         return Set.copyOf(result);
+    }
+
+    private static void addTriggerSource(Set<ResourceLocation> result, ItemStack stack, boolean mainhand) {
+        definitionId(stack).ifPresent(id -> {
+            ConfiguredItemDefinition definition = TalentEditorMod.SNAPSHOTS.active().configuredItems().get(id);
+            if (definition != null && (!definition.mainhandOnly() || mainhand)) result.add(id);
+        });
     }
 
     @Override
@@ -176,27 +185,44 @@ public final class ConfiguredItem extends Item {
             TooltipFlag flag
     ) {
         super.appendHoverText(stack, level, tooltip, flag);
+        definitionId(stack).map(id -> TalentEditorMod.SNAPSHOTS.active().configuredItems().get(id))
+                .filter(definition -> definition.curiosEquippable() && !definition.mainhandOnly()
+                        && !definition.curiosSlots().isEmpty())
+                .ifPresent(definition -> tooltip.add(Component.translatable(
+                        "item.talent_editor.configured_item.curios_slots",
+                        String.join(", ", definition.curiosSlots().stream()
+                                .map(ConfiguredItem::curiosSlotName)
+                                .toList())).withStyle(ChatFormatting.GRAY)));
         if (flag.isAdvanced()) {
             definitionId(stack).ifPresent(id -> tooltip.add(Component.literal("Definition: " + id)
                     .withStyle(ChatFormatting.DARK_GRAY)));
         }
     }
 
+    private static String curiosSlotName(String slot) {
+        String key = "curios.identifier." + slot;
+        String translated = Component.translatable(key).getString();
+        return translated.equals(key) ? slot : translated;
+    }
+
     private static void writeAttributeModifiers(CompoundTag root, ConfiguredItemDefinition definition) {
         ListTag list = new ListTag();
         if (definition.enabled() && definition.available()) {
             for (ConfiguredItemAttributeModifier configured : definition.attributeModifiers()) {
-                CompoundTag modifier = new CompoundTag();
-                modifier.putString("Attribute", configured.attribute().toString());
-                modifier.putDouble("Amount", configured.amount());
-                modifier.putString("Operation", configured.operation().name());
-                modifier.putString("Slot", configured.slot().equipmentSlot().getName());
-                modifier.putString("Name", TalentEditorMod.MOD_ID + ":" + definition.id()
-                        + "/" + configured.modifierKey());
-                modifier.putUUID("Id", ConfiguredItemModifierIds.create(
-                        definition.id(), configured.modifierKey()
-                ));
-                list.add(modifier);
+                for (var slot : configured.slots()) {
+                    if (slot == com.kidxoxo.talenteditor.domain.ConfiguredItemSlot.CURIOS) continue;
+                    CompoundTag modifier = new CompoundTag();
+                    modifier.putString("Attribute", configured.attribute().toString());
+                    modifier.putDouble("Amount", configured.amount());
+                    modifier.putString("Operation", configured.operation().name());
+                    modifier.putString("Slot", slot.equipmentSlot().getName());
+                    modifier.putString("Name", TalentEditorMod.MOD_ID + ":" + definition.id()
+                            + "/" + configured.modifierKey());
+                    modifier.putUUID("Id", ConfiguredItemModifierIds.create(
+                            definition.id(), configured.modifierIdentity(slot)
+                    ));
+                    list.add(modifier);
+                }
             }
         }
         root.put(ATTRIBUTE_MODIFIERS_TAG, list);

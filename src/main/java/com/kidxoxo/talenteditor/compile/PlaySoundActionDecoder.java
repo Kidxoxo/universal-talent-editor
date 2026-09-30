@@ -11,7 +11,7 @@ import java.util.Optional;
 import java.util.Set;
 
 final class PlaySoundActionDecoder implements ActionDecoder {
-    private static final Set<String> FIELDS = Set.of("type", "sound", "source", "volume", "pitch");
+    private static final Set<String> FIELDS = Set.of("type", "sound", "source", "volume", "pitch", "atTick");
 
     @Override
     public ResourceLocation id() {
@@ -55,6 +55,12 @@ final class PlaySoundActionDecoder implements ActionDecoder {
         double pitch = JsonAccess.decimal(
                 json, "pitch", 1.0D, 0.01D, 4.0D, context.source(), context.path(), context.report()
         );
-        return Optional.of(new PlaySoundAction(sound, source, (float) volume, (float) pitch));
+        int atTick = JsonAccess.integer(json, "atTick", 0, 0, 2400,
+                context.source(), context.path(), context.report());
+        if (atTick > 0 && context.placement() != ActionPlacement.ON_ACQUIRE
+                && context.placement() != ActionPlacement.ON_SYNTHESIZE) context.report().error(
+                "PRESENTATION_TIMELINE_PLACEMENT", context.source(), JsonAccess.child(context.path(), "atTick"),
+                "atTick is only supported for acquisition and synthesis actions");
+        return Optional.of(new PlaySoundAction(sound, source, (float) volume, (float) pitch, atTick));
     }
 }

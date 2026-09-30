@@ -94,14 +94,15 @@ public final class TalentTextStyleScreen extends Screen {
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics);
-        super.render(graphics, mouseX, mouseY, partialTick);
         int divider = divider();
         int x = divider + 12;
         int formWidth = Math.max(80, width - x - 14);
-        graphics.fill(divider, 32, divider + 1, height - 36, 0x60808080);
-        graphics.drawCenteredString(font, title, width / 2, 10, 0xFFFFFF);
+        EditorTheme.panel(graphics, 5, 27, divider - 8, Math.max(1, height - 64));
+        EditorTheme.panel(graphics, x - 7, 27, formWidth + 14, Math.max(1, height - 64));
+        super.render(graphics, mouseX, mouseY, partialTick);
+        graphics.drawCenteredString(font, title, width / 2, 10, EditorTheme.TEXT);
         graphics.drawString(font, Component.translatable("screen.talent_editor.text.parts"),
-                12, 34, 0xA0A0A0, false);
+                12, 34, EditorTheme.MUTED, false);
         renderParts(graphics, mouseX, mouseY, divider);
         label(graphics, "screen.talent_editor.text.literal", x, 37);
         label(graphics, "screen.talent_editor.text.translation", x, 70);

@@ -1,6 +1,6 @@
-# Schema 2 当前实现
+# Schema 2 · Universal Talent Editor 1.2.0 当前实现
 
-本页描述 Universal Talent Editor 1.0.0 已经能够编译的字段，不代表最终完整模式。
+本页描述 Universal Talent Editor 1.2.0 支持的 Schema 2 字段。
 
 ## 天赋册布局
 
@@ -133,7 +133,7 @@
       "glint": true,
       "attributeModifiers": [
         {"attribute": "minecraft:generic.attack_damage", "amount": 2,
-         "operation": "addition", "slot": "mainhand", "modifierKey": "shard_attack"}
+         "operation": "addition", "slots": ["mainhand"], "modifierKey": "shard_attack"}
       ],
       "use": {
         "enabled": true,
@@ -165,8 +165,12 @@
 | description | 否 | 字符串、结构化文本，或由两者组成的数组；写入物品 Lore |
 | customModelData | 否 | 0–16777215，默认 0；0 使用载体默认模型 |
 | glint | 否 | 默认 false；是否强制显示附魔光效 |
+| curiosEquippable | 否 | 默认 true；false 时同一载体上的此逻辑物品不可装备进 Curios 槽位 |
+| curiosSlots | 否 | Curios 槽位类型 ID 数组；空数组兼容旧包，表示允许所有类型；非空时只允许列出的玩家槽位 |
+| mainhandOnly | 否 | 默认 false；true 时该物品的事件触发器仅在主手持有时生效，同时不允许放入 Curios 槽位 |
 | attributeModifiers | 否 | 装备槽属性修饰器数组，最多 256 条 |
 | use | 否 | 右键动作、按逻辑 ID 隔离的冷却和可选消耗 |
+| triggers | 否 | 物品处于允许的装备位置时生效的事件触发器；与天赋事件规则使用同一结构 |
 | loot | 否 | 精确、前缀或正则战利品表与可选上下文条件的注入规则数组，最多 256 条 |
 | requiredMods | 否 | 模组 ID 数组；缺少时产生警告并将定义标为不可用 |
 
@@ -212,12 +216,13 @@ Minecraft 1.20.1 客户端资源包可按 `customModelData` 为载体选择模�
 天赋册和天赋点分别使用自己的 item model，可以彼此以及与普通载体复用同一数值。
 物品定义 JSON 属于服务端数据包，模型/PNG 属于客户端资源包，专用服务器不会自动把它们发送给玩家。
 管理员可在 `F8 → 配置物品` 中检索、新建、编辑、仅验证、保存、查看引用和安全删除；写入仍使用统一 revision、事务历史、失败回滚和撤销流程。
+“事件效果”页面可编辑触发器列表、事件、概率与冷却、正常和失败动作链；定时属性修饰、伤害表达式与生命表达式有可视化参数页。其他触发器字段和动作类型可在对应“高级 JSON”入口编辑，保存时保留未在普通表单中显示的字段。配置物品主页可打开 Curios 槽位列表，列表来自当前玩家实际可用的已注册槽位；可关闭 Curios、允许全部类型或选择具体类型。仅主手触发可单独设置。
 
 逻辑物品 ID 可用于 `has_item`、`event_item`、自动计数器 `items` 和 `synthesis.consumeItems`。运行时遇到带 `TalentEditorDefinition` 的载体时只按逻辑 ID 匹配，不会同时按 `talent_editor:configured_item` 重复匹配；没有逻辑 ID 的普通载体仍按其注册 ID 处理。为避免歧义，配置物品 ID 与已注册真实物品 ID 冲突会以 `CONFIGURED_ITEM_ID_COLLISION` 拒绝整批定义，只有上述两个同名系统定义例外。
 
-`attributeModifiers` 每条包含已注册 `attribute`、有限 `amount`、`operation`、`slot` 与物品内唯一的
-`modifierKey`。`operation` 可为 `addition`、`multiply_base`或 `multiply_total`；`slot` 可为
-`mainhand`、`offhand`、`head`、`chest`、`legs`或 `feet`。修饰器 UUID 由逻辑物品 ID 和键稳定生成，
+`attributeModifiers` 每条包含已注册 `attribute`、有限 `amount`、`operation`、非空 `slots` 数组与物品内唯一的
+`modifierKey`。`operation` 可为 `addition`、`multiply_base` 或 `multiply_total`；`slots` 元素可为
+`mainhand`、`offhand`、`head`、`chest`、`legs`、`feet` 或 `curios`，一条属性可选多个不同槽位。旧定义的单值 `slot` 仍可读取，但不可与 `slots` 同时使用。`curios` 属性在允许的 Curios 槽位装备时生效。修饰器 UUID 由逻辑物品 ID 和键稳定生成，
 同一定义内不允许重复键。属性数据写入载体 NBT，既有背包物品在服务端 tick 中按快照 revision 刷新；定义删除后清除旧属性。可视化入口为 `F8 → 配置物品 → 属性效果`。
 
 `use` 包含 `enabled`（默认 true）、`cooldownTicks`（0–1200000）、`consumeCount`（0–64）和非空

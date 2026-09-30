@@ -45,6 +45,7 @@ public final class CounterEditScreen extends Screen {
     private EditBox nameField;
     private Button eventButton;
     private String localStatus = "";
+    private final EditorOptionPopup options = new EditorOptionPopup();
 
     private CounterEditScreen(EditorBootstrap bootstrap, CounterDraft draft, ResourceLocation id, boolean existing) {
         super(Component.translatable(existing
@@ -88,7 +89,7 @@ public final class CounterEditScreen extends Screen {
         idField.setEditable(!existing);
         nameField = field(x, 59, formWidth, nameValue, 512, value -> nameValue = value);
         int half = (formWidth - 6) / 2;
-        eventButton = addRenderableWidget(Button.builder(eventLabel(), button -> cycleEvent())
+        eventButton = addRenderableWidget(Button.builder(eventLabel(), button -> chooseEvent())
                 .bounds(x, 86, half, 20).build());
         addRenderableWidget(Button.builder(enabledLabel(), button -> {
             enabled = !enabled;
@@ -182,6 +183,23 @@ public final class CounterEditScreen extends Screen {
                     x, 226, 0xA0A0A0, false);
         }
         renderResult(graphics, x, formWidth);
+        options.render(graphics, font, width, height);
+    }
+
+    @Override public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (options.mouseClicked(mouseX, mouseY, button, width, height)) return true;
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+    @Override public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        if (options.mouseScrolled(delta, height)) return true;
+        return super.mouseScrolled(mouseX, mouseY, delta);
+    }
+    @Override public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (options.keyPressed(keyCode, height)) return true;
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+    @Override public boolean charTyped(char codePoint, int modifiers) {
+        return options.isOpen() || super.charTyped(codePoint, modifiers);
     }
 
     private void label(GuiGraphics graphics, String key, int x, int y) {
@@ -218,11 +236,15 @@ public final class CounterEditScreen extends Screen {
                 x, height - 42, color, false);
     }
 
-    private void cycleEvent() {
-        int index = EVENTS.indexOf(eventValue);
-        eventValue = EVENTS.get((index + 1) % EVENTS.size());
-        eventButton.setMessage(eventLabel());
-        ClientEditorState.clearValidation();
+    private void chooseEvent() {
+        options.open(Component.translatable("screen.talent_editor.option.choose"),
+                EVENTS.stream().map(value -> Component.translatable(
+                        "screen.talent_editor.counter.event." + value)).toList(),
+                Math.max(0, EVENTS.indexOf(eventValue)), index -> {
+                    eventValue = EVENTS.get(index);
+                    eventButton.setMessage(eventLabel());
+                    ClientEditorState.clearValidation();
+                }, height);
     }
 
     private Component eventLabel() {

@@ -401,19 +401,6 @@ public final class TalentEditScreen extends Screen {
         changed(Component.translatable(translationKey).getString());
     }
 
-    TalentDraft.PresentationDraft presentation(TalentDraft.PresentationPhase phase) {
-        return draft.presentation(phase);
-    }
-
-    void updatePresentations(
-            TalentDraft.PresentationDraft acquire,
-            TalentDraft.PresentationDraft synthesize
-    ) {
-        if (acquire.editable()) draft.updatePresentation(TalentDraft.PresentationPhase.ACQUIRE, acquire);
-        if (synthesize.editable()) draft.updatePresentation(TalentDraft.PresentationPhase.SYNTHESIZE, synthesize);
-        changed(Component.translatable("screen.talent_editor.presentation_updated").getString());
-    }
-
     String effectLabel(TalentDraft.EffectRow row) {
         if (TalentDraft.isEventEffect(row)) {
             String eventKey = "screen.talent_editor.trigger.event." + row.dynamicSource();
@@ -529,7 +516,12 @@ public final class TalentEditScreen extends Screen {
     void openPresentationSettings(Screen returnScreen) {
         if (minecraft == null) return;
         captureOverviewState();
-        minecraft.setScreen(new TalentPresentationScreen(this, bootstrap, returnScreen));
+        minecraft.setScreen(new TalentPresentationTimelineScreen(returnScreen, this,
+                TalentDraft.PresentationPhase.ACQUIRE));
+    }
+
+    void presentationApplied() {
+        changed(Component.translatable("screen.talent_editor.presentation_updated").getString());
     }
 
     void openLifecycleSettings() {

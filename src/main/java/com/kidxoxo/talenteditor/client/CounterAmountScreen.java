@@ -19,6 +19,7 @@ public final class CounterAmountScreen extends Screen {
     private Button modeButton;
     private Button roundingButton;
     private String status = "";
+    private final EditorOptionPopup options = new EditorOptionPopup();
 
     public CounterAmountScreen(CounterEditScreen parent) {
         super(Component.translatable("screen.talent_editor.counter.amount.title"));
@@ -37,7 +38,7 @@ public final class CounterAmountScreen extends Screen {
         modeButton = addRenderableWidget(Button.builder(modeLabel(), button -> cycleMode())
                 .bounds(x, 52, formWidth, 20).build());
         addField(x, 91, formWidth, scale, 32, value -> scale = value);
-        roundingButton = addRenderableWidget(Button.builder(roundingLabel(), button -> cycleRounding())
+        roundingButton = addRenderableWidget(Button.builder(roundingLabel(), button -> chooseRounding())
                 .bounds(x, 130, formWidth, 20).build());
         addField(x, 169, formWidth, minimum, 18, value -> minimum = value);
         addRenderableWidget(Button.builder(Component.translatable("gui.cancel"), button -> returnParent())
@@ -71,6 +72,23 @@ public final class CounterAmountScreen extends Screen {
         graphics.drawString(font, Component.translatable("screen.talent_editor.counter.amount_help"),
                 x, 203, 0xA0A0A0, false);
         if (!status.isBlank()) graphics.drawString(font, status, x, height - 43, 0xFF7777, false);
+        options.render(graphics, font, width, height);
+    }
+
+    @Override public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (options.mouseClicked(mouseX, mouseY, button, width, height)) return true;
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+    @Override public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        if (options.mouseScrolled(delta, height)) return true;
+        return super.mouseScrolled(mouseX, mouseY, delta);
+    }
+    @Override public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (options.keyPressed(keyCode, height)) return true;
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+    @Override public boolean charTyped(char codePoint, int modifiers) {
+        return options.isOpen() || super.charTyped(codePoint, modifiers);
     }
 
     private void label(GuiGraphics graphics, String key, int x, int y) {
@@ -82,9 +100,14 @@ public final class CounterAmountScreen extends Screen {
         modeButton.setMessage(modeLabel());
     }
 
-    private void cycleRounding() {
-        rounding = ROUNDINGS.get((ROUNDINGS.indexOf(rounding) + 1) % ROUNDINGS.size());
-        roundingButton.setMessage(roundingLabel());
+    private void chooseRounding() {
+        options.open(Component.translatable("screen.talent_editor.option.choose"),
+                ROUNDINGS.stream().map(value -> Component.translatable(
+                        "screen.talent_editor.counter.rounding." + value)).toList(),
+                Math.max(0, ROUNDINGS.indexOf(rounding)), index -> {
+                    rounding = ROUNDINGS.get(index);
+                    roundingButton.setMessage(roundingLabel());
+                }, height);
     }
 
     private Component modeLabel() {

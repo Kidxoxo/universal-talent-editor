@@ -1,10 +1,12 @@
 package com.kidxoxo.talenteditor.client;
 
+import com.google.gson.JsonObject;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /** Ordered visual list for trigger and lifecycle extension actions. */
@@ -21,6 +23,7 @@ public final class TalentAdvancedActionListScreen extends Screen {
     private Button upButton;
     private Button downButton;
     private Button gateButton;
+    private Button previewButton;
     private String status = "";
 
     TalentAdvancedActionListScreen(
@@ -52,18 +55,31 @@ public final class TalentAdvancedActionListScreen extends Screen {
                         "screen.talent_editor.advanced_actions.remove"), button -> removeSelected())
                 .bounds(x + (third + gap) * 2, height - 55,
                         formWidth - (third + gap) * 2, 20).build());
+        int bottomColumns = location == TalentDraft.AdvancedActionLocation.ACTIVE_EFFECTS
+                || isPresentationLocation() ? 3 : 4;
+        int bottomWidth = (formWidth - gap * (bottomColumns - 1)) / bottomColumns;
         upButton = addRenderableWidget(Button.builder(Component.translatable(
                         "screen.talent_editor.advanced_actions.up"), button -> move(-1))
-                .bounds(x, height - 28, third, 20).build());
+                .bounds(x, height - 28, bottomWidth, 20).build());
         downButton = addRenderableWidget(Button.builder(Component.translatable(
                         "screen.talent_editor.advanced_actions.down"), button -> move(1))
-                .bounds(x + third + gap, height - 28, third, 20).build());
+                .bounds(x + bottomWidth + gap, height - 28, bottomWidth, 20).build());
+        if (bottomColumns == 4) {
+            previewButton = addRenderableWidget(Button.builder(Component.translatable(
+                    "screen.talent_editor.particles.preview_group"), button -> previewGroup())
+                    .bounds(x + (bottomWidth + gap) * 2, height - 28, bottomWidth, 20).build());
+        }
         addRenderableWidget(Button.builder(Component.translatable("gui.back"), button -> returnParent())
-                .bounds(x + (third + gap) * 2, height - 28,
-                        formWidth - (third + gap) * 2, 20).build());
+                .bounds(x + (bottomWidth + gap) * (bottomColumns - 1), height - 28,
+                        formWidth - (bottomWidth + gap) * (bottomColumns - 1), 20).build());
         gateButton = addRenderableWidget(Button.builder(Component.translatable(
                         "screen.talent_editor.action_gate.open"), button -> openGate())
                 .bounds(x + formWidth - 100, 8, 100, 20).build());
+        if (location != TalentDraft.AdvancedActionLocation.ACTIVE_EFFECTS && !isPresentationLocation()) {
+            addRenderableWidget(Button.builder(Component.translatable(
+                    "screen.talent_editor.particles.add"), button -> openParticleEditor(-1))
+                    .bounds(x, 8, 108, 20).build());
+        }
         syncButtons();
     }
 
@@ -135,7 +151,13 @@ public final class TalentAdvancedActionListScreen extends Screen {
     }
 
     private List<TalentDraft.AdvancedActionRow> rows() {
-        return owner.draft().advancedActionRows(location, triggerRawIndex);
+        List<TalentDraft.AdvancedActionRow> all = owner.draft().advancedActionRows(location, triggerRawIndex);
+        return isPresentationLocation() ? all.stream().filter(row -> !isPresentationRow(row)).toList() : all;
+    }
+
+    private boolean isPresentationLocation() {
+        return location == TalentDraft.AdvancedActionLocation.ON_ACQUIRE
+                || location == TalentDraft.AdvancedActionLocation.ON_SYNTHESIZE;
     }
 
     private TalentDraft.AdvancedActionRow selectedRow() {
@@ -152,6 +174,8 @@ public final class TalentAdvancedActionListScreen extends Screen {
         upButton.active = row != null && !isPresentationRow(row) && selected > 0;
         downButton.active = row != null && !isPresentationRow(row) && selected + 1 < rows().size();
         gateButton.active = row != null;
+        if (previewButton != null) previewButton.active = rows().stream()
+                .anyMatch(candidate -> candidate.type().equals("spawn_particles"));
     }
 
     private void editSelected() {
@@ -160,9 +184,33 @@ public final class TalentAdvancedActionListScreen extends Screen {
     }
 
     private void openEditor(int actionIndex) {
-        if (minecraft != null) minecraft.setScreen(new TalentAdvancedActionScreen(
-                this, owner, location, triggerRawIndex, actionIndex
-        ));
+        if (minecraft == null) return;
+        if (actionIndex >= 0 && owner.draft().advancedAction(location, triggerRawIndex, actionIndex)
+                .get("type").getAsString().replaceFirst("^talent_editor:", "").equals("spawn_particles")) {
+            openParticleEditor(actionIndex);
+        } else minecraft.setScreen(new TalentAdvancedActionScreen(
+                this, owner, location, triggerRawIndex, actionIndex));
+    }
+
+    private void openParticleEditor(int actionIndex) {
+        if (minecraft != null) minecraft.setScreen(new TalentParticleActionScreen(
+                this, owner, location, triggerRawIndex, actionIndex));
+    }
+
+    private void previewGroup() {
+        if (minecraft == null || minecraft.level == null || minecraft.player == null) return;
+        List<JsonObject> particles = new ArrayList<>();
+        for (TalentDraft.AdvancedActionRow row : rows()) {
+            if (row.type().equals("spawn_particles")) {
+                particles.add(owner.draft().advancedAction(location, triggerRawIndex, row.rawIndex()));
+            }
+        }
+        if (particles.isEmpty()) return;
+        try {
+            minecraft.setScreen(new TalentParticlePreviewScreen(this, particles));
+        } catch (RuntimeException exception) {
+            status = Component.translatable("screen.talent_editor.particles.preview_group_invalid").getString();
+        }
     }
 
     private void openGate() {
@@ -187,7 +235,11 @@ public final class TalentAdvancedActionListScreen extends Screen {
     private void move(int offset) {
         TalentDraft.AdvancedActionRow row = selectedRow();
         if (row == null) return;
-        owner.draft().moveAdvancedAction(location, triggerRawIndex, row.rawIndex(), offset);
+        List<TalentDraft.AdvancedActionRow> visible = rows();
+        if (isPresentationLocation() && selected + offset >= 0 && selected + offset < visible.size()) {
+            owner.draft().swapAdvancedActions(location, triggerRawIndex,
+                    row.rawIndex(), visible.get(selected + offset).rawIndex());
+        } else owner.draft().moveAdvancedAction(location, triggerRawIndex, row.rawIndex(), offset);
         selected += offset;
         ClientEditorState.clearValidation();
         syncButtons();
@@ -208,13 +260,17 @@ public final class TalentAdvancedActionListScreen extends Screen {
         return row != null
                 && (location == TalentDraft.AdvancedActionLocation.ON_ACQUIRE
                 || location == TalentDraft.AdvancedActionLocation.ON_SYNTHESIZE)
-                && (row.type().equals("play_sound") || row.type().equals("show_message"));
+                && (row.type().equals("play_sound") || row.type().equals("show_message")
+                || row.type().equals("spawn_particles"));
     }
 
     private static int clamp(int value, int size, int visible) {
         return Math.max(0, Math.min(value, Math.max(0, size - visible)));
     }
 
-    private void returnParent() { if (minecraft != null) minecraft.setScreen(returnScreen); }
+    private void returnParent() {
+        if (returnScreen instanceof TalentTriggerScreen triggerScreen) triggerScreen.refreshAdvancedChanges();
+        if (minecraft != null) minecraft.setScreen(returnScreen);
+    }
     @Override public void onClose() { returnParent(); }
 }

@@ -92,10 +92,11 @@ public final class TalentSynthesisScreen extends Screen {
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics);
-        super.render(graphics, mouseX, mouseY, partialTick);
         int formWidth = Math.min(540, width - 32);
         int x = (width - formWidth) / 2;
-        graphics.drawCenteredString(font, title, width / 2, 13, 0xFFFFFF);
+        EditorTheme.panel(graphics, x - 8, 31, formWidth + 16, 178);
+        super.render(graphics, mouseX, mouseY, partialTick);
+        graphics.drawCenteredString(font, title, width / 2, 13, EditorTheme.TEXT);
         label(graphics, "screen.talent_editor.synthesis.talents", x, 72);
         label(graphics, "screen.talent_editor.synthesis.counters", x, 113);
         label(graphics, "screen.talent_editor.synthesis.items", x, 154);

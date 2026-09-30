@@ -34,6 +34,8 @@ public final class BuiltinActionTypes {
                 .register(new PlayerRenderActionDecoder())
                 .register(new OpenItemSubmissionActionDecoder())
                 .register(new PlaySoundActionDecoder())
+                .register(new SpawnParticlesActionDecoder())
+                .register(new PresentationTransformActionDecoder())
                 .register(new ShowMessageActionDecoder())
                 .build();
     }

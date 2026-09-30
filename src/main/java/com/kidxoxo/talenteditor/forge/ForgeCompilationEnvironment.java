@@ -3,6 +3,7 @@ package com.kidxoxo.talenteditor.forge;
 import com.kidxoxo.talenteditor.compile.CompilationEnvironment;
 import net.minecraftforge.fml.ModList;
 import net.minecraftforge.registries.ForgeRegistries;
+import net.minecraft.core.particles.SimpleParticleType;
 
 import java.util.LinkedHashSet;
 
@@ -20,7 +21,10 @@ public final class ForgeCompilationEnvironment {
                 ForgeRegistries.ENTITY_TYPES.getKeys(),
                 ForgeRegistries.MOB_EFFECTS.getKeys(),
                 ForgeRegistries.BLOCKS.getKeys(),
-                ForgeRegistries.SOUND_EVENTS.getKeys()
+                ForgeRegistries.SOUND_EVENTS.getKeys(),
+                ForgeRegistries.PARTICLE_TYPES.getKeys().stream()
+                        .filter(id -> ForgeRegistries.PARTICLE_TYPES.getValue(id) instanceof SimpleParticleType)
+                        .collect(java.util.stream.Collectors.toSet())
         );
     }
 }

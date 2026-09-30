@@ -19,7 +19,10 @@ public record ConfiguredItemDefinition(
         List<ConfiguredItemLootRule> loot,
         List<String> requiredMods,
         boolean available,
-        List<String> missingMods
+        List<String> missingMods,
+        boolean curiosEquippable,
+        boolean mainhandOnly,
+        List<String> curiosSlots
 ) {
     public ConfiguredItemDefinition {
         id = Objects.requireNonNull(id, "id");
@@ -34,6 +37,36 @@ public record ConfiguredItemDefinition(
         }
         requiredMods = List.copyOf(requiredMods);
         missingMods = List.copyOf(missingMods);
+        curiosSlots = List.copyOf(curiosSlots);
+    }
+
+    public boolean allowsCuriosSlot(String slot) {
+        return curiosEquippable && !mainhandOnly
+                && (curiosSlots.isEmpty() || slot != null && curiosSlots.contains(slot));
+    }
+
+    public ConfiguredItemDefinition(
+            ResourceLocation id, int schema, boolean enabled, LocalizedText name,
+            List<LocalizedText> description, int customModelData, boolean glint,
+            List<ConfiguredItemAttributeModifier> attributeModifiers, ConfiguredItemUseDefinition use,
+            List<CompiledTrigger> triggers, List<ConfiguredItemLootRule> loot,
+            List<String> requiredMods, boolean available, List<String> missingMods
+    ) {
+        this(id, schema, enabled, name, description, customModelData, glint, attributeModifiers, use,
+                triggers, loot, requiredMods, available, missingMods, true, false, List.of());
+    }
+
+    public ConfiguredItemDefinition(
+            ResourceLocation id, int schema, boolean enabled, LocalizedText name,
+            List<LocalizedText> description, int customModelData, boolean glint,
+            List<ConfiguredItemAttributeModifier> attributeModifiers, ConfiguredItemUseDefinition use,
+            List<CompiledTrigger> triggers, List<ConfiguredItemLootRule> loot,
+            List<String> requiredMods, boolean available, List<String> missingMods,
+            boolean curiosEquippable, boolean mainhandOnly
+    ) {
+        this(id, schema, enabled, name, description, customModelData, glint, attributeModifiers, use,
+                triggers, loot, requiredMods, available, missingMods,
+                curiosEquippable, mainhandOnly, List.of());
     }
 
     public ConfiguredItemDefinition(
@@ -52,6 +85,6 @@ public record ConfiguredItemDefinition(
             List<String> missingMods
     ) {
         this(id, schema, enabled, name, description, customModelData, glint, attributeModifiers, use,
-                List.of(), loot, requiredMods, available, missingMods);
+                List.of(), loot, requiredMods, available, missingMods, true, false, List.of());
     }
 }

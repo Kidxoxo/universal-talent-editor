@@ -12,7 +12,8 @@ public record ShowMessageAction(
         Optional<LocalizedText> subtitle,
         int fadeInTicks,
         int stayTicks,
-        int fadeOutTicks
+        int fadeOutTicks,
+        int atTick
 ) implements CompiledAction {
     public static final ResourceLocation TYPE = new ResourceLocation(TalentEditorMod.MOD_ID, "show_message");
 
@@ -20,6 +21,11 @@ public record ShowMessageAction(
         mode = Objects.requireNonNull(mode, "mode");
         text = Objects.requireNonNull(text, "text");
         subtitle = subtitle == null ? Optional.empty() : subtitle;
+    }
+
+    public ShowMessageAction(MessageDisplay mode, LocalizedText text, Optional<LocalizedText> subtitle,
+                             int fadeInTicks, int stayTicks, int fadeOutTicks) {
+        this(mode, text, subtitle, fadeInTicks, stayTicks, fadeOutTicks, 0);
     }
 
     @Override

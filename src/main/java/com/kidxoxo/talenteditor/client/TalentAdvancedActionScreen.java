@@ -22,6 +22,7 @@ public final class TalentAdvancedActionScreen extends Screen {
     private final int triggerRawIndex;
     private final int actionIndex;
     private final List<ActionKind> allowedKinds;
+    private final EditorOptionPopup options = new EditorOptionPopup();
     private JsonObject draft;
     private ActionKind kind;
     private SelectorDraft selector;
@@ -73,7 +74,7 @@ public final class TalentAdvancedActionScreen extends Screen {
         int x = (width - formWidth) / 2;
         int gap = 6;
         int half = (formWidth - gap) / 2;
-        typeButton = addRenderableWidget(Button.builder(Component.empty(), button -> cycleType())
+        typeButton = addRenderableWidget(Button.builder(Component.empty(), button -> chooseType())
                 .bounds(x, 29, formWidth, 20).build());
         resourceField = field(x, 61, formWidth - 92, 256);
         chooseResourceButton = addRenderableWidget(Button.builder(Component.translatable(
@@ -82,7 +83,7 @@ public final class TalentAdvancedActionScreen extends Screen {
         expressionField = field(x, 91, formWidth, 512);
         valueAField = field(x, 121, half, NumericExpression.MAX_LENGTH);
         valueBField = field(x + half + gap, 121, formWidth - half - gap, NumericExpression.MAX_LENGTH);
-        operationButton = addRenderableWidget(Button.builder(Component.empty(), button -> cycleOperation())
+        operationButton = addRenderableWidget(Button.builder(Component.empty(), button -> chooseOperation())
                 .bounds(x, 211, half, 20).build());
         firstToggleButton = addRenderableWidget(Button.builder(Component.empty(), button -> {
             firstToggle = !firstToggle;
@@ -197,7 +198,7 @@ public final class TalentAdvancedActionScreen extends Screen {
         boolean operationVisible = !kind.operations().isEmpty();
         operationButton.visible = operationVisible;
         operationButton.setMessage(Component.translatable("screen.talent_editor.advanced_action.operation",
-                operation));
+                operationName(operation)));
         firstToggleButton.visible = kind.firstToggleKey() != null;
         if (kind.firstToggleKey() != null) firstToggleButton.setMessage(toggleLabel(
                 kind.firstToggleKey(), firstToggle
@@ -220,21 +221,41 @@ public final class TalentAdvancedActionScreen extends Screen {
                 Component.translatable(value ? "options.on" : "options.off"));
     }
 
-    private void cycleType() {
-        int next = (allowedKinds.indexOf(kind) + 1) % allowedKinds.size();
-        kind = allowedKinds.get(next);
+    private void chooseType() {
+        options.open(Component.translatable("screen.talent_editor.advanced_action.choose_type"),
+                allowedKinds.stream().map(value -> Component.translatable(
+                        "screen.talent_editor.advanced_action.type." + value.serializedName())).toList(),
+                allowedKinds.indexOf(kind), index -> selectType(allowedKinds.get(index)), height);
+    }
+
+    private void selectType(ActionKind next) {
+        if (kind == next) return;
+        kind = next;
         draft = defaults(kind);
         loadState();
         loadFields();
         status = "";
     }
 
-    private void cycleOperation() {
+    private void chooseOperation() {
         List<String> operations = kind.operations();
         if (operations.isEmpty()) return;
-        int current = Math.max(0, operations.indexOf(operation));
-        operation = operations.get((current + 1) % operations.size());
-        updateWidgets();
+        options.open(Component.translatable("screen.talent_editor.option.choose"),
+                operations.stream().map(TalentAdvancedActionScreen::operationName).toList(),
+                Math.max(0, operations.indexOf(operation)), index -> {
+                    operation = operations.get(index);
+                    updateWidgets();
+                }, height);
+    }
+
+    private static Component operationName(String value) {
+        return switch (value) {
+            case "set", "add", "multiply", "damage", "heal" -> Component.translatable(
+                    "screen.talent_editor.advanced_action.operation_value." + value);
+            case "addition", "multiply_base", "multiply_total" -> Component.translatable(
+                    "screen.talent_editor.operation." + value);
+            default -> Component.literal(value);
+        };
     }
 
     private void chooseResource() {
@@ -408,16 +429,16 @@ public final class TalentAdvancedActionScreen extends Screen {
         EditorTheme.panel(graphics, x - 7, 24, formWidth + 14, Math.min(284, height - 56));
         super.render(graphics, mouseX, mouseY, partialTick);
         graphics.drawCenteredString(font, title, width / 2, 10, EditorTheme.TEXT);
-        if (kind.hasResource()) label(graphics, kind.resourceLabel(), x, 50);
-        if (kind.hasExpression()) label(graphics, kind.expressionLabel(), x, 80);
+        if (kind.hasResource()) label(graphics, kind.resourceLabel(), x, 51);
+        if (kind.hasExpression()) label(graphics, kind.expressionLabel(), x, 82);
         if (kind.hasValues()) {
-            label(graphics, kind.valueALabel(), x, 110);
+            label(graphics, kind.valueALabel(), x, 112);
             if (kind != ActionKind.AFFECT_HEALTH_EXPRESSION
                     && kind != ActionKind.OPEN_ITEM_SUBMISSION) {
-                label(graphics, kind.valueBLabel(), x + (formWidth - 6) / 2 + 6, 110);
+                label(graphics, kind.valueBLabel(), x + (formWidth - 6) / 2 + 6, 112);
             }
         }
-        if (kind.hasExpression() || kind == ActionKind.PLAYER_RENDER) {
+        if (height >= 340 && (kind.hasExpression() || kind == ActionKind.PLAYER_RENDER)) {
             graphics.drawWordWrap(font, Component.translatable(
                     kind == ActionKind.PLAYER_RENDER
                             ? "screen.talent_editor.advanced_action.render_expression_help"
@@ -426,6 +447,26 @@ public final class TalentAdvancedActionScreen extends Screen {
         }
         if (!status.isBlank()) graphics.drawString(font, font.plainSubstrByWidth(status, formWidth),
                 x, height - 43, 0xFF7777, false);
+        options.render(graphics, font, width, height);
+    }
+
+    @Override public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (options.mouseClicked(mouseX, mouseY, button, width, height)) return true;
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    @Override public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        if (options.mouseScrolled(delta, height)) return true;
+        return super.mouseScrolled(mouseX, mouseY, delta);
+    }
+
+    @Override public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (options.keyPressed(keyCode, height)) return true;
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    @Override public boolean charTyped(char codePoint, int modifiers) {
+        return options.isOpen() || super.charTyped(codePoint, modifiers);
     }
 
     private void label(GuiGraphics graphics, String key, int x, int y) {

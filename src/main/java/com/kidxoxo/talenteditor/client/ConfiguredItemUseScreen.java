@@ -113,9 +113,10 @@ public final class ConfiguredItemUseScreen extends Screen {
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics);
-        super.render(graphics, mouseX, mouseY, partialTick);
         int formWidth = Math.min(620, width - 32);
         int x = (width - formWidth) / 2;
+        EditorTheme.panel(graphics, x - 8, 26, formWidth + 16, 190);
+        super.render(graphics, mouseX, mouseY, partialTick);
         int gap = 6;
         int third = (formWidth - gap * 2) / 3;
         graphics.drawCenteredString(font, title, width / 2, 10, 0xFFFFFF);

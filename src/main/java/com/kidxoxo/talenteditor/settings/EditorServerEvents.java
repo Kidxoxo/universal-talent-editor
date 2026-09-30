@@ -6,6 +6,8 @@ import net.minecraftforge.event.server.ServerStoppedEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
+import java.nio.file.Files;
+
 @Mod.EventBusSubscriber(modid = TalentEditorMod.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class EditorServerEvents {
     private EditorServerEvents() {
@@ -13,16 +15,18 @@ public final class EditorServerEvents {
 
     @SubscribeEvent
     public static void serverAboutToStart(ServerAboutToStartEvent event) {
-        if (!TalentEditorMod.SETTINGS.initializeServer(event.getServer())) return;
+        TalentEditorMod.SETTINGS.initializeServer(event.getServer());
+        if (!Files.isDirectory(TalentEditorMod.EDITOR_PACK.datapacksRoot(event.getServer())
+                .resolve(com.kidxoxo.talenteditor.editor.EditorPackStorage.PACK_FOLDER))) return;
         try {
             TalentEditorMod.EDITOR_PACK.ensureSelected(event.getServer()).whenComplete((ignored, error) -> {
                 if (error != null) TalentEditorMod.LOGGER.error(
-                        "Installed the global talent template but could not enable its data pack", error
+                        "Could not enable the generated talent editor data pack", error
                 );
             });
         } catch (Exception exception) {
             TalentEditorMod.LOGGER.error(
-                    "Installed the global talent template but could not enable its data pack", exception
+                    "Could not enable the generated talent editor data pack", exception
             );
         }
     }

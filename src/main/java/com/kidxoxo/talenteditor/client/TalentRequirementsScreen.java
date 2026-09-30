@@ -31,6 +31,7 @@ public final class TalentRequirementsScreen extends Screen {
     private Button operatorButton;
     private EditBox targetField;
     private EditBox amountField;
+    private final EditorOptionPopup options = new EditorOptionPopup();
     private String status = "";
 
     public TalentRequirementsScreen(TalentEditScreen parent) {
@@ -58,7 +59,7 @@ public final class TalentRequirementsScreen extends Screen {
 
         modeButton = addRenderableWidget(Button.builder(modeLabel(), button -> cycleMode())
                 .bounds(x, 38, leftWidth, 20).build());
-        typeButton = addRenderableWidget(Button.builder(typeLabel(), button -> cycleType())
+        typeButton = addRenderableWidget(Button.builder(typeLabel(), button -> chooseType())
                 .bounds(rightX, 38, rightWidth, 20).build());
 
         int chooseWidth = Math.min(82, Math.max(58, rightWidth / 3));
@@ -70,12 +71,12 @@ public final class TalentRequirementsScreen extends Screen {
                         Component.translatable("screen.talent_editor.requirements.choose"), button -> openPicker())
                 .bounds(rightX + rightWidth - chooseWidth, 81, chooseWidth, 20).build());
 
-        amountField = new EditBox(font, rightX, 124, rightWidth - 96, 20,
+        amountField = new EditBox(font, rightX + 96, 124, rightWidth - 96, 20,
                 Component.translatable("screen.talent_editor.requirements.amount"));
         amountField.setMaxLength(16);
         addRenderableWidget(amountField);
-        operatorButton = addRenderableWidget(Button.builder(Component.empty(), button -> cycleOperator())
-                .bounds(rightX + rightWidth - 90, 124, 90, 20).build());
+        operatorButton = addRenderableWidget(Button.builder(Component.empty(), button -> chooseOperator())
+                .bounds(rightX, 124, 90, 20).build());
 
         int actionY = height - 52;
         addButton = addRenderableWidget(Button.builder(
@@ -102,21 +103,23 @@ public final class TalentRequirementsScreen extends Screen {
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics);
-        super.render(graphics, mouseX, mouseY, partialTick);
         int formWidth = Math.min(650, width - 32);
         int x = (width - formWidth) / 2;
         int gap = 12;
         int leftWidth = Math.max(120, (formWidth - gap) * 52 / 100);
         int rightX = x + leftWidth + gap;
         int rightWidth = formWidth - leftWidth - gap;
-        graphics.drawCenteredString(font, title, width / 2, 12, 0xFFFFFF);
+        EditorTheme.panel(graphics, x - 7, 30, leftWidth + 14, Math.max(160, height - 91));
+        EditorTheme.panel(graphics, rightX - 7, 30, rightWidth + 14, Math.max(160, height - 91));
+        super.render(graphics, mouseX, mouseY, partialTick);
+        graphics.drawCenteredString(font, title, width / 2, 12, EditorTheme.TEXT);
         graphics.drawString(font, Component.translatable("screen.talent_editor.requirements.list", rows.size()),
-                x, 65, 0xA0A0A0, false);
-        graphics.drawString(font, targetLabel(), rightX, 70, 0xA0A0A0, false);
+                x, 65, EditorTheme.MUTED, false);
+        graphics.drawString(font, targetLabel(), rightX, 70, EditorTheme.MUTED, false);
         TalentDraft.RequirementRow current = selectedRow();
         if (current != null && current.type() != TalentDraft.RequirementType.TALENT) {
             graphics.drawString(font, Component.translatable("screen.talent_editor.requirements.amount"),
-                    rightX, 113, 0xA0A0A0, false);
+                    rightX, 113, EditorTheme.MUTED, false);
         }
         TalentDraft.RequirementRow diagnosticRow = selectedRow();
         if (diagnosticRow != null) {
@@ -135,6 +138,7 @@ public final class TalentRequirementsScreen extends Screen {
             graphics.drawString(font, font.plainSubstrByWidth(status, rightWidth), rightX,
                     height - 47, editable ? 0xFF7777 : 0xFFAA55, false);
         }
+        options.render(graphics, font, width, height);
     }
 
     private void renderRows(GuiGraphics graphics, int mouseX, int mouseY, int x, int width) {
@@ -167,6 +171,7 @@ public final class TalentRequirementsScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (options.mouseClicked(mouseX, mouseY, button, width, height)) return true;
         if (button == 0) {
             int formWidth = Math.min(650, width - 32);
             int x = (width - formWidth) / 2;
@@ -186,6 +191,7 @@ public final class TalentRequirementsScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        if (options.mouseScrolled(delta, height)) return true;
         int visible = Math.max(1, (height - 62 - 80) / ROW_HEIGHT);
         scroll = Math.max(0, Math.min(
                 scroll - (int) Math.signum(delta) * 3,
@@ -226,11 +232,18 @@ public final class TalentRequirementsScreen extends Screen {
         modeButton.setMessage(modeLabel());
     }
 
-    private void cycleType() {
+    private void chooseType() {
         if (!editable || selectedRow() == null || !flushSelected()) return;
+        TalentDraft.RequirementType[] values = TalentDraft.RequirementType.values();
+        options.open(Component.translatable("screen.talent_editor.option.choose"),
+                java.util.Arrays.stream(values).map(type -> Component.translatable(typeKey(type))).toList(),
+                selectedRow().type().ordinal(), this::selectType, height);
+    }
+
+    private void selectType(int index) {
         TalentDraft.RequirementRow old = rows.get(selected);
         TalentDraft.RequirementType[] values = TalentDraft.RequirementType.values();
-        TalentDraft.RequirementType next = values[(old.type().ordinal() + 1) % values.length];
+        TalentDraft.RequirementType next = values[index];
         long amount = next == TalentDraft.RequirementType.TALENT ? 1L : Math.max(1L, old.amount());
         ResourceLocation target = next == TalentDraft.RequirementType.ATTRIBUTE
                 ? new ResourceLocation("minecraft", "generic.attack_speed") : old.target();
@@ -239,15 +252,30 @@ public final class TalentRequirementsScreen extends Screen {
         syncWidgets();
     }
 
-    private void cycleOperator() {
+    private void chooseOperator() {
         TalentDraft.RequirementRow row = selectedRow();
         if (!editable || row == null || row.type() != TalentDraft.RequirementType.ATTRIBUTE
                 || !flushSelected()) return;
-        row = selectedRow();
-        int index = OPERATORS.indexOf(row.operator());
+        options.open(Component.translatable("screen.talent_editor.option.choose"),
+                OPERATORS.stream().map(value -> Component.translatable(
+                        "screen.talent_editor.expression_condition.operator_help." + value)).toList(),
+                Math.max(0, OPERATORS.indexOf(selectedRow().operator())), this::selectOperator, height);
+    }
+
+    private void selectOperator(int index) {
+        TalentDraft.RequirementRow row = selectedRow();
         rows.set(selected, new TalentDraft.RequirementRow(row.type(), row.target(), row.amount(),
-                OPERATORS.get((index + 1) % OPERATORS.size()), row.attributeValue()));
+                OPERATORS.get(index), row.attributeValue()));
         syncWidgets();
+    }
+
+    @Override public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (options.keyPressed(keyCode, height)) return true;
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    @Override public boolean charTyped(char codePoint, int modifiers) {
+        return options.isOpen() || super.charTyped(codePoint, modifiers);
     }
 
     private boolean flushSelected() {
@@ -302,8 +330,8 @@ public final class TalentRequirementsScreen extends Screen {
         chooseButton.active = selectedEditable;
         amountField.active = selectedEditable && row.type() != TalentDraft.RequirementType.TALENT;
         amountField.visible = row != null && row.type() != TalentDraft.RequirementType.TALENT;
-        operatorButton.visible = row != null && row.type() == TalentDraft.RequirementType.ATTRIBUTE;
-        operatorButton.active = selectedEditable;
+        operatorButton.visible = row != null && row.type() != TalentDraft.RequirementType.TALENT;
+        operatorButton.active = selectedEditable && row.type() == TalentDraft.RequirementType.ATTRIBUTE;
         addButton.active = editable && rows.size() < MAX_ROWS;
         removeButton.active = selectedEditable;
         applyButton.active = editable;
@@ -316,8 +344,9 @@ public final class TalentRequirementsScreen extends Screen {
             targetField.setValue(row.target().toString());
             amountField.setValue(row.type() == TalentDraft.RequirementType.ATTRIBUTE
                     ? Double.toString(row.attributeValue()) : Long.toString(row.amount()));
-            operatorButton.setMessage(Component.translatable(
-                    "screen.talent_editor.expression_condition.operator_help." + row.operator()));
+            operatorButton.setMessage(Component.translatable(row.type() == TalentDraft.RequirementType.ATTRIBUTE
+                    ? "screen.talent_editor.requirements.operator_short." + row.operator()
+                    : "screen.talent_editor.requirements.operator_fixed"));
         }
     }
 

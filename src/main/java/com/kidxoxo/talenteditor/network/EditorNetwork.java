@@ -44,7 +44,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 
 public final class EditorNetwork {
-    private static final String PROTOCOL = "39";
+    private static final String PROTOCOL = "42";
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final int MAX_CATALOG_ENTRIES = 10_000;
     private static final int MAX_POOL_ENTRIES = 2_048;
@@ -298,6 +298,16 @@ public final class EditorNetwork {
                 .decoder(SynthesisSoundPacket::decode)
                 .consumerMainThread(SynthesisSoundPacket::handle)
                 .add();
+        CHANNEL.messageBuilder(ParticleWavePacket.class, nextMessageId++, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(ParticleWavePacket::encode)
+                .decoder(ParticleWavePacket::decode)
+                .consumerMainThread(ParticleWavePacket::handle)
+                .add();
+        CHANNEL.messageBuilder(PresentationTransformPacket.class, nextMessageId++, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(PresentationTransformPacket::encode)
+                .decoder(PresentationTransformPacket::decode)
+                .consumerMainThread(PresentationTransformPacket::handle)
+                .add();
         CHANNEL.messageBuilder(ItemSubmissionOpenPacket.class, nextMessageId++, NetworkDirection.PLAY_TO_CLIENT)
                 .encoder(ItemSubmissionOpenPacket::encode)
                 .decoder(ItemSubmissionOpenPacket::decode)
@@ -471,6 +481,14 @@ public final class EditorNetwork {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new SynthesisSoundPacket(
                 action.sound(), action.source(), action.volume(), action.pitch(), overlapPolicy
         ));
+    }
+
+    public static void sendParticleWave(ServerPlayer player, ParticleWavePacket packet) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), packet);
+    }
+
+    public static void sendPresentationTransform(ServerPlayer subject, PresentationTransformPacket packet) {
+        CHANNEL.send(PacketDistributor.TRACKING_ENTITY_AND_SELF.with(() -> subject), packet);
     }
 
     public static void sendBootstrap(ServerPlayer player, boolean openScreen) {

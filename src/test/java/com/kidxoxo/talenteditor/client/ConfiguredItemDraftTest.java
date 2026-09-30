@@ -12,6 +12,31 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ConfiguredItemDraftTest {
     @Test
+    void editsEventRulesAndEquipmentScopeWithoutLosingActions() {
+        ConfiguredItemDraft draft = ConfiguredItemDraft.parse("""
+                {"schema":2,"name":"Sword","triggers":[
+                  {"id":"damage","event":"damage_dealt","futureFlag":7,"actions":[
+                    {"type":"modify_damage_expression","operation":"multiply","expression":"3"}
+                  ]}
+                ]}
+                """);
+        JsonObject trigger = draft.triggers().get(0);
+        trigger.addProperty("chance", 0.75);
+        draft.replaceTriggers(List.of(trigger));
+        JsonObject output = JsonParser.parseString(draft.toJson(
+                "Sword", "", true, 42, false, false, true, List.of("charm"), List.of()
+        )).getAsJsonObject();
+        assertFalse(output.get("curiosEquippable").getAsBoolean());
+        assertTrue(output.get("mainhandOnly").getAsBoolean());
+        assertEquals("charm", output.getAsJsonArray("curiosSlots").get(0).getAsString());
+        JsonObject restored = output.getAsJsonArray("triggers").get(0).getAsJsonObject();
+        assertEquals(7, restored.get("futureFlag").getAsInt());
+        assertEquals(0.75, restored.get("chance").getAsDouble());
+        assertEquals("3", restored.getAsJsonArray("actions").get(0).getAsJsonObject()
+                .get("expression").getAsString());
+    }
+
+    @Test
     void editsVisualFieldsWhilePreservingLocalizedStylesAndUnknownData() {
         ConfiguredItemDraft draft = ConfiguredItemDraft.parse("""
                 {
@@ -158,7 +183,7 @@ class ConfiguredItemDraftTest {
                 """);
         var modifier = draft.attributeModifiers().get(0).withValues(
                 new net.minecraft.resources.ResourceLocation("minecraft", "generic.attack_damage"),
-                0.25D, "multiply_total", "mainhand", "damage"
+                0.25D, "multiply_total", List.of("mainhand", "offhand", "curios"), "damage"
         );
         draft.replaceAttributeModifiers(List.of(modifier));
 
@@ -169,7 +194,9 @@ class ConfiguredItemDraftTest {
         assertEquals("minecraft:generic.attack_damage", serialized.get("attribute").getAsString());
         assertEquals(0.25D, serialized.get("amount").getAsDouble());
         assertEquals("multiply_total", serialized.get("operation").getAsString());
-        assertEquals("mainhand", serialized.get("slot").getAsString());
+        assertFalse(serialized.has("slot"));
+        assertEquals(List.of("mainhand", "offhand", "curios"),
+                serialized.getAsJsonArray("slots").asList().stream().map(element -> element.getAsString()).toList());
         assertEquals("damage", serialized.get("modifierKey").getAsString());
         assertEquals("minecraft:the_end", serialized.getAsJsonObject("futurePredicate")
                 .get("dimension").getAsString());

@@ -166,7 +166,7 @@ public record PlayerTalentState(
         public RenderView {
             if (!Double.isFinite(alpha)) alpha = 1.0D;
             if (!Double.isFinite(scale)) scale = 1.0D;
-            alpha = Math.max(0.05D, Math.min(1.0D, alpha));
+            alpha = Math.max(0.0D, Math.min(1.0D, alpha));
             scale = Math.max(0.1D, Math.min(4.0D, scale));
         }
     }

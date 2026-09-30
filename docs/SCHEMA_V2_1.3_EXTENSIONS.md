@@ -100,3 +100,36 @@
 ## 7. 检索结果占位
 
 `queue_draw_constraint` 的每条待用检索按队列顺序占据下一次新抽取或刷新中的结果格位，`guaranteed` 指该条检索最多占据的格数。已占满抽取池的 `choices` 格时，后续检索返回失败，不改变已排队的约束或成功计数；特别是 `replace` 也不能覆盖满格队列。若当前没有符合筛选条件的可抽取天赋，则该格会按普通规则补齐。
+
+## 粒子动画动作
+
+`spawn_particles` is available in trigger actions and in `onAcquire`, `onSynthesize`, and `onRemove`.
+The visual editor has **Add particles** in each of these action lists. Its picker searches the
+client's registered simple particle types by full namespace ID, and Preview emits one local wave.
+Saving a definition also validates the server's particle registry. A matching
+`assets/<mod>/particles/*.json` file alone does not register a particle type. Missing mod IDs and
+unregistered or parameterized particle types are rejected with an explicit validation issue.
+
+```json
+{
+  "type": "spawn_particles",
+  "particle": "minecraft:end_rod",
+  "anchor": "body",
+  "motion": "inward",
+  "count": 12,
+  "radius": 1.3,
+  "speed": 0.075,
+  "durationTicks": 12,
+  "intervalTicks": 3,
+  "viewDistance": 24,
+  "cooldownTicks": 10
+}
+```
+
+`anchor` is `feet`, `body`, or `head`; `motion` is `burst`, `inward`, or `outward`.
+The limits are 1–32 particles per wave, radius 0–4 blocks, speed 0–0.3,
+duration 1–60 ticks, wave interval 1–20 ticks, viewing distance 4–64 blocks,
+and cooldown 0–1200 ticks. An animation may emit at most 256 particles.
+The runtime also limits simultaneous animations to eight per player and 128 per server.
+For a high-frequency counter trigger, set a trigger cooldown as well as the action cooldown.
+Only viewers within `viewDistance` in the same dimension receive the particle packets.

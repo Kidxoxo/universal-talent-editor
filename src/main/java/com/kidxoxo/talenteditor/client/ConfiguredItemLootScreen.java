@@ -35,6 +35,7 @@ public final class ConfiguredItemLootScreen extends Screen {
     private Button conditionsButton;
     private int tableMatchIndex;
     private String status = "";
+    private final EditorOptionPopup options = new EditorOptionPopup();
 
     public ConfiguredItemLootScreen(
             ConfiguredItemEditScreen parent,
@@ -54,7 +55,7 @@ public final class ConfiguredItemLootScreen extends Screen {
         int x = (width - formWidth) / 2;
         int matchWidth = Math.min(120, Math.max(80, formWidth / 3));
         int matchGap = 6;
-        tableMatchButton = addRenderableWidget(Button.builder(Component.empty(), button -> cycleTableMatch())
+        tableMatchButton = addRenderableWidget(Button.builder(Component.empty(), button -> chooseTableMatch())
                 .bounds(x, 43, matchWidth, 20).build());
         tableField = field(x + matchWidth + matchGap, 43,
                 formWidth - matchWidth - matchGap, ConfiguredItemLootRule.MAX_TABLE_EXPRESSION_LENGTH);
@@ -103,9 +104,10 @@ public final class ConfiguredItemLootScreen extends Screen {
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics);
-        super.render(graphics, mouseX, mouseY, partialTick);
         int formWidth = Math.min(560, width - 32);
         int x = (width - formWidth) / 2;
+        EditorTheme.panel(graphics, x - 8, 25, formWidth + 16, 190);
+        super.render(graphics, mouseX, mouseY, partialTick);
         int gap = 6;
         int third = (formWidth - gap * 2) / 3;
         int matchWidth = Math.min(120, Math.max(80, formWidth / 3));
@@ -127,6 +129,23 @@ public final class ConfiguredItemLootScreen extends Screen {
             graphics.drawString(font, font.plainSubstrByWidth(status, formWidth), x,
                     195, 0xFF7777, false);
         }
+        options.render(graphics, font, width, height);
+    }
+
+    @Override public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (options.mouseClicked(mouseX, mouseY, button, width, height)) return true;
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+    @Override public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        if (options.mouseScrolled(delta, height)) return true;
+        return super.mouseScrolled(mouseX, mouseY, delta);
+    }
+    @Override public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (options.keyPressed(keyCode, height)) return true;
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+    @Override public boolean charTyped(char codePoint, int modifiers) {
+        return options.isOpen() || super.charTyped(codePoint, modifiers);
     }
 
     private void label(GuiGraphics graphics, String key, int x, int y) {
@@ -154,10 +173,15 @@ public final class ConfiguredItemLootScreen extends Screen {
         loadSelected();
     }
 
-    private void cycleTableMatch() {
-        tableMatchIndex = (tableMatchIndex + 1) % TABLE_MATCHES.size();
-        updateTableMatchLabel();
-        status = "";
+    private void chooseTableMatch() {
+        options.open(Component.translatable("screen.talent_editor.option.choose"),
+                TABLE_MATCHES.stream().map(value -> Component.translatable(
+                        "screen.talent_editor.configured_item.loot.match." + value.serializedName())).toList(),
+                tableMatchIndex, index -> {
+                    tableMatchIndex = index;
+                    updateTableMatchLabel();
+                    status = "";
+                }, height);
     }
 
     private void deleteRule() {

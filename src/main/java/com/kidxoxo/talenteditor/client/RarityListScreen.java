@@ -22,6 +22,7 @@ public final class RarityListScreen extends Screen {
     private String selectedSource = "";
     private int scroll;
     private String status = "";
+    private final EditorOptionPopup options = new EditorOptionPopup();
 
     public RarityListScreen(EditorBootstrap bootstrap) {
         super(Component.translatable("screen.talent_editor.rarity_list.title"));
@@ -43,9 +44,9 @@ public final class RarityListScreen extends Screen {
         search.setHint(Component.translatable("screen.talent_editor.filter.search"));
         search.setResponder(ignored -> scroll = 0);
         addRenderableWidget(search);
-        stateButton = addRenderableWidget(Button.builder(stateLabel(), button -> cycleState())
+        stateButton = addRenderableWidget(Button.builder(stateLabel(), button -> chooseState())
                 .bounds(stateX, 38, stateWidth, 20).build());
-        sourceButton = addRenderableWidget(Button.builder(sourceLabel(), button -> cycleSource())
+        sourceButton = addRenderableWidget(Button.builder(sourceLabel(), button -> chooseSource())
                 .bounds(sourceX, 38, sourceWidth, 20).build());
         addRenderableWidget(Button.builder(Component.translatable("gui.back"), button -> returnHome())
                 .bounds(width - 86, height - 28, 70, 20).build());
@@ -86,10 +87,12 @@ public final class RarityListScreen extends Screen {
             graphics.drawString(font, font.plainSubstrByWidth(status, width - 112),
                     16, height - 24, 0xA0A0A0, false);
         }
+        options.render(graphics, font, width, height);
     }
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (options.mouseClicked(mouseX, mouseY, button, width, height)) return true;
         if (button == 0 && mouseX >= 12 && mouseX < width - 12 && mouseY >= 83 && mouseY < height - 39) {
             int index = scroll + (int) ((mouseY - 83) / ROW_HEIGHT);
             List<EditorBootstrap.RaritySummary> rarities = filteredRarities();
@@ -104,6 +107,7 @@ public final class RarityListScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        if (options.mouseScrolled(delta, height)) return true;
         int rows = Math.max(1, (height - 83 - 39) / ROW_HEIGHT);
         scroll = clamp(scroll - (int) Math.signum(delta) * 3, filteredRarities().size(), rows);
         return true;
@@ -121,16 +125,28 @@ public final class RarityListScreen extends Screen {
         );
     }
 
-    private void cycleState() {
-        filterState = filterState.next(false);
-        scroll = 0;
-        stateButton.setMessage(stateLabel());
+    private void chooseState() {
+        DefinitionListFilter.chooseState(options, filterState, false, height, value -> {
+            filterState = value;
+            scroll = 0;
+            stateButton.setMessage(stateLabel());
+        });
     }
 
-    private void cycleSource() {
-        selectedSource = DefinitionListFilter.nextSource(selectedSource, sources);
-        scroll = 0;
-        sourceButton.setMessage(sourceLabel());
+    private void chooseSource() {
+        DefinitionListFilter.chooseSource(options, selectedSource, sources, height, value -> {
+            selectedSource = value;
+            scroll = 0;
+            sourceButton.setMessage(sourceLabel());
+        });
+    }
+
+    @Override public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (options.keyPressed(keyCode, height)) return true;
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+    @Override public boolean charTyped(char codePoint, int modifiers) {
+        return options.isOpen() || super.charTyped(codePoint, modifiers);
     }
 
     private Component stateLabel() {

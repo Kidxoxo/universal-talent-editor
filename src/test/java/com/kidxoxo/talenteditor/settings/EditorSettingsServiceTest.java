@@ -5,6 +5,7 @@ import com.kidxoxo.talenteditor.compile.RawDefinitionSet;
 import com.google.gson.JsonParser;
 import net.minecraft.resources.ResourceLocation;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
@@ -130,6 +131,21 @@ class EditorSettingsServiceTest {
         assertThrows(java.io.IOException.class,
                 () -> EditorSettingsService.extractImportArchive(traversal, rejected));
         assertFalse(Files.exists(temporaryDirectory.resolve("escaped.json")));
+    }
+
+    @Test
+    void releaseArchiveUsesTheCurrentOneClickImportFormat() throws Exception {
+        String releaseArchive = System.getenv("TALENT_EDITOR_RELEASE_ARCHIVE");
+        Assumptions.assumeTrue(releaseArchive != null && !releaseArchive.isBlank());
+        Path staging = temporaryDirectory.resolve("release");
+        Files.createDirectory(staging);
+        EditorSettingsService.extractImportArchive(Path.of(releaseArchive), staging);
+        Path data = staging.resolve("datapacks/talent_editor_generated");
+        var imported = EditorSettingsService.readImportedDefinitions(data);
+        assertEquals(77, imported.talents().size());
+        assertEquals(5, imported.configuredItems().size());
+        assertTrue(Files.isRegularFile(staging.resolve(
+                "resourcepacks/talent_editor_generated/assets/ripples_talents/sounds/synthesis/talent_039.ogg")));
     }
 
     private static void put(ZipOutputStream zip, String name, String text) throws Exception {

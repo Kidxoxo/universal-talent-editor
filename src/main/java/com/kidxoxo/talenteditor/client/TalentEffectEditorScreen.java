@@ -26,6 +26,7 @@ public final class TalentEffectEditorScreen extends Screen {
     private Button applyButton;
     private Button removeButton;
     private Button gateButton;
+    private final EditorOptionPopup options = new EditorOptionPopup();
     private String status = "";
     private int statusColor = EditorTheme.MUTED;
 
@@ -58,7 +59,7 @@ public final class TalentEffectEditorScreen extends Screen {
                 Component.translatable("screen.talent_editor.form.amount"));
         amountField.setMaxLength(48);
         addRenderableWidget(amountField);
-        operationButton = addRenderableWidget(Button.builder(operationLabel(), button -> cycleOperation())
+        operationButton = addRenderableWidget(Button.builder(operationLabel(), button -> chooseOperation())
                 .bounds(x + half + gap, detailY, formWidth - half - gap, 20).build());
 
         int bottom = height - 28;
@@ -94,6 +95,7 @@ public final class TalentEffectEditorScreen extends Screen {
             graphics.drawString(font, font.plainSubstrByWidth(status, formWidth), x, height - 55,
                     statusColor, false);
         }
+        options.render(graphics, font, width, height);
     }
 
     private void renderRows(GuiGraphics graphics, int mouseX, int mouseY, int x, int formWidth) {
@@ -123,6 +125,7 @@ public final class TalentEffectEditorScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (options.mouseClicked(mouseX, mouseY, button, width, height)) return true;
         if (button == 0) {
             int formWidth = Math.min(700, width - 32);
             int x = (width - formWidth) / 2;
@@ -143,6 +146,7 @@ public final class TalentEffectEditorScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        if (options.mouseScrolled(delta, height)) return true;
         int visible = Math.max(1, (height - 96 - 84) / ROW_HEIGHT);
         scroll = Math.max(0, Math.min(scroll - (int) Math.signum(delta) * 3,
                 Math.max(0, rows().size() - visible)));
@@ -270,9 +274,23 @@ public final class TalentEffectEditorScreen extends Screen {
         return rows().stream().filter(row -> row.rawIndex() == selectedRawIndex).findFirst().orElse(null);
     }
 
-    private void cycleOperation() {
-        operationIndex = (operationIndex + 1) % OPERATIONS.size();
-        operationButton.setMessage(operationLabel());
+    private void chooseOperation() {
+        options.open(Component.translatable("screen.talent_editor.option.choose"),
+                OPERATIONS.stream().map(value -> Component.translatable(
+                        "screen.talent_editor.operation." + value)).toList(),
+                operationIndex, index -> {
+                    operationIndex = index;
+                    operationButton.setMessage(operationLabel());
+                }, height);
+    }
+
+    @Override public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (options.keyPressed(keyCode, height)) return true;
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    @Override public boolean charTyped(char codePoint, int modifiers) {
+        return options.isOpen() || super.charTyped(codePoint, modifiers);
     }
 
     private Component operationLabel() {

@@ -11,6 +11,7 @@ public sealed interface CompiledAction permits
         AffectHealthExpressionAction, ModifyAttributeBaseExpressionAction,
         TimedAttributeModifierAction, GrantTalentAction, RevokeTalentAction,
         GiveItemAction, GiveDrawTokensAction, ModifyCounterAction, TakeItemAction,
-        HudResourceAction, PlayerRenderAction, OpenItemSubmissionAction, ConditionalAction {
+        HudResourceAction, PlayerRenderAction, OpenItemSubmissionAction, SpawnParticlesAction,
+        PresentationTransformAction, ConditionalAction {
     ResourceLocation type();
 }

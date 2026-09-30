@@ -81,7 +81,8 @@ public final class TalentDraft {
             "modify_state", "modify_damage_expression", "affect_health_expression",
             "modify_attribute_base_expression", "timed_attribute_modifier", "grant_talent",
             "revoke_talent", "give_item", "give_draw_tokens", "modify_counter", "take_item",
-            "hud_resource", "player_render", "open_item_submission"
+            "hud_resource", "player_render", "open_item_submission", "spawn_particles",
+            "presentation_transform"
     );
     private static final Set<String> ACTIVE_ADVANCED_ACTION_TYPES = Set.of(
             "hud_resource", "player_render"
@@ -139,6 +140,8 @@ public final class TalentDraft {
         if (!parsed.isJsonObject()) throw new IllegalArgumentException("Talent root must be an object");
         return new TalentDraft(parsed.getAsJsonObject());
     }
+
+    public TalentDraft copy() { return new TalentDraft(root); }
 
     public LifecycleDraft lifecycle() {
         JsonObject lifecycle = object(root, "lifecycle");
@@ -572,9 +575,7 @@ public final class TalentDraft {
 
         int presentationCount = presentationActionCount("onAcquire") + presentationActionCount("onSynthesize");
         states.put(EditorSection.PRESENTATION, new EditorSectionState(
-                presentationCount > 0, presentationCount,
-                !presentation(PresentationPhase.ACQUIRE).editable()
-                        || !presentation(PresentationPhase.SYNTHESIZE).editable()
+                presentationCount > 0, presentationCount, false
         ));
 
         OfferDraft offer = offer();
@@ -631,13 +632,11 @@ public final class TalentDraft {
             AdvancedActionLocation location
     ) {
         List<AdvancedActionRow> rows = advancedActionRows(location, -1);
-        long presentationRows = rows.stream().filter(row -> row.type().equals("play_sound")
-                || row.type().equals("show_message")).count();
+        long presentationRows = rows.stream().filter(row -> isPresentationAction(row.type())).count();
         int behaviorCount = (int) Math.max(0L, rows.size() - presentationRows);
         states.put(section, new EditorSectionState(
                 behaviorCount > 0, behaviorCount,
-                rows.stream().anyMatch(row -> !row.editable()
-                        && !row.type().equals("play_sound") && !row.type().equals("show_message"))
+                rows.stream().anyMatch(row -> !row.editable() && !isPresentationAction(row.type()))
         ));
     }
 
@@ -648,9 +647,43 @@ public final class TalentDraft {
         for (JsonElement element : raw.getAsJsonArray()) {
             if (!element.isJsonObject()) continue;
             String actionType = normalizeLocalId(type(element.getAsJsonObject()));
-            if (actionType.equals("play_sound") || actionType.equals("show_message")) count++;
+            if (isPresentationAction(actionType)) count++;
         }
         return count;
+    }
+
+    private static boolean isPresentationAction(String type) {
+        return type.equals("play_sound") || type.equals("show_message") || type.equals("spawn_particles")
+                || type.equals("presentation_transform");
+    }
+
+    public List<AdvancedActionRow> presentationCues(PresentationPhase phase) {
+        AdvancedActionLocation location = phase == PresentationPhase.ACQUIRE
+                ? AdvancedActionLocation.ON_ACQUIRE : AdvancedActionLocation.ON_SYNTHESIZE;
+        return advancedActionRows(location, -1).stream()
+                .filter(row -> isPresentationAction(row.type())).toList();
+    }
+
+    public void movePresentationCue(PresentationPhase phase, int rawIndex, int direction) {
+        List<AdvancedActionRow> cues = presentationCues(phase);
+        int selected = -1;
+        for (int index = 0; index < cues.size(); index++) {
+            if (cues.get(index).rawIndex() == rawIndex) { selected = index; break; }
+        }
+        if (selected < 0 || selected + direction < 0 || selected + direction >= cues.size()) return;
+        int other = cues.get(selected + direction).rawIndex();
+        swapAdvancedActions(phase == PresentationPhase.ACQUIRE
+                ? AdvancedActionLocation.ON_ACQUIRE : AdvancedActionLocation.ON_SYNTHESIZE,
+                -1, rawIndex, other);
+    }
+
+    public void swapAdvancedActions(AdvancedActionLocation location, int triggerRawIndex,
+                                    int firstIndex, int secondIndex) {
+        JsonArray actions = advancedActionArray(location, triggerRawIndex, false);
+        if (firstIndex < 0 || secondIndex < 0 || firstIndex >= actions.size() || secondIndex >= actions.size()) return;
+        JsonElement swap = actions.get(firstIndex);
+        actions.set(firstIndex, actions.get(secondIndex));
+        actions.set(secondIndex, swap);
     }
 
     private boolean hasAdvancedJsonOnlyContent() {

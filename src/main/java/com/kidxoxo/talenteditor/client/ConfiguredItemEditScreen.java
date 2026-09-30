@@ -28,6 +28,9 @@ public final class ConfiguredItemEditScreen extends Screen {
     private long baseRevision;
     private boolean enabled;
     private boolean glint;
+    private boolean curiosEquippable;
+    private List<String> curiosSlots;
+    private boolean mainhandOnly;
     private String idValue;
     private String nameValue;
     private String descriptionValue;
@@ -39,6 +42,7 @@ public final class ConfiguredItemEditScreen extends Screen {
     private EditBox modelField;
     private EditBox modsField;
     private Button referencesButton;
+    private Button curiosButton;
     private String localStatus = "";
 
     private ConfiguredItemEditScreen(
@@ -57,6 +61,9 @@ public final class ConfiguredItemEditScreen extends Screen {
         this.baseRevision = bootstrap.revision();
         this.enabled = draft.enabled();
         this.glint = draft.glint();
+        this.curiosEquippable = draft.curiosEquippable();
+        this.curiosSlots = draft.curiosSlots();
+        this.mainhandOnly = draft.mainhandOnly();
         this.idValue = id.toString();
         this.nameValue = draft.name();
         this.descriptionValue = draft.descriptionEditorText();
@@ -80,39 +87,56 @@ public final class ConfiguredItemEditScreen extends Screen {
     protected void init() {
         int formWidth = Math.min(680, width - 32);
         int x = (width - formWidth) / 2;
+        int rowStep = height >= 280 ? 34 : 30;
+        int toggleY = 30 + rowStep * 4;
+        int useY = toggleY + 26;
         idField = field(x, 30, formWidth, idValue, 256, value -> idValue = value);
         idField.setEditable(!existing);
-        nameField = field(x, 58, formWidth, nameValue, 512, value -> nameValue = value);
-        descriptionField = field(x, 86, formWidth, descriptionValue, 4096,
+        nameField = field(x, 30 + rowStep, formWidth, nameValue, 512, value -> nameValue = value);
+        descriptionField = field(x, 30 + rowStep * 2, formWidth, descriptionValue, 4096,
                 value -> descriptionValue = value);
         int gap = 6;
         int half = (formWidth - gap) / 2;
-        modelField = field(x, 114, half, modelValue, 8, value -> modelValue = value);
-        modsField = field(x + half + gap, 114, formWidth - half - gap, modsValue, 2048,
+        modelField = field(x, 30 + rowStep * 3, half, modelValue, 8, value -> modelValue = value);
+        modsField = field(x + half + gap, 30 + rowStep * 3, formWidth - half - gap, modsValue, 2048,
                 value -> modsValue = value);
         int toggleWidth = (formWidth - gap * 3) / 4;
         addRenderableWidget(Button.builder(enabledLabel(), button -> {
             enabled = !enabled;
             button.setMessage(enabledLabel());
             ClientEditorState.clearValidation();
-        }).bounds(x, 142, toggleWidth, 20).build());
+        }).bounds(x, toggleY, toggleWidth, 20).build());
+        addRenderableWidget(Button.builder(attributesLabel(), button -> openAttributeModifiers())
+                .bounds(x + toggleWidth + gap, toggleY, toggleWidth, 20).build());
+        addRenderableWidget(Button.builder(lootLabel(), button -> openLootRules())
+                .bounds(x + (toggleWidth + gap) * 2, toggleY, toggleWidth, 20).build());
+        addRenderableWidget(Button.builder(triggersLabel(), button -> openTriggers())
+                .bounds(x + (toggleWidth + gap) * 3, toggleY,
+                        formWidth - (toggleWidth + gap) * 3, 20).build());
+
+        int secondWidth = (formWidth - gap * 4) / 5;
         addRenderableWidget(Button.builder(glintLabel(), button -> {
             glint = !glint;
             button.setMessage(glintLabel());
             ClientEditorState.clearValidation();
-        }).bounds(x + toggleWidth + gap, 142, toggleWidth, 20).build());
-        addRenderableWidget(Button.builder(attributesLabel(), button -> openAttributeModifiers())
-                .bounds(x + (toggleWidth + gap) * 2, 142, toggleWidth, 20).build());
-        addRenderableWidget(Button.builder(lootLabel(), button -> openLootRules())
-                .bounds(x + (toggleWidth + gap) * 3, 142,
-                        formWidth - (toggleWidth + gap) * 3, 20).build());
+        }).bounds(x, useY, secondWidth, 20).build());
         Button useButton = addRenderableWidget(Button.builder(useLabel(), button -> openUseSettings())
-                .bounds(x, 168, half, 20).build());
+                .bounds(x + secondWidth + gap, useY, secondWidth, 20).build());
         useButton.active = !ConfiguredItem.isSystemDefinitionId(definitionId);
+        curiosButton = addRenderableWidget(Button.builder(curiosLabel(), button -> openCuriosSlots())
+                .bounds(x + (secondWidth + gap) * 2, useY, secondWidth, 20).build());
+        addRenderableWidget(Button.builder(mainhandLabel(), button -> {
+            mainhandOnly = !mainhandOnly;
+            if (mainhandOnly) curiosEquippable = false;
+            button.setMessage(mainhandLabel());
+            curiosButton.setMessage(curiosLabel());
+            ClientEditorState.clearValidation();
+        }).bounds(x + (secondWidth + gap) * 3, useY, secondWidth, 20).build());
         addRenderableWidget(Button.builder(
                         Component.translatable("screen.talent_editor.configured_item.import_icon"),
                         button -> openIconImport())
-                .bounds(x + half + gap, 168, formWidth - half - gap, 20).build());
+                .bounds(x + (secondWidth + gap) * 4, useY,
+                        formWidth - (secondWidth + gap) * 4, 20).build());
 
         int bottomY = height - 28;
         int buttonWidth = Math.max(54, (formWidth - gap * 3) / 4);
@@ -152,20 +176,23 @@ public final class ConfiguredItemEditScreen extends Screen {
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics);
-        super.render(graphics, mouseX, mouseY, partialTick);
         int formWidth = Math.min(680, width - 32);
         int x = (width - formWidth) / 2;
+        EditorTheme.panel(graphics, x - 8, 24, formWidth + 16, 216);
+        super.render(graphics, mouseX, mouseY, partialTick);
         int half = (formWidth - 6) / 2;
+        int rowStep = height >= 280 ? 34 : 30;
         graphics.drawCenteredString(font, title, width / 2, 10, 0xFFFFFF);
         label(graphics, "screen.talent_editor.configured_item.id", x, 19);
-        label(graphics, "screen.talent_editor.configured_item.name", x, 47);
-        label(graphics, "screen.talent_editor.configured_item.description", x, 75);
-        label(graphics, "screen.talent_editor.configured_item.model", x, 103);
-        label(graphics, "screen.talent_editor.configured_item.required_mods", x + half + 6, 103);
+        label(graphics, "screen.talent_editor.configured_item.name", x, 20 + rowStep);
+        label(graphics, "screen.talent_editor.configured_item.description", x, 20 + rowStep * 2);
+        label(graphics, "screen.talent_editor.configured_item.model", x, 20 + rowStep * 3);
+        label(graphics, "screen.talent_editor.configured_item.required_mods", x + half + 6,
+                20 + rowStep * 3);
         if (height >= 280) {
             graphics.drawString(font, font.plainSubstrByWidth(
                     Component.translatable("screen.talent_editor.configured_item.help").getString(), formWidth
-            ), x, 198, 0x808080, false);
+            ), x, 222, 0x808080, false);
         }
         renderResult(graphics, x, formWidth);
     }
@@ -207,7 +234,7 @@ public final class ConfiguredItemEditScreen extends Screen {
         }
         if (!message.isBlank()) {
             graphics.drawString(font, font.plainSubstrByWidth(message, formWidth),
-                    x, height - 47, color, false);
+                    x, height >= 280 ? height - 47 : 200, color, false);
         }
     }
 
@@ -218,6 +245,7 @@ public final class ConfiguredItemEditScreen extends Screen {
         localStatus = Component.translatable("screen.talent_editor.result.waiting").getString();
         EditorNetwork.submitConfiguredItem(baseRevision, values.id(), draft.toJson(
                 values.name(), descriptionField.getValue(), enabled, values.customModelData(), glint,
+                curiosEquippable, mainhandOnly, curiosSlots,
                 values.requiredMods()
         ), commit);
     }
@@ -264,6 +292,47 @@ public final class ConfiguredItemEditScreen extends Screen {
         return Component.translatable(glint
                 ? "screen.talent_editor.configured_item.glint_yes"
                 : "screen.talent_editor.configured_item.glint_no");
+    }
+
+    private Component curiosLabel() {
+        if (!curiosEquippable || mainhandOnly) return Component.translatable("screen.talent_editor.configured_item.curios_no");
+        return curiosSlots.isEmpty()
+                ? Component.translatable("screen.talent_editor.configured_item.curios_any")
+                : Component.translatable("screen.talent_editor.configured_item.curios_count", curiosSlots.size());
+    }
+
+    private void openCuriosSlots() {
+        if (minecraft != null) minecraft.setScreen(new ConfiguredItemCuriosSlotsScreen(
+                this, curiosEquippable, mainhandOnly, curiosSlots));
+    }
+
+    void updateCuriosSlots(boolean enabled, List<String> slots) {
+        curiosEquippable = enabled && !mainhandOnly;
+        curiosSlots = List.copyOf(slots);
+        ClientEditorState.clearValidation();
+        localStatus = "";
+    }
+
+    private Component mainhandLabel() {
+        return Component.translatable(mainhandOnly
+                ? "screen.talent_editor.configured_item.mainhand_only"
+                : "screen.talent_editor.configured_item.any_equipment");
+    }
+
+    private Component triggersLabel() {
+        return Component.translatable("screen.talent_editor.configured_item.triggers_button",
+                draft.triggers().size());
+    }
+
+    private void openTriggers() {
+        if (minecraft != null) minecraft.setScreen(new ConfiguredItemTriggerScreen(this, bootstrap,
+                draft.triggers()));
+    }
+
+    void updateTriggers(List<com.google.gson.JsonObject> triggers) {
+        draft.replaceTriggers(triggers);
+        ClientEditorState.clearValidation();
+        localStatus = "";
     }
 
     private Component lootLabel() {

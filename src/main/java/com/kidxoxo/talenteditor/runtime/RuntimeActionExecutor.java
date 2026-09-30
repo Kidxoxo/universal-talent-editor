@@ -248,6 +248,8 @@ public final class RuntimeActionExecutor {
             return true;
         }
         if (action instanceof TakeItemAction takeItem) return takeItem(owner, takeItem, context);
+        if (action instanceof SpawnParticlesAction particles) return ParticleAnimationService.start(owner, particles);
+        if (action instanceof PresentationTransformAction transform) return PresentationTransformService.start(owner, transform);
         if (action instanceof OpenItemSubmissionAction submission) {
             int count = boundedCount(NumericExpressionRuntime.evaluate(
                     submission.count(), owner, context.eventEntity(), context.eventAmount(),
@@ -273,7 +275,9 @@ public final class RuntimeActionExecutor {
             if (!ActionConditionRuntime.active(action, player, talent)) continue;
             action = ConditionalAction.unwrap(action);
             RandomObservation random = RandomObservation.capture(player, action);
-            boolean changed = action instanceof PlaySoundAction || action instanceof ShowMessageAction
+            boolean changed = PresentationTimelineService.atTick(action) > 0
+                    ? PresentationTimelineService.schedule(player, action, synthesized)
+                    : action instanceof PlaySoundAction || action instanceof ShowMessageAction
                     ? TalentPresentationService.executePresentation(player, action, synthesized)
                     : execute(action, context);
             if (changed) {

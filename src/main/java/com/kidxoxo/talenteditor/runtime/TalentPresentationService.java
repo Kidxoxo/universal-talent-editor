@@ -22,13 +22,17 @@ import java.util.List;
 
 public final class TalentPresentationService {
     public void acquired(ServerPlayer player, TalentDefinition talent, boolean synthesized) {
-        player.sendSystemMessage(net.minecraft.network.chat.Component.translatable(
-                "message.talent_editor.talent_acquired", talent.name().component()
-        ));
+        if (talent.onAcquire().stream().map(com.kidxoxo.talenteditor.domain.ConditionalAction::unwrap)
+                .noneMatch(ShowMessageAction.class::isInstance)) {
+            player.sendSystemMessage(net.minecraft.network.chat.Component.translatable(
+                    "message.talent_editor.talent_acquired", talent.name().component()
+            ));
+        }
         RuntimeActionExecutor.executeLifecycle(player, talent.id(), talent.onAcquire(), synthesized);
         if (synthesized) {
             RuntimeActionExecutor.executeLifecycle(player, talent.id(), talent.onSynthesize(), true);
-            if (talent.onSynthesize().stream().noneMatch(ShowMessageAction.class::isInstance)) {
+            if (talent.onSynthesize().stream().map(com.kidxoxo.talenteditor.domain.ConditionalAction::unwrap)
+                    .noneMatch(ShowMessageAction.class::isInstance)) {
                 showDefaultSynthesisTitle(player, talent);
             }
         }

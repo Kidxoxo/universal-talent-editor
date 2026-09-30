@@ -122,10 +122,11 @@ public final class TalentCompiler {
     );
     private static final Set<String> CONFIGURED_ITEM_FIELDS = Set.of(
             "schema", "enabled", "name", "description", "customModelData", "glint",
-            "attributeModifiers", "use", "triggers", "loot", "requiredMods"
+            "attributeModifiers", "use", "triggers", "loot", "requiredMods", "curiosEquippable",
+            "mainhandOnly", "curiosSlots"
     );
     private static final Set<String> CONFIGURED_ITEM_ATTRIBUTE_FIELDS = Set.of(
-            "attribute", "amount", "operation", "slot", "modifierKey"
+            "attribute", "amount", "operation", "slot", "slots", "modifierKey"
     );
     private static final Set<String> CONFIGURED_ITEM_USE_FIELDS = Set.of(
             "enabled", "cooldownTicks", "consumeCount", "actions"
@@ -243,7 +244,8 @@ public final class TalentCompiler {
         return new CompilationEnvironment(
                 environment.loadedMods(), environment.registeredAttributes(), items,
                 environment.registeredEntityTypes(), environment.registeredMobEffects(),
-                environment.registeredBlocks(), environment.registeredSoundEvents()
+                environment.registeredBlocks(), environment.registeredSoundEvents(),
+                environment.registeredParticles()
         );
     }
 
@@ -274,6 +276,15 @@ public final class TalentCompiler {
                 json, "customModelData", 0, 0, 16_777_215, source, "$", report
         );
         boolean glint = JsonAccess.bool(json, "glint", false, source, "$", report);
+        boolean curiosEquippable = JsonAccess.bool(json, "curiosEquippable", true, source, "$", report);
+        boolean mainhandOnly = JsonAccess.bool(json, "mainhandOnly", false, source, "$", report);
+        List<String> curiosSlots = JsonAccess.stringList(json, "curiosSlots", source, "$", report);
+        if (curiosSlots.size() > 128 || curiosSlots.stream().anyMatch(slot ->
+                !slot.matches("[a-z0-9_.-]{1,64}") || !slot.equals(slot.strip()))
+                || new HashSet<>(curiosSlots).size() != curiosSlots.size()) {
+            report.error("INVALID_CURIOS_SLOTS", source, "$.curiosSlots",
+                    "Curios slots must be distinct lowercase slot identifiers (maximum 128)");
+        }
         List<String> requiredMods = normalizeRequiredMods(
                 JsonAccess.stringList(json, "requiredMods", source, "$", report), source, report
         );
@@ -308,7 +319,7 @@ public final class TalentCompiler {
         return new ConfiguredItemDefinition(
                 id, SCHEMA_VERSION, enabled, name, description, customModelData, glint,
                 attributeModifiers, use, triggers, loot,
-                requiredMods, missingMods.isEmpty(), missingMods
+                requiredMods, missingMods.isEmpty(), missingMods, curiosEquippable, mainhandOnly, curiosSlots
         );
     }
 
@@ -359,15 +370,49 @@ public final class TalentCompiler {
                         "Expected addition, multiply_base, or multiply_total");
                 operation = AttributeOperation.ADDITION;
             }
-            String rawSlot = JsonAccess.string(modifier, "slot", "mainhand", false, source, path, report);
-            ConfiguredItemSlot slot;
-            try {
-                slot = ConfiguredItemSlot.parse(rawSlot);
-            } catch (IllegalArgumentException ex) {
-                report.error("INVALID_EQUIPMENT_SLOT", source, JsonAccess.child(path, "slot"),
-                        "Expected mainhand, offhand, head, chest, legs, or feet");
-                slot = ConfiguredItemSlot.MAINHAND;
+            ArrayList<ConfiguredItemSlot> slots = new ArrayList<>();
+            if (modifier.has("slots")) {
+                if (modifier.has("slot")) {
+                    report.error("CONFLICTING_EQUIPMENT_SLOTS", source, path,
+                            "Use slots or legacy slot, not both");
+                }
+                JsonElement rawSlots = modifier.get("slots");
+                if (!rawSlots.isJsonArray() || rawSlots.getAsJsonArray().isEmpty()
+                        || rawSlots.getAsJsonArray().size() > ConfiguredItemSlot.values().length) {
+                    report.error("INVALID_EQUIPMENT_SLOTS", source, JsonAccess.child(path, "slots"),
+                            "Expected 1-7 equipment slots");
+                } else {
+                    JsonArray slotArray = rawSlots.getAsJsonArray();
+                    for (int slotIndex = 0; slotIndex < slotArray.size(); slotIndex++) {
+                        String slotPath = JsonAccess.child(path, "slots") + "[" + slotIndex + "]";
+                        try {
+                            JsonElement slotElement = slotArray.get(slotIndex);
+                            if (!slotElement.isJsonPrimitive() || !slotElement.getAsJsonPrimitive().isString()) {
+                                throw new IllegalArgumentException();
+                            }
+                            ConfiguredItemSlot parsed = ConfiguredItemSlot.parse(slotElement.getAsString());
+                            if (slots.contains(parsed)) {
+                                report.error("DUPLICATE_EQUIPMENT_SLOT", source, slotPath,
+                                        "Duplicate equipment slot");
+                            } else {
+                                slots.add(parsed);
+                            }
+                        } catch (IllegalArgumentException ex) {
+                            report.error("INVALID_EQUIPMENT_SLOT", source, slotPath,
+                                    "Expected mainhand, offhand, head, chest, legs, feet, or curios");
+                        }
+                    }
+                }
+            } else {
+                String rawSlot = JsonAccess.string(modifier, "slot", "mainhand", false, source, path, report);
+                try {
+                    slots.add(ConfiguredItemSlot.parse(rawSlot));
+                } catch (IllegalArgumentException ex) {
+                    report.error("INVALID_EQUIPMENT_SLOT", source, JsonAccess.child(path, "slot"),
+                            "Expected mainhand, offhand, head, chest, legs, feet, or curios");
+                }
             }
+            if (slots.isEmpty()) slots.add(ConfiguredItemSlot.MAINHAND);
             String modifierKey = JsonAccess.string(
                     modifier, "modifierKey", "modifier_" + index, false, source, path, report
             );
@@ -392,7 +437,7 @@ public final class TalentCompiler {
                 report.warning("ZERO_ATTRIBUTE_MODIFIER", source, JsonAccess.child(path, "amount"),
                         "This attribute modifier has no effect");
             }
-            result.add(new ConfiguredItemAttributeModifier(attribute, amount, operation, slot, modifierKey));
+            result.add(new ConfiguredItemAttributeModifier(attribute, amount, operation, slots, modifierKey));
         }
         return List.copyOf(result);
     }

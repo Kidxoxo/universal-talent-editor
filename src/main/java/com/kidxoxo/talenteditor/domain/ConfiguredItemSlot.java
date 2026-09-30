@@ -10,7 +10,8 @@ public enum ConfiguredItemSlot {
     HEAD(EquipmentSlot.HEAD),
     CHEST(EquipmentSlot.CHEST),
     LEGS(EquipmentSlot.LEGS),
-    FEET(EquipmentSlot.FEET);
+    FEET(EquipmentSlot.FEET),
+    CURIOS(null);
 
     private final EquipmentSlot equipmentSlot;
 

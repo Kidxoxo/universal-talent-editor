@@ -844,4 +844,30 @@ class TalentDraftTest {
         assertEquals("minecraft:ui.toast.challenge_complete", output.getAsJsonArray("onSynthesize")
                 .get(1).getAsJsonObject().get("sound").getAsString());
     }
+
+    @Test
+    void presentationTimelineMovesCuesWithoutChangingBehaviorActions() {
+        TalentDraft draft = TalentDraft.parse("""
+                {"schema":2,"text":{"name":"Ceremony"},"rarity":"talent_editor:common",
+                 "onAcquire":[
+                   {"type":"show_message","mode":"chat","text":{"literal":"First"},"atTick":20},
+                   {"type":"give_draw_tokens","amount":1},
+                   {"type":"spawn_particles","particle":"minecraft:end_rod","atTick":40},
+                   {"type":"play_sound","sound":"minecraft:entity.player.levelup","atTick":60}
+                 ]}
+                """);
+        var cues = draft.presentationCues(TalentDraft.PresentationPhase.ACQUIRE);
+        assertEquals(3, cues.size());
+        var presentation = draft.editorOverview().section(TalentDraft.EditorSection.PRESENTATION);
+        assertEquals(3, presentation.count());
+        assertFalse(presentation.advancedOnly());
+        draft.movePresentationCue(TalentDraft.PresentationPhase.ACQUIRE, cues.get(2).rawIndex(), -1);
+        JsonObject output = JsonParser.parseString(draft.toJson("Ceremony")).getAsJsonObject();
+        assertEquals("give_draw_tokens", output.getAsJsonArray("onAcquire").get(1)
+                .getAsJsonObject().get("type").getAsString());
+        assertEquals("play_sound", output.getAsJsonArray("onAcquire").get(2)
+                .getAsJsonObject().get("type").getAsString());
+        assertEquals("spawn_particles", output.getAsJsonArray("onAcquire").get(3)
+                .getAsJsonObject().get("type").getAsString());
+    }
 }

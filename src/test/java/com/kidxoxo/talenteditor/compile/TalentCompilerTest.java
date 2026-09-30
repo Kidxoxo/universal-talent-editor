@@ -1491,6 +1491,9 @@ class TalentCompilerTest {
                 {
                   "schema":2,
                   "name":"Equipped Relic",
+                  "curiosEquippable":false,
+                  "curiosSlots":["charm"],
+                  "mainhandOnly":true,
                   "triggers":[
                     {"id":"equipped_tick","event":"player_second","actions":[
                       {"type":"timed_attribute_modifier",
@@ -1509,6 +1512,10 @@ class TalentCompilerTest {
         assertFalse(result.report().hasErrors(), () -> result.report().issues().toString());
         var compiled = result.candidate().orElseThrow().configuredItems().get(itemId);
         assertEquals(1, compiled.triggers().size());
+        assertFalse(compiled.curiosEquippable());
+        assertTrue(compiled.mainhandOnly());
+        assertEquals(List.of("charm"), compiled.curiosSlots());
+        assertFalse(compiled.allowsCuriosSlot("charm"));
         assertEquals(itemId, result.candidate().orElseThrow().triggersByEvent()
                 .get(id("talent_editor:player_second")).get(0).talentId());
     }
@@ -1808,10 +1815,13 @@ class TalentCompilerTest {
                   "name":"Swift Relic",
                   "attributeModifiers":[
                     {"attribute":"minecraft:generic.attack_damage","amount":2,
-                     "operation":"addition","slot":"mainhand","modifierKey":"attack"},
+                     "operation":"addition","slots":["mainhand","offhand","curios"],"modifierKey":"attack"},
                     {"attribute":"minecraft:generic.max_health","amount":0.1,
-                     "operation":"multiply_total","slot":"offhand","modifierKey":"health"}
+                     "operation":"multiply_total","slot":"offhand","modifierKey":"health"},
+                    {"attribute":"minecraft:generic.max_health","amount":20,
+                     "operation":"addition","slot":"curios","modifierKey":"curio_health"}
                   ],
+                  "curiosSlots":["charm"],
                   "use":{
                     "enabled":true,"cooldownTicks":40,"consumeCount":1,
                     "actions":[
@@ -1834,13 +1844,44 @@ class TalentCompilerTest {
 
         assertFalse(result.report().hasErrors());
         var compiled = result.candidate().orElseThrow().configuredItems().get(itemId);
-        assertEquals(2, compiled.attributeModifiers().size());
+        assertEquals(3, compiled.attributeModifiers().size());
         assertEquals("mainhand", compiled.attributeModifiers().get(0).slot().serializedName());
+        assertEquals(List.of("mainhand", "offhand", "curios"), compiled.attributeModifiers().get(0)
+                .slots().stream().map(slot -> slot.serializedName()).toList());
+        assertNotEquals(compiled.attributeModifiers().get(0).modifierIdentity(
+                        com.kidxoxo.talenteditor.domain.ConfiguredItemSlot.MAINHAND),
+                compiled.attributeModifiers().get(0).modifierIdentity(
+                        com.kidxoxo.talenteditor.domain.ConfiguredItemSlot.OFFHAND));
         assertEquals("health", compiled.attributeModifiers().get(1).modifierKey());
+        assertEquals("curios", compiled.attributeModifiers().get(2).slot().serializedName());
+        assertTrue(compiled.allowsCuriosSlot("charm"));
+        assertFalse(compiled.allowsCuriosSlot("ring"));
         assertTrue(compiled.use().enabled());
         assertEquals(40, compiled.use().cooldownTicks());
         assertEquals(1, compiled.use().consumeCount());
         assertEquals(3, compiled.use().actions().size());
+    }
+
+    @Test
+    void rejectsEmptyDuplicateAndConflictingConfiguredItemSlots() {
+        JsonObject item = parse("""
+                {"schema":2,"name":"Bad Slots","attributeModifiers":[
+                  {"attribute":"minecraft:generic.max_health","amount":1,
+                   "slots":[],"modifierKey":"empty"},
+                  {"attribute":"minecraft:generic.max_health","amount":1,
+                   "slots":["mainhand","mainhand"],"modifierKey":"duplicate"},
+                  {"attribute":"minecraft:generic.max_health","amount":1,
+                   "slot":"offhand","slots":["curios"],"modifierKey":"conflict"}
+                ]}
+                """);
+        CompilationResult result = compiler.compile(
+                validDefinitions().withConfiguredItem(id("example:bad_slots"), item, "test/items"), environment);
+        assertTrue(result.report().issues().stream().anyMatch(issue ->
+                issue.code().equals("INVALID_EQUIPMENT_SLOTS")));
+        assertTrue(result.report().issues().stream().anyMatch(issue ->
+                issue.code().equals("DUPLICATE_EQUIPMENT_SLOT")));
+        assertTrue(result.report().issues().stream().anyMatch(issue ->
+                issue.code().equals("CONFLICTING_EQUIPMENT_SLOTS")));
     }
 
     @Test

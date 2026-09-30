@@ -54,6 +54,7 @@ public final class ConfiguredItemUseActionScreen extends Screen {
     private EditBox fadeInField;
     private EditBox stayField;
     private EditBox fadeOutField;
+    private final EditorOptionPopup options = new EditorOptionPopup();
     private String status = "";
 
     ConfiguredItemUseActionScreen(
@@ -76,7 +77,7 @@ public final class ConfiguredItemUseActionScreen extends Screen {
         int gap = 6;
         int half = (formWidth - gap) / 2;
         int third = (formWidth - gap * 2) / 3;
-        typeButton = addRenderableWidget(Button.builder(Component.empty(), button -> cycleType())
+        typeButton = addRenderableWidget(Button.builder(Component.empty(), button -> chooseType())
                 .bounds(x, 32, formWidth, 20).build());
         resourceField = field(x, 58, formWidth - 92, 256);
         chooseResourceButton = addRenderableWidget(Button.builder(Component.translatable(
@@ -96,14 +97,12 @@ public final class ConfiguredItemUseActionScreen extends Screen {
             icon = !icon;
             updateWidgets();
         }).bounds(x + (third + gap) * 2, 110, formWidth - (third + gap) * 2, 20).build());
-        soundSourceButton = addRenderableWidget(Button.builder(Component.empty(), button -> {
-            soundSourceIndex = (soundSourceIndex + 1) % SOUND_SOURCES.size();
-            updateWidgets();
-        }).bounds(x, 84, formWidth, 20).build());
+        soundSourceButton = addRenderableWidget(Button.builder(Component.empty(), button -> chooseSoundSource())
+                .bounds(x, 84, formWidth, 20).build());
         volumeField = field(x, 110, half, 16);
         pitchField = field(x + half + gap, 110, formWidth - half - gap, 16);
 
-        messageModeButton = addRenderableWidget(Button.builder(Component.empty(), button -> cycleMessageMode())
+        messageModeButton = addRenderableWidget(Button.builder(Component.empty(), button -> chooseMessageMode())
                 .bounds(x, 58, formWidth, 20).build());
         partButton = addRenderableWidget(Button.builder(Component.empty(), button -> cyclePart())
                 .bounds(x, 84, half, 20).build());
@@ -176,6 +175,23 @@ public final class ConfiguredItemUseActionScreen extends Screen {
             graphics.drawString(font, font.plainSubstrByWidth(status, formWidth),
                     x, 20, 0xFF7777, false);
         }
+        options.render(graphics, font, width, height);
+    }
+
+    @Override public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (options.mouseClicked(mouseX, mouseY, button, width, height)) return true;
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+    @Override public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        if (options.mouseScrolled(delta, height)) return true;
+        return super.mouseScrolled(mouseX, mouseY, delta);
+    }
+    @Override public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (options.keyPressed(keyCode, height)) return true;
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+    @Override public boolean charTyped(char codePoint, int modifiers) {
+        return options.isOpen() || super.charTyped(codePoint, modifiers);
     }
 
     private void label(GuiGraphics graphics, String suffix, int x, int y) {
@@ -242,15 +258,36 @@ public final class ConfiguredItemUseActionScreen extends Screen {
         return true;
     }
 
-    private void cycleType() {
-        int next = (draft.type().ordinal() + 1) % ConfiguredItemDraft.UseActionType.values().length;
-        draft = ConfiguredItemDraft.UseActionDraft.defaults(ConfiguredItemDraft.UseActionType.values()[next]);
+    private void chooseType() {
+        ConfiguredItemDraft.UseActionType[] values = ConfiguredItemDraft.UseActionType.values();
+        options.open(Component.translatable("screen.talent_editor.option.choose"),
+                java.util.Arrays.stream(values).map(value -> Component.translatable(
+                        "screen.talent_editor.configured_item.use.action." + value.serializedName())).toList(),
+                draft.type().ordinal(), index -> selectType(values[index]), height);
+    }
+
+    private void selectType(ConfiguredItemDraft.UseActionType next) {
+        if (next == draft.type()) return;
+        draft = ConfiguredItemDraft.UseActionDraft.defaults(next);
         loadDraft();
     }
 
-    private void cycleMessageMode() {
+    private void chooseSoundSource() {
+        options.open(Component.translatable("screen.talent_editor.option.choose"),
+                SOUND_SOURCES.stream().map(Component::literal).toList(),
+                soundSourceIndex, index -> { soundSourceIndex = index; updateWidgets(); }, height);
+    }
+
+    private void chooseMessageMode() {
         if (!flushPart()) return;
-        messageModeIndex = (messageModeIndex + 1) % MESSAGE_MODES.size();
+        options.open(Component.translatable("screen.talent_editor.option.choose"),
+                MESSAGE_MODES.stream().map(value -> Component.translatable(
+                        "screen.talent_editor.configured_item.use.action.mode." + value)).toList(),
+                messageModeIndex, this::selectMessageMode, height);
+    }
+
+    private void selectMessageMode(int index) {
+        messageModeIndex = index;
         if (!MESSAGE_MODES.get(messageModeIndex).equals("title")) {
             subtitleEnabled = false;
             partIndex = 0;

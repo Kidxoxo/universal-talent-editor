@@ -117,9 +117,10 @@ public final class TalentMetadataScreen extends Screen {
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics);
-        super.render(graphics, mouseX, mouseY, partialTick);
         int formWidth = Math.min(650, width - 32);
         int x = (width - formWidth) / 2;
+        EditorTheme.panel(graphics, x - 8, 27, formWidth + 16, 169);
+        super.render(graphics, mouseX, mouseY, partialTick);
         int capacityWidth = Math.min(130, Math.max(80, formWidth / 4));
         graphics.drawCenteredString(font, title, width / 2, 10, 0xFFFFFF);
         label(graphics, "screen.talent_editor.metadata.categories", x, 59);

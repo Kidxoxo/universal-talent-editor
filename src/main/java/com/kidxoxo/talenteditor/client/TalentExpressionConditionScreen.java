@@ -20,6 +20,7 @@ public final class TalentExpressionConditionScreen extends Screen {
     private EditBox right;
     private int operatorIndex;
     private Button operatorButton;
+    private final EditorOptionPopup options = new EditorOptionPopup();
     private String status = "";
 
     TalentExpressionConditionScreen(Screen returnScreen, TalentEditScreen owner, int triggerRawIndex) {
@@ -38,10 +39,14 @@ public final class TalentExpressionConditionScreen extends Screen {
         int formWidth = Math.min(650, width - 32);
         int x = (width - formWidth) / 2;
         left = field(x, 61, formWidth, current.expression() ? current.left() : "0");
-        operatorButton = addRenderableWidget(Button.builder(operatorLabel(), button -> {
-            operatorIndex = (operatorIndex + 1) % OPERATORS.size();
-            operatorButton.setMessage(operatorLabel());
-        }).bounds(x, 101, formWidth, 20).build());
+        operatorButton = addRenderableWidget(Button.builder(operatorLabel(), button ->
+                options.open(Component.translatable("screen.talent_editor.option.choose"),
+                        OPERATORS.stream().map(value -> Component.translatable(
+                                "screen.talent_editor.expression_condition.operator_help." + value)).toList(),
+                        operatorIndex, index -> {
+                            operatorIndex = index;
+                            operatorButton.setMessage(operatorLabel());
+                        }, height)).bounds(x, 101, formWidth, 20).build());
         right = field(x, 141, formWidth, current.expression() ? current.right() : "0");
         int third = (formWidth - 12) / 3;
         addRenderableWidget(Button.builder(Component.translatable("gui.cancel"), button -> returnParent())
@@ -108,6 +113,26 @@ public final class TalentExpressionConditionScreen extends Screen {
                 x, 185, formWidth, replacingOtherCondition ? 0xFFAA55 : EditorTheme.MUTED);
         if (!status.isBlank()) graphics.drawString(font, font.plainSubstrByWidth(status, formWidth),
                 x, height - 47, 0xFF7777, false);
+        options.render(graphics, font, width, height);
+    }
+
+    @Override public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (options.mouseClicked(mouseX, mouseY, button, width, height)) return true;
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    @Override public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        if (options.mouseScrolled(delta, height)) return true;
+        return super.mouseScrolled(mouseX, mouseY, delta);
+    }
+
+    @Override public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (options.keyPressed(keyCode, height)) return true;
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    @Override public boolean charTyped(char codePoint, int modifiers) {
+        return options.isOpen() || super.charTyped(codePoint, modifiers);
     }
 
     private void label(GuiGraphics graphics, String key, int x, int y) {
@@ -115,6 +140,9 @@ public final class TalentExpressionConditionScreen extends Screen {
                 "screen.talent_editor.expression_condition." + key), x, y, EditorTheme.MUTED, false);
     }
 
-    private void returnParent() { if (minecraft != null) minecraft.setScreen(returnScreen); }
+    private void returnParent() {
+        if (returnScreen instanceof TalentTriggerScreen triggerScreen) triggerScreen.refreshAdvancedChanges();
+        if (minecraft != null) minecraft.setScreen(returnScreen);
+    }
     @Override public void onClose() { returnParent(); }
 }

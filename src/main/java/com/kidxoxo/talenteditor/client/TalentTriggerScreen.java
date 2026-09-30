@@ -30,6 +30,7 @@ public final class TalentTriggerScreen extends Screen {
     private final Screen returnScreen;
     private final TalentDraft working;
     private final EditorBootstrap bootstrap;
+    private final EditorOptionPopup options = new EditorOptionPopup();
     private int selected = -1;
     private int scroll;
     private int eventIndex;
@@ -42,6 +43,7 @@ public final class TalentTriggerScreen extends Screen {
     private int searchQueueModeIndex;
     private int searchMilestoneTargetIndex = TalentDraft.DrawSearchTarget.TAG.ordinal();
     private int pageIndex;
+    private int previousPageIndex;
     private int chanceSourceIndex;
     private int actionFailurePolicyIndex;
     private boolean failureBranch;
@@ -114,11 +116,7 @@ public final class TalentTriggerScreen extends Screen {
     private Button clearSearchSuccessCounterButton;
     private Button searchMilestoneTargetButton;
     private Button chooseSearchMilestoneValueButton;
-    private Button basePageButton;
-    private Button actionPageButton;
-    private Button conditionPageButton;
-    private Button searchPageButton;
-    private Button advancedPageButton;
+    private Button pageButton;
     private Button advancedConditionButton;
     private Button advancedActionsButton;
     private Button advancedFailureButton;
@@ -163,32 +161,15 @@ public final class TalentTriggerScreen extends Screen {
         int half = (rightWidth - 6) / 2;
         int fifth = (rightWidth - 24) / 5;
 
-        int pageWidth = (rightWidth - 24) / 5;
-        basePageButton = addRenderableWidget(Button.builder(Component.translatable(
-                        "screen.talent_editor.trigger.page.base"), button -> switchPage(0))
-                .bounds(right, 32, pageWidth, 20).build());
-        actionPageButton = addRenderableWidget(Button.builder(Component.translatable(
-                        "screen.talent_editor.trigger.page.action"), button -> switchPage(1))
-                .bounds(right + pageWidth + 6, 32, pageWidth, 20).build());
-        conditionPageButton = addRenderableWidget(Button.builder(Component.translatable(
-                        "screen.talent_editor.trigger.page.condition"), button -> switchPage(2))
-                .bounds(right + (pageWidth + 6) * 2, 32,
-                        pageWidth, 20).build());
-        searchPageButton = addRenderableWidget(Button.builder(Component.translatable(
-                        "screen.talent_editor.trigger.page.search"), button -> switchPage(3))
-                .bounds(right + (pageWidth + 6) * 3, 32,
-                        pageWidth, 20).build());
-        advancedPageButton = addRenderableWidget(Button.builder(Component.translatable(
-                        "screen.talent_editor.trigger.page.advanced"), button -> switchPage(4))
-                .bounds(right + (pageWidth + 6) * 4, 32,
-                        rightWidth - (pageWidth + 6) * 4, 20).build());
+        pageButton = addRenderableWidget(Button.builder(Component.empty(), button -> choosePage())
+                .bounds(right, 32, rightWidth, 20).build());
 
         idField = field(right, 63, rightWidth, 64);
         priorityField = field(right, 93, fifth, 8);
         chanceField = field(right + fifth + 6, 93, fifth, 8);
         cooldownField = field(right + (fifth + 6) * 2, 93, fifth, 10);
         activationLimitField = field(right + (fifth + 6) * 3, 93, fifth, 10);
-        eventButton = addRenderableWidget(Button.builder(Component.empty(), button -> cycleEvent())
+        eventButton = addRenderableWidget(Button.builder(Component.empty(), button -> chooseEvent())
                 .bounds(right + (fifth + 6) * 4, 93,
                         rightWidth - (fifth + 6) * 4, 20).build());
         int chanceChooseWidth = Math.min(76, Math.max(46, rightWidth / 4));
@@ -202,7 +183,7 @@ public final class TalentTriggerScreen extends Screen {
         clearChanceAttributeButton = addRenderableWidget(Button.builder(Component.literal("×"),
                         button -> clearChanceAttribute())
                 .bounds(right + chanceAttributeWidth + chanceChooseWidth + 8, 123, 22, 20).build());
-        chanceSourceButton = addRenderableWidget(Button.builder(Component.empty(), button -> cycleChanceSource())
+        chanceSourceButton = addRenderableWidget(Button.builder(Component.empty(), button -> chooseChanceSource())
                 .bounds(right, 153, half, 20).build());
         chancePerPointField = field(right + half + 6, 153, rightWidth - half - 6, 32);
         distanceIntervalField = field(right, 183, rightWidth, 32);
@@ -210,7 +191,7 @@ public final class TalentTriggerScreen extends Screen {
         int branchWidth = Math.min(104, Math.max(62, rightWidth / 3));
         actionBranchButton = addRenderableWidget(Button.builder(Component.empty(), button -> switchActionBranch())
                 .bounds(right, 63, branchWidth, 20).build());
-        actionButton = addRenderableWidget(Button.builder(Component.empty(), button -> cycleAction())
+        actionButton = addRenderableWidget(Button.builder(Component.empty(), button -> chooseAction())
                 .bounds(right + branchWidth + 6, 63, rightWidth - branchWidth - 6, 20).build());
         int actionControlWidth = Math.max(18, (rightWidth - 20) / 6);
         int actionX = right;
@@ -244,9 +225,9 @@ public final class TalentTriggerScreen extends Screen {
         amplifierField = field(right + half + 6, 156, rightWidth - half - 6, 4);
         damageMinimumField = field(right, 186, half, 32);
         damageMaximumField = field(right + half + 6, 186, rightWidth - half - 6, 32);
-        targetButton = addRenderableWidget(Button.builder(Component.empty(), button -> cycleTarget())
+        targetButton = addRenderableWidget(Button.builder(Component.empty(), button -> chooseTarget())
                 .bounds(right, 63, half, 20).build());
-        filterButton = addRenderableWidget(Button.builder(Component.empty(), button -> cycleFilter())
+        filterButton = addRenderableWidget(Button.builder(Component.empty(), button -> chooseFilterType())
                 .bounds(right + half + 6, 63, rightWidth - half - 6, 20).build());
         filterValueField = field(right, 96, rightWidth - 70, 256);
         filterValueField.setEditable(false);
@@ -266,7 +247,7 @@ public final class TalentTriggerScreen extends Screen {
         onceButton = addRenderableWidget(Button.builder(Component.empty(), button -> toggleOnce())
                 .bounds(right + half + 6, 126, rightWidth - half - 6, 20).build());
         entityRadiusField = field(right, 156, rightWidth, 32);
-        searchTargetButton = addRenderableWidget(Button.builder(Component.empty(), button -> cycleSearchTarget())
+        searchTargetButton = addRenderableWidget(Button.builder(Component.empty(), button -> chooseSearchTarget())
                 .bounds(right, 126, half, 20).build());
         searchGuaranteedField = field(right + half + 6, 126, rightWidth - half - 6, 2);
         searchValueField = field(right, 156, rightWidth - 70, 256);
@@ -284,7 +265,7 @@ public final class TalentTriggerScreen extends Screen {
                         button -> clearSearchPool())
                 .bounds(right + searchPoolWidth + 72, 186, rightWidth - searchPoolWidth - 72, 20).build());
 
-        searchQueueModeButton = addRenderableWidget(Button.builder(Component.empty(), button -> cycleSearchQueueMode())
+        searchQueueModeButton = addRenderableWidget(Button.builder(Component.empty(), button -> chooseSearchQueueMode())
                 .bounds(right, 63, rightWidth, 20).build());
         int counterWidth = Math.max(30, rightWidth - 94);
         searchSuccessCounterField = field(right, 93, counterWidth, 256);
@@ -298,7 +279,7 @@ public final class TalentTriggerScreen extends Screen {
         searchSuccessIncrementField = field(right, 123, half, 16);
         searchMilestoneEveryField = field(right + half + 6, 123, rightWidth - half - 6, 16);
         searchMilestoneTargetButton = addRenderableWidget(Button.builder(Component.empty(),
-                        button -> cycleSearchMilestoneTarget())
+                        button -> chooseSearchMilestoneTarget())
                 .bounds(right, 153, half, 20).build());
         searchMilestoneGuaranteedField = field(right + half + 6, 153, rightWidth - half - 6, 2);
         searchMilestoneValueField = field(right, 183, rightWidth - 70, 256);
@@ -307,13 +288,13 @@ public final class TalentTriggerScreen extends Screen {
                 .bounds(right + rightWidth - 64, 183, 64, 20).build());
         advancedConditionButton = addRenderableWidget(Button.builder(Component.translatable(
                         "screen.talent_editor.advanced_trigger.condition"), button -> openAdvancedCondition())
-                .bounds(right, 72, rightWidth, 20).build());
+                .bounds(right, 185, rightWidth, 20).build());
         advancedActionsButton = addRenderableWidget(Button.builder(Component.translatable(
                         "screen.talent_editor.advanced_trigger.actions"), button -> openAdvancedActions(false))
-                .bounds(right, 102, rightWidth, 20).build());
+                .bounds(right, 72, rightWidth, 20).build());
         advancedFailureButton = addRenderableWidget(Button.builder(Component.translatable(
                         "screen.talent_editor.advanced_trigger.failure_actions"), button -> openAdvancedActions(true))
-                .bounds(right, 132, rightWidth, 20).build());
+                .bounds(right, 102, rightWidth, 20).build());
         addTriggerButton = addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.trigger.add"),
                         button -> addTrigger())
                 .bounds(left, height - 56, (listWidth - 6) / 2, 20).build());
@@ -323,7 +304,7 @@ public final class TalentTriggerScreen extends Screen {
                         listWidth - (listWidth - 6) / 2 - 6, 20).build());
 
         int bottom = height - 28;
-        addRenderableWidget(Button.builder(Component.translatable("gui.back"), button -> returnWithoutApplying())
+        addRenderableWidget(Button.builder(Component.translatable("gui.back"), button -> backOnePage())
                 .bounds(left, bottom, (formWidth - 6) / 2, 20).build());
         addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.trigger.apply"),
                         button -> apply())
@@ -352,34 +333,31 @@ public final class TalentTriggerScreen extends Screen {
         super.render(graphics, mouseX, mouseY, partialTick);
         graphics.drawCenteredString(font, title, width / 2, 9, 0xFFFFFF);
         graphics.drawString(font, Component.translatable("screen.talent_editor.trigger.list"), left, 33, 0xA0A0A0, false);
-        int pageWidth = (rightWidth - 24) / 5;
-        int tabX = right + pageIndex * (pageWidth + 6);
-        int tabWidth = pageIndex == 4 ? rightWidth - (pageWidth + 6) * 4 : pageWidth;
-        EditorTheme.selectedTab(graphics, tabX, 32, tabWidth);
+        EditorTheme.selectedTab(graphics, right, 32, rightWidth);
         TalentDraft.TriggerAction action = actions()[actionIndex];
         if (pageIndex == 0) {
-            label(graphics, right, 52, "id");
-            label(graphics, right, 82, "priority_event_limit");
-            label(graphics, right, 112, "chance_attribute");
-            label(graphics, right, 142, "chance_per_point");
+            label(graphics, right, 54, "id");
+            label(graphics, right, 84, "priority_event_limit");
+            label(graphics, right, 114, "chance_attribute");
+            label(graphics, right, 144, "chance_per_point");
             if (EVENTS.get(eventIndex).equals("player_move_distance")) {
-                label(graphics, right, 172, "distance_interval");
+                label(graphics, right, 174, "distance_interval");
             }
         } else if (pageIndex == 1) {
-            label(graphics, right, 52, "action_type");
+            label(graphics, right, 54, "action_type");
             if (action == TalentDraft.TriggerAction.QUEUE_DRAW_CONSTRAINT) {
-                label(graphics, right, 115, "search_target_guaranteed");
-                label(graphics, right, 145, "search_value");
-                label(graphics, right, 175, "search_pool");
+                label(graphics, right, 116, "search_target_guaranteed");
+                label(graphics, right, 147, "search_value");
+                label(graphics, right, 177, "search_pool");
             } else if (action == TalentDraft.TriggerAction.MODIFY_ENTITY_ATTRIBUTE) {
-                label(graphics, right, 115, "attribute");
-                label(graphics, right, 145, "attribute_amount_operation");
-                label(graphics, right, 175, "attribute_minimum_maximum");
+                label(graphics, right, 116, "attribute");
+                label(graphics, right, 147, "attribute_amount_operation");
+                label(graphics, right, 177, "attribute_minimum_maximum");
             } else if (action == TalentDraft.TriggerAction.DAMAGE_ENTITY
                     || action == TalentDraft.TriggerAction.HEAL_ENTITY) {
-                label(graphics, right, 145, "entity_amount");
+                label(graphics, right, 147, "entity_amount");
             } else if (action != TalentDraft.TriggerAction.CANCEL_DAMAGE) {
-                label(graphics, right, action == TalentDraft.TriggerAction.MODIFY_DAMAGE ? 145 : 115,
+                label(graphics, right, action == TalentDraft.TriggerAction.MODIFY_DAMAGE ? 147 : 116,
                         action == TalentDraft.TriggerAction.MODIFY_DAMAGE
                                 ? "damage_amount_operation" : "effect");
             }
@@ -389,28 +367,28 @@ public final class TalentTriggerScreen extends Screen {
                     && action != TalentDraft.TriggerAction.MODIFY_ENTITY_ATTRIBUTE
                     && action != TalentDraft.TriggerAction.DAMAGE_ENTITY
                     && action != TalentDraft.TriggerAction.HEAL_ENTITY) {
-                label(graphics, right, action == TalentDraft.TriggerAction.MODIFY_DAMAGE ? 175 : 145,
+                label(graphics, right, action == TalentDraft.TriggerAction.MODIFY_DAMAGE ? 177 : 147,
                         action == TalentDraft.TriggerAction.MODIFY_DAMAGE
                                 ? "damage_minimum_maximum" : "duration_amplifier");
             }
-            if (action == TalentDraft.TriggerAction.ADD_EFFECT) label(graphics, right, 175, "effect_display");
+            if (action == TalentDraft.TriggerAction.ADD_EFFECT) label(graphics, right, 177, "effect_display");
         } else if (pageIndex == 2) {
-            label(graphics, right, 52, action == TalentDraft.TriggerAction.MODIFY_DAMAGE
+            label(graphics, right, 54, action == TalentDraft.TriggerAction.MODIFY_DAMAGE
                     || action == TalentDraft.TriggerAction.CANCEL_DAMAGE
                     ? "damage_filter" : action == TalentDraft.TriggerAction.QUEUE_DRAW_CONSTRAINT
                     ? "event_filter" : "target_filter");
-            label(graphics, right, 85, "filter_value");
-            label(graphics, right, 115, "failure_policy_once");
-            if (supportsExtendedTarget(action)) label(graphics, right, 145, "nearby_radius");
+            label(graphics, right, 87, "filter_value");
+            label(graphics, right, 117, "failure_policy_once");
+            if (supportsExtendedTarget(action)) label(graphics, right, 147, "nearby_radius");
         } else if (pageIndex == 3) {
-            label(graphics, right, 52, "search_queue_mode");
-            label(graphics, right, 82, "search_success_counter");
-            label(graphics, right, 112, "search_increment_milestone_every");
-            label(graphics, right, 142, "search_milestone_target_guaranteed");
-            label(graphics, right, 172, "search_milestone_value");
+            label(graphics, right, 54, "search_queue_mode");
+            label(graphics, right, 84, "search_success_counter");
+            label(graphics, right, 114, "search_increment_milestone_every");
+            label(graphics, right, 144, "search_milestone_target_guaranteed");
+            label(graphics, right, 174, "search_milestone_value");
         } else {
             graphics.drawWordWrap(font, Component.translatable(
-                    "screen.talent_editor.trigger.advanced_help"), right, 166, rightWidth, EditorTheme.MUTED);
+                    "screen.talent_editor.trigger.advanced_help"), right, 137, rightWidth, EditorTheme.MUTED);
         }
 
         List<TalentDraft.TriggerRow> rows = working.triggerRows();
@@ -431,6 +409,7 @@ public final class TalentTriggerScreen extends Screen {
                 Component.translatable("screen.talent_editor.trigger.empty"), left + 4, 52, 0x808080, false);
         if (!status.isBlank()) graphics.drawCenteredString(font,
                 font.plainSubstrByWidth(status, formWidth), width / 2, 20, 0xFF7777);
+        options.render(graphics, font, width, height);
     }
 
     private void label(GuiGraphics graphics, int x, int y, String suffix) {
@@ -440,6 +419,7 @@ public final class TalentTriggerScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (options.mouseClicked(mouseX, mouseY, button, width, height)) return true;
         if (button == 0) {
             int formWidth = Math.min(760, width - 32);
             int left = (width - formWidth) / 2;
@@ -461,10 +441,20 @@ public final class TalentTriggerScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        if (options.mouseScrolled(delta, height)) return true;
         int rows = Math.max(1, (height - 63 - 50) / ROW_HEIGHT);
         scroll = Math.max(0, Math.min(scroll - (int) Math.signum(delta) * 3,
                 Math.max(0, working.triggerRows().size() - rows)));
         return true;
+    }
+
+    @Override public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (options.keyPressed(keyCode, height)) return true;
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    @Override public boolean charTyped(char codePoint, int modifiers) {
+        return options.isOpen() || super.charTyped(codePoint, modifiers);
     }
 
     private void addTrigger() {
@@ -869,10 +859,27 @@ public final class TalentTriggerScreen extends Screen {
         if (effectField != null) effectField.setValue(selectedEffect.toString());
     }
 
-    private void cycleEvent() { eventIndex = (eventIndex + 1) % EVENTS.size(); updateLabels(); }
-    private void cycleAction() {
+    private void chooseEvent() {
+        options.open(Component.translatable("screen.talent_editor.option.choose"),
+                EVENTS.stream().map(value -> Component.translatable(
+                        "screen.talent_editor.trigger.event." + value)).toList(),
+                eventIndex, index -> { eventIndex = index; updateLabels(); }, height);
+    }
+
+    private void chooseAction() {
         if (activeActions().isEmpty()) return;
-        actionIndex = (actionIndex + 1) % actions().length;
+        TalentDraft.TriggerAction[] choices = actions();
+        options.open(Component.translatable("screen.talent_editor.option.choose"),
+                java.util.Arrays.stream(choices).map(value -> Component.translatable(
+                        "screen.talent_editor.trigger.action."
+                                + value.name().toLowerCase(java.util.Locale.ROOT))).toList(),
+                actionIndex, this::selectAction, height);
+    }
+
+    private void selectAction(int next) {
+        if (activeActions().isEmpty()) return;
+        if (next == actionIndex) return;
+        actionIndex = next;
         TalentDraft.TriggerAction action = actions()[actionIndex];
         if (action == TalentDraft.TriggerAction.MODIFY_ENTITY_ATTRIBUTE) {
             selectedEffect = new ResourceLocation("minecraft", "generic.attack_damage");
@@ -890,19 +897,42 @@ public final class TalentTriggerScreen extends Screen {
         effectField.setValue(selectedEffect.toString());
         updateLabels();
     }
-    private void cycleSearchTarget() {
-        searchTargetIndex = (searchTargetIndex + 1) % TalentDraft.DrawSearchTarget.values().length;
+    private void chooseSearchTarget() {
+        TalentDraft.DrawSearchTarget[] choices = TalentDraft.DrawSearchTarget.values();
+        options.open(Component.translatable("screen.talent_editor.option.choose"),
+                java.util.Arrays.stream(choices).map(value -> Component.translatable(
+                        "screen.talent_editor.trigger.search_target."
+                                + value.name().toLowerCase(java.util.Locale.ROOT))).toList(),
+                searchTargetIndex, index -> selectSearchTarget(index), height);
+    }
+
+    private void selectSearchTarget(int next) {
+        if (next == searchTargetIndex) return;
+        searchTargetIndex = next;
         searchValue = null;
         searchValueField.setValue("");
         updateLabels();
     }
-    private void cycleSearchQueueMode() {
-        searchQueueModeIndex = (searchQueueModeIndex + 1) % SEARCH_QUEUE_MODES.size();
-        updateLabels();
+
+    private void chooseSearchQueueMode() {
+        options.open(Component.translatable("screen.talent_editor.option.choose"),
+                SEARCH_QUEUE_MODES.stream().map(value -> Component.translatable(
+                        "screen.talent_editor.trigger.search_queue_mode." + value)).toList(),
+                searchQueueModeIndex, index -> { searchQueueModeIndex = index; updateLabels(); }, height);
     }
-    private void cycleSearchMilestoneTarget() {
-        searchMilestoneTargetIndex = (searchMilestoneTargetIndex + 1)
-                % TalentDraft.DrawSearchTarget.values().length;
+
+    private void chooseSearchMilestoneTarget() {
+        TalentDraft.DrawSearchTarget[] choices = TalentDraft.DrawSearchTarget.values();
+        options.open(Component.translatable("screen.talent_editor.option.choose"),
+                java.util.Arrays.stream(choices).map(value -> Component.translatable(
+                        "screen.talent_editor.trigger.search_target."
+                                + value.name().toLowerCase(java.util.Locale.ROOT))).toList(),
+                searchMilestoneTargetIndex, index -> selectSearchMilestoneTarget(index), height);
+    }
+
+    private void selectSearchMilestoneTarget(int next) {
+        if (next == searchMilestoneTargetIndex) return;
+        searchMilestoneTargetIndex = next;
         searchMilestoneValue = null;
         searchMilestoneValueField.setValue("");
         updateLabels();
@@ -1018,16 +1048,48 @@ public final class TalentTriggerScreen extends Screen {
     }
     private void switchPage(int next) {
         if (pageIndex == 1 && selected >= 0 && actionButton.active && !storeCurrentAction()) return;
+        if (next == 4 && pageIndex != 4) previousPageIndex = pageIndex;
         pageIndex = Math.max(0, Math.min(4, next));
         updateLabels();
     }
-    private void cycleTarget() {
-        int size = supportsExtendedTarget(actions()[actionIndex]) ? TARGETS.size() : 2;
-        targetIndex = (targetIndex + 1) % size;
-        updateLabels();
+
+    private void choosePage() {
+        List<Integer> pages = new ArrayList<>(List.of(0, 1, 2));
+        if (selected >= 0 && !activeActions().isEmpty()
+                && actions()[actionIndex] == TalentDraft.TriggerAction.QUEUE_DRAW_CONSTRAINT) pages.add(3);
+        pages.add(4);
+        options.open(Component.translatable("screen.talent_editor.option.choose"),
+                pages.stream().map(index -> Component.translatable("screen.talent_editor.trigger.page."
+                        + switch (index) {
+                    case 1 -> "action";
+                    case 2 -> "condition";
+                    case 3 -> "search";
+                    case 4 -> "advanced";
+                    default -> "base";
+                })).toList(), Math.max(0, pages.indexOf(pageIndex)),
+                index -> switchPage(pages.get(index)), height);
     }
-    private void cycleFilter() {
-        filterIndex = (filterIndex + 1) % filters().length;
+
+    private void chooseTarget() {
+        int size = supportsExtendedTarget(actions()[actionIndex]) ? TARGETS.size() : 2;
+        options.open(Component.translatable("screen.talent_editor.option.choose"),
+                TARGETS.subList(0, size).stream().map(value -> Component.translatable(
+                        "screen.talent_editor.trigger.target." + value)).toList(),
+                targetIndex, index -> { targetIndex = index; updateLabels(); }, height);
+    }
+
+    private void chooseFilterType() {
+        TalentDraft.TriggerFilter[] choices = filters();
+        options.open(Component.translatable("screen.talent_editor.option.choose"),
+                java.util.Arrays.stream(choices).map(value -> Component.translatable(
+                        "screen.talent_editor.trigger.filter."
+                                + value.name().toLowerCase(java.util.Locale.ROOT))).toList(),
+                filterIndex, index -> selectFilter(index), height);
+    }
+
+    private void selectFilter(int next) {
+        if (next == filterIndex) return;
+        filterIndex = next;
         filterValue = null;
         filterValueField.setValue("");
         updateLabels();
@@ -1106,7 +1168,14 @@ public final class TalentTriggerScreen extends Screen {
         boolean conditionPage = pageIndex == 2;
         boolean searchPage = pageIndex == 3;
         boolean advancedPage = pageIndex == 4;
-        searchPageButton.active = actionEditable && drawConstraint;
+        pageButton.setMessage(Component.translatable("screen.talent_editor.trigger.page.selected",
+                Component.translatable("screen.talent_editor.trigger.page." + switch (pageIndex) {
+                    case 1 -> "action";
+                    case 2 -> "condition";
+                    case 3 -> "search";
+                    case 4 -> "advanced";
+                    default -> "base";
+                })));
         idField.visible = basePage;
         priorityField.visible = basePage;
         chanceField.visible = basePage;
@@ -1203,7 +1272,7 @@ public final class TalentTriggerScreen extends Screen {
                 && searchSuccessCounter != null && milestoneTag);
         chooseSearchMilestoneValueButton.active = actionButton.active && drawConstraint
                 && searchSuccessCounter != null && !milestoneTag;
-        advancedConditionButton.visible = advancedPage;
+        advancedConditionButton.visible = conditionPage;
         advancedActionsButton.visible = advancedPage;
         advancedFailureButton.visible = advancedPage;
         advancedConditionButton.active = advancedEditable;
@@ -1280,8 +1349,16 @@ public final class TalentTriggerScreen extends Screen {
         updateLabels();
     }
 
-    private void cycleChanceSource() {
-        chanceSourceIndex = (chanceSourceIndex + 1) % CHANCE_SOURCES.size();
+    private void chooseChanceSource() {
+        options.open(Component.translatable("screen.talent_editor.option.choose"),
+                CHANCE_SOURCES.stream().map(value -> Component.translatable(
+                        "screen.talent_editor.trigger.chance_source." + value)).toList(),
+                chanceSourceIndex, index -> selectChanceSource(index), height);
+    }
+
+    private void selectChanceSource(int next) {
+        if (next == chanceSourceIndex) return;
+        chanceSourceIndex = next;
         chanceAttribute = null;
         chanceCounter = null;
         chanceCategory = null;
@@ -1442,7 +1519,7 @@ public final class TalentTriggerScreen extends Screen {
     private void openAdvancedCondition() {
         int rawIndex = applyForAdvancedEditor();
         if (minecraft != null && rawIndex >= 0) {
-            minecraft.setScreen(new TalentExpressionConditionScreen(owner, owner, rawIndex));
+            minecraft.setScreen(new TalentExpressionConditionScreen(this, owner, rawIndex));
         }
     }
 
@@ -1450,7 +1527,7 @@ public final class TalentTriggerScreen extends Screen {
         int rawIndex = applyForAdvancedEditor();
         if (minecraft != null && rawIndex >= 0) {
             minecraft.setScreen(new TalentAdvancedActionListScreen(
-                    owner, owner,
+                    this, owner,
                     failure ? TalentDraft.AdvancedActionLocation.TRIGGER_FAILURE_ACTIONS
                             : TalentDraft.AdvancedActionLocation.TRIGGER_ACTIONS,
                     rawIndex
@@ -1458,12 +1535,24 @@ public final class TalentTriggerScreen extends Screen {
         }
     }
 
+    void refreshAdvancedChanges() {
+        // Advanced child pages edit the owner's draft. Bring those edits back into this
+        // screen's working copy before its Apply button can replace the trigger list.
+        working.replaceTriggersFrom(owner.draft());
+        status = "";
+    }
+
     private void returnWithoutApplying() {
         if (minecraft != null) minecraft.setScreen(returnScreen);
     }
 
+    private void backOnePage() {
+        if (pageIndex == 4) switchPage(previousPageIndex);
+        else returnWithoutApplying();
+    }
+
     @Override
-    public void onClose() { returnWithoutApplying(); }
+    public void onClose() { backOnePage(); }
 
     private static TalentDraft.TriggerFilter[] filters() {
         return java.util.Arrays.stream(TalentDraft.TriggerFilter.values())

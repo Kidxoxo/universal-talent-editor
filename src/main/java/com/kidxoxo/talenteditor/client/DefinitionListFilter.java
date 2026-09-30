@@ -2,12 +2,14 @@ package com.kidxoxo.talenteditor.client;
 
 import com.kidxoxo.talenteditor.network.EditorBootstrap;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.network.chat.Component;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -169,6 +171,29 @@ final class DefinitionListFilter {
         if (current == null || current.isBlank()) return sources.get(0);
         int index = sources.indexOf(current);
         return index < 0 || index + 1 >= sources.size() ? "" : sources.get(index + 1);
+    }
+
+    static void chooseState(EditorOptionPopup options, State current, boolean supportsUnavailable,
+                            int height, Consumer<State> select) {
+        List<State> choices = java.util.Arrays.stream(State.values())
+                .filter(state -> supportsUnavailable || state != State.UNAVAILABLE).toList();
+        options.open(Component.translatable("screen.talent_editor.option.choose"),
+                choices.stream().map(state -> Component.translatable(
+                        "screen.talent_editor.filter.state." + state.translationSuffix())).toList(),
+                Math.max(0, choices.indexOf(current)), index -> select.accept(choices.get(index)), height);
+    }
+
+    static void chooseSource(EditorOptionPopup options, String current, List<String> sources,
+                             int height, Consumer<String> select) {
+        ArrayList<String> choices = new ArrayList<>();
+        choices.add("");
+        choices.addAll(sources);
+        options.open(Component.translatable("screen.talent_editor.option.choose"),
+                choices.stream().map(source -> source.isBlank()
+                        ? Component.translatable("screen.talent_editor.filter.source.all")
+                        : Component.translatable("screen.talent_editor.filter.source", compactSource(source)))
+                        .toList(),
+                Math.max(0, choices.indexOf(current)), index -> select.accept(choices.get(index)), height);
     }
 
     static String compactSource(String source) {

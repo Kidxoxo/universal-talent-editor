@@ -36,6 +36,7 @@ public final class PoolAdvancedScreen extends Screen {
     private String duplicateCounterValue;
     private String duplicateAmountValue;
     private String status = "";
+    private final EditorOptionPopup options = new EditorOptionPopup();
 
     public PoolAdvancedScreen(PoolEditScreen parent, EditorBootstrap bootstrap) {
         super(Component.translatable("screen.talent_editor.pool.advanced.title"));
@@ -82,7 +83,7 @@ public final class PoolAdvancedScreen extends Screen {
                 .bounds(x + selectorWidth + gap, 102, chooseWidth, 20).build());
         pityAfter = field(x + half + gap, 102, formWidth - half - gap,
                 pityAfterValue, 8, value -> pityAfterValue = value);
-        policyButton = addRenderableWidget(Button.builder(policyLabel(), button -> cyclePolicy())
+        policyButton = addRenderableWidget(Button.builder(policyLabel(), button -> choosePolicy())
                 .bounds(x, 135, formWidth, 20).build());
         duplicateCounter = field(x, 168, selectorWidth, duplicateCounterValue, 256,
                 value -> duplicateCounterValue = value);
@@ -134,16 +135,38 @@ public final class PoolAdvancedScreen extends Screen {
         graphics.drawString(font, font.plainSubstrByWidth(
                 ReferenceDiagnostics.label(references).getString(), formWidth
         ), x, 202, ReferenceDiagnostics.color(references), false);
+        options.render(graphics, font, width, height);
+    }
+
+    @Override public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (options.mouseClicked(mouseX, mouseY, button, width, height)) return true;
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+    @Override public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        if (options.mouseScrolled(delta, height)) return true;
+        return super.mouseScrolled(mouseX, mouseY, delta);
+    }
+    @Override public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (options.keyPressed(keyCode, height)) return true;
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+    @Override public boolean charTyped(char codePoint, int modifiers) {
+        return options.isOpen() || super.charTyped(codePoint, modifiers);
     }
 
     private void label(GuiGraphics graphics, String key, int x, int y) {
         graphics.drawString(font, Component.translatable(key), x, y, 0xA0A0A0, false);
     }
 
-    private void cyclePolicy() {
-        policy = POLICIES.get((POLICIES.indexOf(policy) + 1) % POLICIES.size());
-        policyButton.setMessage(policyLabel());
-        status = "";
+    private void choosePolicy() {
+        options.open(Component.translatable("screen.talent_editor.option.choose"),
+                POLICIES.stream().map(value -> Component.translatable(
+                        "screen.talent_editor.pool.duplicate_policy." + value)).toList(),
+                Math.max(0, POLICIES.indexOf(policy)), index -> {
+                    policy = POLICIES.get(index);
+                    policyButton.setMessage(policyLabel());
+                    status = "";
+                }, height);
     }
 
     private void openPicker(

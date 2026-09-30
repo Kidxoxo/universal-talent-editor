@@ -19,6 +19,7 @@ public final class CounterMetadataScreen extends Screen {
     private EditBox displayCategoryField;
     private Button visibilityButton;
     private String status = "";
+    private final EditorOptionPopup options = new EditorOptionPopup();
 
     public CounterMetadataScreen(CounterEditScreen parent) {
         super(Component.translatable("screen.talent_editor.counter.metadata.title"));
@@ -59,7 +60,7 @@ public final class CounterMetadataScreen extends Screen {
         addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.reference_picker.choose"),
                         button -> openDisplayCategoryPicker())
                 .bounds(x + fieldWidth + 6, 96, chooseWidth, 20).build());
-        visibilityButton = addRenderableWidget(Button.builder(visibilityLabel(), button -> cycleVisibility())
+        visibilityButton = addRenderableWidget(Button.builder(visibilityLabel(), button -> chooseVisibility())
                 .bounds(x, 138, formWidth, 20).build());
         addRenderableWidget(Button.builder(Component.translatable("gui.cancel"), button -> returnParent())
                 .bounds(x, height - 28, 80, 20).build());
@@ -91,12 +92,33 @@ public final class CounterMetadataScreen extends Screen {
             graphics.drawString(font, font.plainSubstrByWidth(status, formWidth),
                     x, height - 45, 0xFF7777, false);
         }
+        options.render(graphics, font, width, height);
     }
 
-    private void cycleVisibility() {
-        int index = VISIBILITIES.indexOf(visibility);
-        visibility = VISIBILITIES.get((index + 1) % VISIBILITIES.size());
-        visibilityButton.setMessage(visibilityLabel());
+    @Override public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (options.mouseClicked(mouseX, mouseY, button, width, height)) return true;
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+    @Override public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        if (options.mouseScrolled(delta, height)) return true;
+        return super.mouseScrolled(mouseX, mouseY, delta);
+    }
+    @Override public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (options.keyPressed(keyCode, height)) return true;
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+    @Override public boolean charTyped(char codePoint, int modifiers) {
+        return options.isOpen() || super.charTyped(codePoint, modifiers);
+    }
+
+    private void chooseVisibility() {
+        options.open(Component.translatable("screen.talent_editor.option.choose"),
+                VISIBILITIES.stream().map(value -> Component.translatable(
+                        "screen.talent_editor.counter.visibility." + value)).toList(),
+                Math.max(0, VISIBILITIES.indexOf(visibility)), index -> {
+                    visibility = VISIBILITIES.get(index);
+                    visibilityButton.setMessage(visibilityLabel());
+                }, height);
     }
 
     private Component visibilityLabel() {

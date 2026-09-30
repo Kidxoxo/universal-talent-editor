@@ -18,6 +18,14 @@ final class EditorTheme {
         graphics.fill(x + 2, y, x + width, y + 1, 0x604A6B8E);
     }
 
+    static void modalPanel(GuiGraphics graphics, int x, int y, int width, int height) {
+        if (width <= 0 || height <= 0) return;
+        graphics.fill(x + 3, y + 3, x + width + 3, y + height + 3, 0xB0000000);
+        graphics.fill(x, y, x + width, y + height, 0xFF101823);
+        graphics.fill(x, y, x + 2, y + height, ACCENT);
+        graphics.fill(x + 2, y, x + width, y + 1, 0xFF4A6B8E);
+    }
+
     static void selectedTab(GuiGraphics graphics, int x, int y, int width) {
         graphics.fill(x + 2, y + 18, x + width - 2, y + 20, ACCENT);
     }

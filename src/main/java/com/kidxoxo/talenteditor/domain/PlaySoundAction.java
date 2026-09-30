@@ -10,13 +10,18 @@ public record PlaySoundAction(
         ResourceLocation sound,
         SoundSource source,
         float volume,
-        float pitch
+        float pitch,
+        int atTick
 ) implements CompiledAction {
     public static final ResourceLocation TYPE = new ResourceLocation(TalentEditorMod.MOD_ID, "play_sound");
 
     public PlaySoundAction {
         sound = Objects.requireNonNull(sound, "sound");
         source = Objects.requireNonNull(source, "source");
+    }
+
+    public PlaySoundAction(ResourceLocation sound, SoundSource source, float volume, float pitch) {
+        this(sound, source, volume, pitch, 0);
     }
 
     @Override

@@ -44,9 +44,12 @@ public abstract class LivingEntityRendererMixin {
         Player player = entity instanceof Player candidate ? candidate : null;
         boolean scaled = false;
         if (player != null) {
+            ClientVisualState.PresentationPose presentation = ClientVisualState.presentation(player.getUUID());
             float scale = (float) ClientVisualState.get(player.getUUID()).scale();
-            if (scale != 1.0F) {
+            if (scale != 1.0F || presentation != null && (presentation.x() != 0
+                    || presentation.y() != 0 || presentation.z() != 0)) {
                 poseStack.pushPose();
+                if (presentation != null) poseStack.translate(presentation.x(), presentation.y(), presentation.z());
                 poseStack.scale(scale, scale, scale);
                 scaled = true;
             }

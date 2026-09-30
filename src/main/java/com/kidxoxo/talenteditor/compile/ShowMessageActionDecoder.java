@@ -12,7 +12,7 @@ import java.util.Set;
 
 final class ShowMessageActionDecoder implements ActionDecoder {
     private static final Set<String> FIELDS = Set.of(
-            "type", "mode", "text", "subtitle", "fadeInTicks", "stayTicks", "fadeOutTicks"
+            "type", "mode", "text", "subtitle", "fadeInTicks", "stayTicks", "fadeOutTicks", "atTick"
     );
 
     @Override
@@ -64,6 +64,12 @@ final class ShowMessageActionDecoder implements ActionDecoder {
         int fadeOut = JsonAccess.integer(
                 json, "fadeOutTicks", 20, 0, 1_200, context.source(), context.path(), context.report()
         );
-        return Optional.of(new ShowMessageAction(mode, text, subtitle, fadeIn, stay, fadeOut));
+        int atTick = JsonAccess.integer(json, "atTick", 0, 0, 2400,
+                context.source(), context.path(), context.report());
+        if (atTick > 0 && context.placement() != ActionPlacement.ON_ACQUIRE
+                && context.placement() != ActionPlacement.ON_SYNTHESIZE) context.report().error(
+                "PRESENTATION_TIMELINE_PLACEMENT", context.source(), JsonAccess.child(context.path(), "atTick"),
+                "atTick is only supported for acquisition and synthesis actions");
+        return Optional.of(new ShowMessageAction(mode, text, subtitle, fadeIn, stay, fadeOut, atTick));
     }
 }
