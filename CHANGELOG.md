@@ -2,7 +2,7 @@
 
 ## 1.2.0
 
-See [release notes](RELEASE_NOTES_1.2.0.md) for the current features and pack verification.
+Added acquisition and synthesis presentation timelines, configurable item equipment slots, and Curios support.
 
 ## 1.1.0
 
