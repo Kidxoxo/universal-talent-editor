@@ -8,11 +8,9 @@ Visual UI editing for the talent book and draw screen, with drag/resize, layers,
 
 The 2026-10-13 logic update fixes interrupted canvas gestures, partial pack import rollback, conditional fixed attributes, same-ID talent/item trigger isolation, stale editor metadata, and renamed counter references. It also caches draft rendering and synthesis candidates, reduces redundant synchronization and condition scans, and consolidates the six definition submission paths. See [logic fixes and verification](docs/LOGIC_FIXES_1.3.0.md).
 
-See [release notes](RELEASE_NOTES_1.3.0.md).
-
 ## 1.2.0
 
-See [release notes](RELEASE_NOTES_1.2.0.md) for the 1.2.0 features and pack verification.
+Added acquisition and synthesis presentation timelines, configurable item equipment slots, and Curios support.
 
 ## 1.1.0
 
