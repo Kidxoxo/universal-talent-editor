@@ -277,6 +277,15 @@ final class DefinitionReferenceIndex {
             Map<DefinitionTarget, List<DefinitionReference>> references,
             TalentBookLayoutDefinition layout
     ) {
+        layout.bookUi().ifPresent(ui -> {
+            for (int i = 0; i < ui.elements().size(); i++) {
+                var e = ui.elements().get(i);
+                if (e.type().equals("button") && e.action().equals("draw")) {
+                    add(references, DefinitionKind.POOL, new ResourceLocation(e.target().isBlank() ? "talent_editor:default" : e.target()),
+                            DefinitionKind.LAYOUT, layout.id(), "ui_draw_pool", "$.bookUi.elements[" + i + "].target");
+                }
+            }
+        });
         for (int pageIndex = 0; pageIndex < layout.pages().size(); pageIndex++) {
             TalentBookLayoutDefinition.PageDefinition page = layout.pages().get(pageIndex);
             for (int slotIndex = 0; slotIndex < page.slots().size(); slotIndex++) {

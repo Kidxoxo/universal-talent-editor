@@ -12,7 +12,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-public final class TalentTriggerScreen extends Screen {
+public final class TalentTriggerScreen extends EditorScreen {
     private static final List<String> EVENTS = List.of(
             "damage_dealt_pre", "damage_taken_pre", "damage_dealt", "damage_taken", "interact_entity",
             "kill", "death", "item_use_finish", "interact_block", "player_tick", "player_second",
@@ -29,6 +29,8 @@ public final class TalentTriggerScreen extends Screen {
     private final TalentEditScreen owner;
     private final Screen returnScreen;
     private final TalentDraft working;
+    private final TalentEditScreen advancedOwner;
+    private final String initialTriggers;
     private final EditorBootstrap bootstrap;
     private final EditorOptionPopup options = new EditorOptionPopup();
     private int selected = -1;
@@ -123,6 +125,8 @@ public final class TalentTriggerScreen extends Screen {
     private Button addTriggerButton;
     private Button removeButton;
     private String status = "";
+    private String initialForm;
+    private String triggerFormState(){return children().stream().filter(c->c instanceof EditBox).map(c->((EditBox)c).getValue()).toList().toString();}
 
     TalentTriggerScreen(TalentEditScreen parent, TalentDraft working, EditorBootstrap bootstrap) {
         this(parent, working, bootstrap, parent, -1);
@@ -142,6 +146,8 @@ public final class TalentTriggerScreen extends Screen {
         this.owner = owner;
         this.returnScreen = returnScreen;
         this.working = working;
+        this.advancedOwner=owner.detached(working);
+        this.initialTriggers=working.snapshot();
         this.bootstrap = bootstrap;
         List<TalentDraft.TriggerRow> rows = working.triggerRows();
         if (!rows.isEmpty()) {
@@ -161,7 +167,7 @@ public final class TalentTriggerScreen extends Screen {
         int half = (rightWidth - 6) / 2;
         int fifth = (rightWidth - 24) / 5;
 
-        pageButton = addRenderableWidget(Button.builder(Component.empty(), button -> choosePage())
+        pageButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> choosePage())
                 .bounds(right, 32, rightWidth, 20).build());
 
         idField = field(right, 63, rightWidth, 64);
@@ -169,148 +175,149 @@ public final class TalentTriggerScreen extends Screen {
         chanceField = field(right + fifth + 6, 93, fifth, 8);
         cooldownField = field(right + (fifth + 6) * 2, 93, fifth, 10);
         activationLimitField = field(right + (fifth + 6) * 3, 93, fifth, 10);
-        eventButton = addRenderableWidget(Button.builder(Component.empty(), button -> chooseEvent())
+        eventButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> chooseEvent())
                 .bounds(right + (fifth + 6) * 4, 93,
                         rightWidth - (fifth + 6) * 4, 20).build());
         int chanceChooseWidth = Math.min(76, Math.max(46, rightWidth / 4));
         int chanceAttributeWidth = Math.max(40, rightWidth - chanceChooseWidth - 30);
         chanceAttributeField = field(right, 123, chanceAttributeWidth, 256);
         chanceAttributeField.setEditable(false);
-        chooseChanceAttributeButton = addRenderableWidget(Button.builder(
+        chooseChanceAttributeButton = addRenderableWidget(EditorWidgets.button(
                         Component.translatable("screen.talent_editor.trigger.choose_chance_attribute"),
                         button -> chooseChanceAttribute())
                 .bounds(right + chanceAttributeWidth + 4, 123, chanceChooseWidth, 20).build());
-        clearChanceAttributeButton = addRenderableWidget(Button.builder(Component.literal("×"),
+        clearChanceAttributeButton = addRenderableWidget(EditorWidgets.button(Component.literal("×"),
                         button -> clearChanceAttribute())
                 .bounds(right + chanceAttributeWidth + chanceChooseWidth + 8, 123, 22, 20).build());
-        chanceSourceButton = addRenderableWidget(Button.builder(Component.empty(), button -> chooseChanceSource())
+        chanceSourceButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> chooseChanceSource())
                 .bounds(right, 153, half, 20).build());
         chancePerPointField = field(right + half + 6, 153, rightWidth - half - 6, 32);
         distanceIntervalField = field(right, 183, rightWidth, 32);
 
         int branchWidth = Math.min(104, Math.max(62, rightWidth / 3));
-        actionBranchButton = addRenderableWidget(Button.builder(Component.empty(), button -> switchActionBranch())
+        actionBranchButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> switchActionBranch())
                 .bounds(right, 63, branchWidth, 20).build());
-        actionButton = addRenderableWidget(Button.builder(Component.empty(), button -> chooseAction())
+        actionButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> chooseAction())
                 .bounds(right + branchWidth + 6, 63, rightWidth - branchWidth - 6, 20).build());
         int actionControlWidth = Math.max(18, (rightWidth - 20) / 6);
         int actionX = right;
-        previousActionButton = addRenderableWidget(Button.builder(Component.literal("<"), button -> previousAction())
+        previousActionButton = addRenderableWidget(EditorWidgets.button(Component.literal("<"), button -> previousAction())
                 .bounds(actionX, 89, actionControlWidth, 20).build());
         actionX += actionControlWidth + 4;
-        nextActionButton = addRenderableWidget(Button.builder(Component.literal(">"), button -> nextAction())
+        nextActionButton = addRenderableWidget(EditorWidgets.button(Component.literal(">"), button -> nextAction())
                 .bounds(actionX, 89, actionControlWidth, 20).build());
         actionX += actionControlWidth + 4;
-        addActionButton = addRenderableWidget(Button.builder(Component.literal("+"), button -> addAction())
+        addActionButton = addRenderableWidget(EditorWidgets.button(Component.literal("+"), button -> addAction())
                 .bounds(actionX, 89, actionControlWidth, 20).build());
         actionX += actionControlWidth + 4;
-        removeActionButton = addRenderableWidget(Button.builder(Component.literal("−"), button -> removeAction())
+        removeActionButton = addRenderableWidget(EditorWidgets.button(Component.literal("−"), button -> removeAction())
                 .bounds(actionX, 89, actionControlWidth, 20).build());
         actionX += actionControlWidth + 4;
-        moveActionUpButton = addRenderableWidget(Button.builder(Component.literal("↑"), button -> moveAction(-1))
+        moveActionUpButton = addRenderableWidget(EditorWidgets.button(Component.literal("↑"), button -> moveAction(-1))
                 .bounds(actionX, 89, actionControlWidth, 20).build());
         actionX += actionControlWidth + 4;
-        moveActionDownButton = addRenderableWidget(Button.builder(Component.literal("↓"), button -> moveAction(1))
+        moveActionDownButton = addRenderableWidget(EditorWidgets.button(Component.literal("↓"), button -> moveAction(1))
                 .bounds(actionX, 89, right + rightWidth - actionX, 20).build());
 
         effectField = field(right, 126, rightWidth - 70, 256);
         effectField.setEditable(false);
-        chooseEffectButton = addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.trigger.choose_effect"),
+        chooseEffectButton = addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.trigger.choose_effect"),
                         button -> chooseEffect())
                 .bounds(right + rightWidth - 64, 126, 64, 20).build());
         damageAmountField = field(right, 156, half, 32);
-        damageOperationButton = addRenderableWidget(Button.builder(Component.empty(), button -> cycleDamageOperation())
+        damageOperationButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> cycleDamageOperation())
                 .bounds(right + half + 6, 156, rightWidth - half - 6, 20).build());
         durationField = field(right, 156, half, 8);
         amplifierField = field(right + half + 6, 156, rightWidth - half - 6, 4);
         damageMinimumField = field(right, 186, half, 32);
         damageMaximumField = field(right + half + 6, 186, rightWidth - half - 6, 32);
-        targetButton = addRenderableWidget(Button.builder(Component.empty(), button -> chooseTarget())
+        targetButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> chooseTarget())
                 .bounds(right, 63, half, 20).build());
-        filterButton = addRenderableWidget(Button.builder(Component.empty(), button -> chooseFilterType())
+        filterButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> chooseFilterType())
                 .bounds(right + half + 6, 63, rightWidth - half - 6, 20).build());
         filterValueField = field(right, 96, rightWidth - 70, 256);
         filterValueField.setEditable(false);
-        chooseFilterButton = addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.trigger.choose_filter"),
+        chooseFilterButton = addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.trigger.choose_filter"),
                         button -> chooseFilter())
                 .bounds(right + rightWidth - 64, 96, 64, 20).build());
         int third = (rightWidth - 12) / 3;
-        ambientButton = addRenderableWidget(Button.builder(Component.empty(), button -> toggleAmbient())
+        ambientButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> toggleAmbient())
                 .bounds(right, 186, third, 20).build());
-        particlesButton = addRenderableWidget(Button.builder(Component.empty(), button -> toggleParticles())
+        particlesButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> toggleParticles())
                 .bounds(right + third + 6, 186, third, 20).build());
-        iconButton = addRenderableWidget(Button.builder(Component.empty(), button -> toggleIcon())
+        iconButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> toggleIcon())
                 .bounds(right + (third + 6) * 2, 186, rightWidth - (third + 6) * 2, 20).build());
-        actionFailurePolicyButton = addRenderableWidget(Button.builder(Component.empty(),
+        actionFailurePolicyButton = addRenderableWidget(EditorWidgets.button(Component.empty(),
                         button -> cycleActionFailurePolicy())
                 .bounds(right, 126, half, 20).build());
-        onceButton = addRenderableWidget(Button.builder(Component.empty(), button -> toggleOnce())
+        onceButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> toggleOnce())
                 .bounds(right + half + 6, 126, rightWidth - half - 6, 20).build());
         entityRadiusField = field(right, 156, rightWidth, 32);
-        searchTargetButton = addRenderableWidget(Button.builder(Component.empty(), button -> chooseSearchTarget())
+        searchTargetButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> chooseSearchTarget())
                 .bounds(right, 126, half, 20).build());
         searchGuaranteedField = field(right + half + 6, 126, rightWidth - half - 6, 2);
         searchValueField = field(right, 156, rightWidth - 70, 256);
         searchValueField.setEditable(false);
-        chooseSearchValueButton = addRenderableWidget(Button.builder(Component.translatable(
+        chooseSearchValueButton = addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.trigger.choose_search_value"), button -> chooseSearchValue())
                 .bounds(right + rightWidth - 64, 156, 64, 20).build());
         int searchPoolWidth = Math.max(30, rightWidth - 94);
         searchPoolField = field(right, 186, searchPoolWidth, 256);
         searchPoolField.setEditable(false);
-        chooseSearchPoolButton = addRenderableWidget(Button.builder(Component.translatable(
+        chooseSearchPoolButton = addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.trigger.choose_pool"), button -> chooseSearchPool())
                 .bounds(right + searchPoolWidth + 4, 186, 64, 20).build());
-        clearSearchPoolButton = addRenderableWidget(Button.builder(Component.literal("×"),
+        clearSearchPoolButton = addRenderableWidget(EditorWidgets.button(Component.literal("×"),
                         button -> clearSearchPool())
                 .bounds(right + searchPoolWidth + 72, 186, rightWidth - searchPoolWidth - 72, 20).build());
 
-        searchQueueModeButton = addRenderableWidget(Button.builder(Component.empty(), button -> chooseSearchQueueMode())
+        searchQueueModeButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> chooseSearchQueueMode())
                 .bounds(right, 63, rightWidth, 20).build());
         int counterWidth = Math.max(30, rightWidth - 94);
         searchSuccessCounterField = field(right, 93, counterWidth, 256);
         searchSuccessCounterField.setEditable(false);
-        chooseSearchSuccessCounterButton = addRenderableWidget(Button.builder(Component.translatable(
+        chooseSearchSuccessCounterButton = addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.trigger.choose_counter"), button -> chooseSearchSuccessCounter())
                 .bounds(right + counterWidth + 4, 93, 64, 20).build());
-        clearSearchSuccessCounterButton = addRenderableWidget(Button.builder(Component.literal("×"),
+        clearSearchSuccessCounterButton = addRenderableWidget(EditorWidgets.button(Component.literal("×"),
                         button -> clearSearchSuccessCounter())
                 .bounds(right + counterWidth + 72, 93, rightWidth - counterWidth - 72, 20).build());
         searchSuccessIncrementField = field(right, 123, half, 16);
         searchMilestoneEveryField = field(right + half + 6, 123, rightWidth - half - 6, 16);
-        searchMilestoneTargetButton = addRenderableWidget(Button.builder(Component.empty(),
+        searchMilestoneTargetButton = addRenderableWidget(EditorWidgets.button(Component.empty(),
                         button -> chooseSearchMilestoneTarget())
                 .bounds(right, 153, half, 20).build());
         searchMilestoneGuaranteedField = field(right + half + 6, 153, rightWidth - half - 6, 2);
         searchMilestoneValueField = field(right, 183, rightWidth - 70, 256);
-        chooseSearchMilestoneValueButton = addRenderableWidget(Button.builder(Component.translatable(
+        chooseSearchMilestoneValueButton = addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.trigger.choose_search_value"), button -> chooseSearchMilestoneValue())
                 .bounds(right + rightWidth - 64, 183, 64, 20).build());
-        advancedConditionButton = addRenderableWidget(Button.builder(Component.translatable(
+        advancedConditionButton = addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.advanced_trigger.condition"), button -> openAdvancedCondition())
                 .bounds(right, 185, rightWidth, 20).build());
-        advancedActionsButton = addRenderableWidget(Button.builder(Component.translatable(
+        advancedActionsButton = addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.advanced_trigger.actions"), button -> openAdvancedActions(false))
                 .bounds(right, 72, rightWidth, 20).build());
-        advancedFailureButton = addRenderableWidget(Button.builder(Component.translatable(
+        advancedFailureButton = addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.advanced_trigger.failure_actions"), button -> openAdvancedActions(true))
                 .bounds(right, 102, rightWidth, 20).build());
-        addTriggerButton = addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.trigger.add"),
+        addTriggerButton = addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.trigger.add"),
                         button -> addTrigger())
                 .bounds(left, height - 56, (listWidth - 6) / 2, 20).build());
-        removeButton = addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.trigger.remove"),
+        removeButton = addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.trigger.remove"),
                         button -> removeTrigger())
                 .bounds(left + (listWidth - 6) / 2 + 6, height - 56,
                         listWidth - (listWidth - 6) / 2 - 6, 20).build());
 
         int bottom = height - 28;
-        addRenderableWidget(Button.builder(Component.translatable("gui.back"), button -> backOnePage())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.back"), button -> backOnePage())
                 .bounds(left, bottom, (formWidth - 6) / 2, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.trigger.apply"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.trigger.apply"), EditorTheme.Tone.PRIMARY,
                         button -> apply())
                 .bounds(left + (formWidth - 6) / 2 + 6, bottom,
                         formWidth - (formWidth - 6) / 2 - 6, 20).build());
         loadSelected();
+        if(initialForm==null)initialForm=triggerFormState();
     }
 
     private EditBox field(int x, int y, int width, int maxLength) {
@@ -331,8 +338,8 @@ public final class TalentTriggerScreen extends Screen {
         EditorTheme.panel(graphics, left - 6, 27, listWidth + 12, Math.max(1, height - 63));
         EditorTheme.panel(graphics, right - 6, 27, rightWidth + 12, Math.max(1, height - 63));
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 9, 0xFFFFFF);
-        graphics.drawString(font, Component.translatable("screen.talent_editor.trigger.list"), left, 33, 0xA0A0A0, false);
+        EditorTheme.title(graphics,font,title,width);
+        graphics.drawString(font, Component.translatable("screen.talent_editor.trigger.list"), left, 33, EditorTheme.MUTED, false);
         EditorTheme.selectedTab(graphics, right, 32, rightWidth);
         TalentDraft.TriggerAction action = actions()[actionIndex];
         if (pageIndex == 0) {
@@ -406,7 +413,7 @@ public final class TalentTriggerScreen extends Screen {
                     left + 4, y, row.editable() ? 0xE8E8E8 : 0x909090, false);
         }
         if (rows.isEmpty()) graphics.drawString(font,
-                Component.translatable("screen.talent_editor.trigger.empty"), left + 4, 52, 0x808080, false);
+                Component.translatable("screen.talent_editor.trigger.empty"), left + 4, 52, EditorTheme.MUTED, false);
         if (!status.isBlank()) graphics.drawCenteredString(font,
                 font.plainSubstrByWidth(status, formWidth), width / 2, 20, 0xFF7777);
         options.render(graphics, font, width, height);
@@ -414,7 +421,7 @@ public final class TalentTriggerScreen extends Screen {
 
     private void label(GuiGraphics graphics, int x, int y, String suffix) {
         graphics.drawString(font, Component.translatable("screen.talent_editor.trigger." + suffix),
-                x, y, 0xA0A0A0, false);
+                x, y, EditorTheme.MUTED, false);
     }
 
     @Override
@@ -823,6 +830,7 @@ public final class TalentTriggerScreen extends Screen {
         iconButton.active = editable;
         removeButton.active = editable;
         updateLabels();
+        initialForm=triggerFormState();
     }
 
     private void loadAction(TalentDraft.TriggerActionDraft value) {
@@ -1512,14 +1520,13 @@ public final class TalentTriggerScreen extends Screen {
         List<TalentDraft.TriggerRow> rows = working.triggerRows();
         int selectedRawIndex = selected >= 0 && selected < rows.size() ? rows.get(selected).rawIndex() : -1;
         if (selectedRawIndex < 0) return -1;
-        owner.applyTriggerDraft(working, selectedRawIndex);
         return selectedRawIndex;
     }
 
     private void openAdvancedCondition() {
         int rawIndex = applyForAdvancedEditor();
         if (minecraft != null && rawIndex >= 0) {
-            minecraft.setScreen(new TalentExpressionConditionScreen(this, owner, rawIndex));
+            minecraft.setScreen(new TalentExpressionConditionScreen(this, advancedOwner, rawIndex));
         }
     }
 
@@ -1527,7 +1534,7 @@ public final class TalentTriggerScreen extends Screen {
         int rawIndex = applyForAdvancedEditor();
         if (minecraft != null && rawIndex >= 0) {
             minecraft.setScreen(new TalentAdvancedActionListScreen(
-                    this, owner,
+                    this, advancedOwner,
                     failure ? TalentDraft.AdvancedActionLocation.TRIGGER_FAILURE_ACTIONS
                             : TalentDraft.AdvancedActionLocation.TRIGGER_ACTIONS,
                     rawIndex
@@ -1538,12 +1545,17 @@ public final class TalentTriggerScreen extends Screen {
     void refreshAdvancedChanges() {
         // Advanced child pages edit the owner's draft. Bring those edits back into this
         // screen's working copy before its Apply button can replace the trigger list.
-        working.replaceTriggersFrom(owner.draft());
+        // Advanced pages already share this isolated working draft.
         status = "";
     }
 
     private void returnWithoutApplying() {
-        if (minecraft != null) minecraft.setScreen(returnScreen);
+        if(minecraft==null)return;
+        // Store incomplete field edits only for dirty detection; validation remains on Apply.
+        String fields=triggerFormState();
+        if(!working.snapshot().equals(initialTriggers)||!fields.equals(initialForm))
+            minecraft.setScreen(new EditorLeaveScreen(this,()->minecraft.setScreen(returnScreen),this::apply));
+        else minecraft.setScreen(returnScreen);
     }
 
     private void backOnePage() {

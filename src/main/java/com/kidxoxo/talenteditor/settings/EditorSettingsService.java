@@ -176,7 +176,7 @@ public final class EditorSettingsService {
      */
     public synchronized ImportInstallation beginImport(MinecraftServer server, String input) throws IOException {
         Path gameRoot = FMLPaths.GAMEDIR.get().toAbsolutePath().normalize();
-        Path archive = resolveImportArchive(gameRoot, input);
+        Path archive = resolveConfirmedArchive(gameRoot, input);
         Path stagingParent = gameRoot.resolve(IMPORT_STAGING_DIRECTORY).normalize();
         requireInside(gameRoot, stagingParent, false);
         Files.createDirectories(stagingParent);
@@ -191,6 +191,12 @@ public final class EditorSettingsService {
         Path clientBackup = null;
         EditorRuntimeSettings previous = current;
         boolean clientInstalled = false;
+        PackInstallTransaction transaction = new PackInstallTransaction(new PackInstallTransaction.Files() {
+            public void prepare(Path target) throws IOException { Files.createDirectories(target.getParent()); }
+            public Path backup(Path target) throws IOException { return moveExistingToBackup(target); }
+            public void install(Path source, Path target) throws IOException { move(source, target); }
+            public void restore(Path target, Path backup) throws IOException { restoreBackup(target, backup); }
+        });
         try {
             extractImportArchive(archive, staging);
             RawDefinitionSet imported = readImportedDefinitions(serverSource);
@@ -209,26 +215,10 @@ public final class EditorSettingsService {
             EditorRuntimeSettings importedSettings = readSettings(serverSource);
             validateClientPack(clientSource);
 
-            Files.createDirectories(serverTarget.getParent());
-            serverBackup = moveExistingToBackup(serverTarget);
-            try {
-                move(serverSource, serverTarget);
-            } catch (IOException exception) {
-                restoreBackup(serverTarget, serverBackup);
-                throw exception;
-            }
-
+            serverBackup = transaction.replace(serverSource, serverTarget);
             if (Files.isDirectory(clientSource, LinkOption.NOFOLLOW_LINKS)) {
-                Files.createDirectories(clientTarget.getParent());
-                clientBackup = moveExistingToBackup(clientTarget);
-                try {
-                    move(clientSource, clientTarget);
-                    clientInstalled = true;
-                } catch (IOException exception) {
-                    restoreBackup(clientTarget, clientBackup);
-                    restoreBackup(serverTarget, serverBackup);
-                    throw exception;
-                }
+                clientBackup = transaction.replace(clientSource, clientTarget);
+                clientInstalled = true;
             }
             current = importedSettings;
             return new ImportInstallation(
@@ -237,7 +227,14 @@ public final class EditorSettingsService {
             );
         } catch (IOException | RuntimeException exception) {
             current = previous;
-            if (Files.exists(staging, LinkOption.NOFOLLOW_LINKS)) deleteTree(staging, stagingParent);
+            // Keep recovery material if any restore failed, and preserve the original failure.
+            if (transaction.rollback(exception)) {
+                try {
+                    if (Files.exists(staging, LinkOption.NOFOLLOW_LINKS)) deleteTree(staging, stagingParent);
+                } catch (IOException | RuntimeException cleanupError) {
+                    exception.addSuppressed(cleanupError);
+                }
+            }
             if (exception instanceof IOException ioException) throw ioException;
             throw new IOException("Could not import talent editor archive", exception);
         }
@@ -246,6 +243,49 @@ public final class EditorSettingsService {
     public synchronized String completeImport(ImportInstallation installation) throws IOException {
         cleanupImportStaging(installation);
         return installation.archive().toString();
+    }
+
+    public synchronized String previewImport(MinecraftServer server, String input) throws IOException {
+        JsonObject summary=inspectImportArchive(FMLPaths.GAMEDIR.get().toAbsolutePath().normalize(),input);
+        summary.addProperty("world",server.getWorldData().getLevelName());
+        return summary.toString();
+    }
+
+    static JsonObject inspectImportArchive(Path gameRoot,String input) throws IOException {
+        Path archive=resolveImportArchive(gameRoot,input);
+        if(Files.size(archive)>MAX_ARCHIVE_BYTES)throw new IOException("Import ZIP exceeds the size limit");
+        JsonObject counts=new JsonObject();int total=0,resources=0;
+        try(var zip=new java.util.zip.ZipFile(archive.toFile(),StandardCharsets.UTF_8)){
+            var entries=zip.entries();
+            while(entries.hasMoreElements()){
+                var entry=entries.nextElement();if(++total>MAX_ARCHIVE_ENTRIES)throw new IOException("Too many archive entries");
+                validateArchiveEntryName(entry.getName(),entry.isDirectory());if(entry.isDirectory())continue;
+                String name=entry.getName();if(name.startsWith("resourcepacks/"))resources++;
+                for(String type:List.of("talents","rarities","pools","counters","layouts","items"))
+                    if(name.contains("/talent_editor/"+type+"/")&&name.endsWith(".json"))counts.addProperty(type,counts.has(type)?counts.get(type).getAsInt()+1:1);
+            }
+        }
+        JsonObject result=new JsonObject();result.addProperty("path",archive.toString());result.addProperty("sha256",archiveHash(archive));
+        result.addProperty("bytes",Files.size(archive));result.addProperty("resources",resources);result.add("counts",counts);return result;
+    }
+
+    static Path resolveConfirmedArchive(Path gameRoot,String input) throws IOException {
+        if(input==null||!input.strip().startsWith("{"))return resolveImportArchive(gameRoot,input);
+        try{
+            JsonObject value=JsonParser.parseString(input).getAsJsonObject();Path archive=resolveImportArchive(gameRoot,value.get("path").getAsString());
+            String expected=value.get("sha256").getAsString();
+            if(!expected.matches("[0-9a-f]{64}")||!archiveHash(archive).equals(expected))throw new IOException("Import ZIP changed after preview; preview it again");
+            return archive;
+        }catch(RuntimeException ex){throw new IOException("Invalid import preview",ex);}
+    }
+
+    private static String archiveHash(Path archive) throws IOException {
+        if(Files.size(archive)>MAX_ARCHIVE_BYTES)throw new IOException("Import ZIP exceeds the size limit");
+        try{
+            var digest=java.security.MessageDigest.getInstance("SHA-256");
+            try(var input=Files.newInputStream(archive)){byte[] buffer=new byte[65536];int read;while((read=input.read(buffer))!=-1)digest.update(buffer,0,read);}
+            return java.util.HexFormat.of().formatHex(digest.digest());
+        }catch(java.security.NoSuchAlgorithmException ex){throw new IllegalStateException(ex);}
     }
 
     public synchronized void rollbackImport(ImportInstallation installation) throws IOException {
@@ -264,13 +304,8 @@ public final class EditorSettingsService {
             else failure.addSuppressed(exception);
         }
         current = installation.previousSettings();
-        try {
-            cleanupImportStaging(installation);
-        } catch (IOException exception) {
-            if (failure == null) failure = exception;
-            else failure.addSuppressed(exception);
-        }
-        if (failure != null) throw failure;
+        if (failure == null) cleanupImportStaging(installation);
+        else throw failure;
     }
 
     public boolean globalTemplateAvailable() {
@@ -765,7 +800,8 @@ public final class EditorSettingsService {
         UPDATE_SETTINGS,
         EXPORT,
         INSTALL_GLOBAL,
-        IMPORT
+        IMPORT,
+        PREVIEW_IMPORT
     }
 
     public record ImportInstallation(

@@ -296,6 +296,8 @@ public final class PlayerTalentData implements INBTSerializable<CompoundTag> {
         triggerActivations.putAll(other.triggerActivations);
         triggerDistanceProgress.clear();
         triggerDistanceProgress.putAll(other.triggerDistanceProgress);
+        migratedItemTriggerSources.clear();
+        migratedItemTriggerSources.addAll(other.migratedItemTriggerSources);
         drawConstraints.clear();
         drawConstraints.addAll(other.drawConstraints);
         drawTokens = other.drawTokens;
@@ -573,6 +575,7 @@ public final class PlayerTalentData implements INBTSerializable<CompoundTag> {
 
     @Override
     public void deserializeNBT(CompoundTag root) {
+        migratedItemTriggerSources.clear();
         owned.clear();
         ListTag values = root.getList(TALENTS_KEY, Tag.TAG_STRING);
         for (int index = 0; index < values.size(); index++) {
@@ -717,6 +720,25 @@ public final class PlayerTalentData implements INBTSerializable<CompoundTag> {
             if (value != null) result.add(value);
         }
         return List.copyOf(result);
+    }
+
+    private final Set<ResourceLocation> migratedItemTriggerSources = new java.util.HashSet<>();
+
+    /** Ambiguous legacy keys remain talent-owned; new item keys can never share talent state. */
+    public void migrateItemTriggerState(ResourceLocation item, boolean legacyUnambiguous) {
+        if (!migratedItemTriggerSources.add(item) || !legacyUnambiguous) return;
+        String prefix = item + "#";
+        migrateItemKeys(triggerCooldowns, prefix);
+        migrateItemKeys(triggerActivations, prefix);
+        migrateItemKeys(triggerDistanceProgress, prefix);
+    }
+
+    private static <T> void migrateItemKeys(Map<String, T> values, String prefix) {
+        for (String key : new java.util.ArrayList<>(values.keySet())) {
+            if (!key.startsWith(prefix)) continue;
+            T value = values.remove(key);
+            values.putIfAbsent("item|" + key, value);
+        }
     }
 
     private void clearTriggerState(ResourceLocation talent) {

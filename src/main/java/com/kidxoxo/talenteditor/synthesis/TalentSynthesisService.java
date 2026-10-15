@@ -20,8 +20,24 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 
 public final class TalentSynthesisService {
+    private com.kidxoxo.talenteditor.runtime.RuntimeSnapshot recipeSnapshot;
+    private List<ResourceLocation> recipeIds = List.of();
+
+    private List<ResourceLocation> recipes() {
+        var snapshot = TalentEditorMod.SNAPSHOTS.active();
+        if (snapshot != recipeSnapshot) {
+            recipeIds = snapshot.talents().values().stream()
+                    .filter(TalentDefinition::enabled).filter(TalentDefinition::available)
+                    .filter(talent -> talent.synthesis().enabled())
+                    .map(TalentDefinition::id).sorted(java.util.Comparator.comparing(ResourceLocation::toString))
+                    .toList();
+            recipeSnapshot = snapshot;
+        }
+        return recipeIds;
+    }
     /**
      * Resolves all recipes that are currently ready, including recipes unlocked by an earlier result.
      * A stable ID order makes competing recipes deterministic; the bound prevents malformed packs from
@@ -31,22 +47,24 @@ public final class TalentSynthesisService {
         int limit = Math.max(0, Math.min(256, maximum));
         int synthesized = 0;
         while (synthesized < limit) {
-            ResourceLocation ready = TalentEditorMod.SNAPSHOTS.active().talents().values().stream()
-                    .filter(TalentDefinition::enabled)
-                    .filter(TalentDefinition::available)
-                    .filter(talent -> talent.synthesis().enabled())
-                    .sorted(java.util.Comparator.comparing(talent -> talent.id().toString()))
-                    .map(TalentDefinition::id)
-                    .filter(id -> check(player, id).successful())
-                    .findFirst()
-                    .orElse(null);
-            if (ready == null || !synthesize(player, ready).successful()) break;
+            if (recipes().isEmpty()) break;
+            // Rebuild after each successful recipe: costs and presentation actions may change conditions.
+            var context = ConditionEvaluator.context(player);
+            ResourceLocation ready = recipes().stream()
+                    .filter(id -> check(player, id, () -> context).successful()).findFirst().orElse(null);
+            if (ready == null || !synthesize(player, ready, false).successful()) break;
             synthesized++;
         }
+        if (synthesized > 0) syncResult(player);
         return synthesized;
     }
 
     public SynthesisResult check(ServerPlayer player, ResourceLocation targetId) {
+        return check(player, targetId, () -> ConditionEvaluator.context(player));
+    }
+
+    private SynthesisResult check(ServerPlayer player, ResourceLocation targetId,
+                                  Supplier<ConditionEvaluator.Context> contextSupplier) {
         TalentDefinition target = TalentEditorMod.SNAPSHOTS.active().talents().get(targetId);
         if (target == null) return SynthesisResult.failed(SynthesisResult.Status.TARGET_NOT_FOUND, targetId);
         if (!target.enabled() || !target.available()) {
@@ -63,7 +81,8 @@ public final class TalentSynthesisService {
         if (data.contains(targetId)) {
             return SynthesisResult.failed(SynthesisResult.Status.ALREADY_OWNED, targetId);
         }
-        if (!ConditionEvaluator.test(target.acquireCondition(), player)) {
+        var context = contextSupplier.get();
+        if (!ConditionEvaluator.test(target.acquireCondition(), context)) {
             return SynthesisResult.failed(SynthesisResult.Status.REQUIREMENTS_NOT_MET, targetId);
         }
         for (ResourceLocation talent : synthesis.consumeTalents()) {
@@ -76,7 +95,7 @@ public final class TalentSynthesisService {
                 return SynthesisResult.failed(SynthesisResult.Status.MISSING_COUNTER, targetId, cost.getKey());
             }
         }
-        Map<ResourceLocation, Integer> itemCounts = ConditionEvaluator.context(player).itemCounts();
+        Map<ResourceLocation, Integer> itemCounts = context.itemCounts();
         for (Map.Entry<ResourceLocation, Integer> cost : synthesis.consumeItems().entrySet()) {
             if (itemCounts.getOrDefault(cost.getKey(), 0) < cost.getValue()) {
                 return SynthesisResult.failed(SynthesisResult.Status.MISSING_ITEM, targetId, cost.getKey());
@@ -86,6 +105,10 @@ public final class TalentSynthesisService {
     }
 
     public synchronized SynthesisResult synthesize(ServerPlayer player, ResourceLocation targetId) {
+        return synthesize(player, targetId, true);
+    }
+
+    private SynthesisResult synthesize(ServerPlayer player, ResourceLocation targetId, boolean synchronize) {
         SynthesisResult checked = check(player, targetId);
         if (!checked.successful()) return checked;
         TalentDefinition target = TalentEditorMod.SNAPSHOTS.active().talents().get(targetId);
@@ -111,11 +134,16 @@ public final class TalentSynthesisService {
                 player.getInventory().getItem(consumption.slot()).shrink(consumption.count())
         );
         player.getInventory().setChanged();
-        player.inventoryMenu.broadcastChanges();
         TalentEditorMod.PRESENTATIONS.acquired(player, target, true);
+        // Keep intermediate attributes current for the next recipe and its expressions.
         TalentAttributeRuntime.refresh(player);
-        EditorNetwork.sendPlayerState(player, false);
+        if (synchronize) syncResult(player);
         return SynthesisResult.success(targetId);
+    }
+
+    private static void syncResult(ServerPlayer player) {
+        player.inventoryMenu.broadcastChanges();
+        EditorNetwork.sendPlayerState(player, false);
     }
 
     private static List<SlotConsumption> planItems(

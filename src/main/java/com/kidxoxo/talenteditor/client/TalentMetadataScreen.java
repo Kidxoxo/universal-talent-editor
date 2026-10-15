@@ -13,7 +13,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 
-public final class TalentMetadataScreen extends Screen {
+public final class TalentMetadataScreen extends EditorScreen {
     private final TalentEditScreen parent;
     private final Screen returnScreen;
     private final TalentDraft.MetadataDraft original;
@@ -58,14 +58,14 @@ public final class TalentMetadataScreen extends Screen {
         int x = (width - formWidth) / 2;
         int gap = 6;
         int toggleWidth = (formWidth - gap * 2) / 3;
-        enabledButton = addRenderableWidget(Button.builder(enabledLabel(), button -> {
+        enabledButton = addRenderableWidget(EditorWidgets.button(enabledLabel(), button -> {
             enabled = !enabled;
             button.setMessage(enabledLabel());
         }).bounds(x, 34, toggleWidth, 20).build());
-        rarityButton = addRenderableWidget(Button.builder(rarityLabel(), button -> openRarityPicker())
+        rarityButton = addRenderableWidget(EditorWidgets.button(rarityLabel(), button -> openRarityPicker())
                 .bounds(x + toggleWidth + gap, 34, toggleWidth, 20).build());
         rarityButton.active = !rarities.isEmpty();
-        generatedEffectsButton = addRenderableWidget(Button.builder(generatedEffectsLabel(), button -> {
+        generatedEffectsButton = addRenderableWidget(EditorWidgets.button(generatedEffectsLabel(), button -> {
             showGeneratedEffects = !showGeneratedEffects;
             button.setMessage(generatedEffectsLabel());
         }).bounds(x + (toggleWidth + gap) * 2,
@@ -75,7 +75,7 @@ public final class TalentMetadataScreen extends Screen {
         categoriesField = field(x, 70, formWidth - chooseWidth - gap, categoriesValue, 4_096,
                 value -> categoriesValue = value);
         categoriesField.setHint(Component.translatable("screen.talent_editor.metadata.categories_hint"));
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.reference_picker.choose"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.reference_picker.choose"),
                         button -> openCategoryPicker())
                 .bounds(x + formWidth - chooseWidth, 70, chooseWidth, 20).build());
 
@@ -85,7 +85,7 @@ public final class TalentMetadataScreen extends Screen {
         iconField = field(x, 105, iconAreaWidth - iconChooseWidth - gap,
                 iconValue, 512, value -> iconValue = value);
         iconField.setHint(Component.translatable("screen.talent_editor.metadata.icon_hint"));
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.reference_picker.choose"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.reference_picker.choose"),
                         button -> openIconPicker())
                 .bounds(x + iconAreaWidth - iconChooseWidth, 105, iconChooseWidth, 20).build());
         capacityField = field(x + formWidth - capacityWidth, 105, capacityWidth,
@@ -94,9 +94,9 @@ public final class TalentMetadataScreen extends Screen {
         int buttonWidth = Math.max(90, Math.min(160, (formWidth - gap) / 2));
         int total = buttonWidth * 2 + gap;
         int buttonX = x + (formWidth - total) / 2;
-        addRenderableWidget(Button.builder(Component.translatable("gui.back"), button -> returnToParent())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.back"), button -> returnToParent())
                 .bounds(buttonX, height - 28, buttonWidth, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.metadata.apply"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.metadata.apply"), EditorTheme.Tone.PRIMARY,
                         button -> apply())
                 .bounds(buttonX + buttonWidth + gap, height - 28, buttonWidth, 20).build());
     }
@@ -122,23 +122,23 @@ public final class TalentMetadataScreen extends Screen {
         EditorTheme.panel(graphics, x - 8, 27, formWidth + 16, 169);
         super.render(graphics, mouseX, mouseY, partialTick);
         int capacityWidth = Math.min(130, Math.max(80, formWidth / 4));
-        graphics.drawCenteredString(font, title, width / 2, 10, 0xFFFFFF);
+        EditorTheme.title(graphics,font,title,width);
         label(graphics, "screen.talent_editor.metadata.categories", x, 59);
         label(graphics, "screen.talent_editor.metadata.icon", x, 94);
         label(graphics, "screen.talent_editor.metadata.capacity",
                 x + formWidth - capacityWidth, 94);
         graphics.drawString(font, font.plainSubstrByWidth(
                 Component.translatable("screen.talent_editor.metadata.help").getString(), formWidth
-        ), x, 131, 0x808080, false);
+        ), x, 131, EditorTheme.MUTED, false);
         renderIconDiagnostic(graphics, x, 143, formWidth);
         if (!status.isBlank()) {
             graphics.drawString(font, font.plainSubstrByWidth(status, formWidth),
-                    x, height - 47, 0xFF7777, false);
+                    x, height - 47, EditorTheme.ERROR, false);
         }
     }
 
     private void label(GuiGraphics graphics, String key, int x, int y) {
-        graphics.drawString(font, Component.translatable(key), x, y, 0xA0A0A0, false);
+        graphics.drawString(font, Component.translatable(key), x, y, EditorTheme.MUTED, false);
     }
 
     private void renderIconDiagnostic(GuiGraphics graphics, int x, int y, int formWidth) {

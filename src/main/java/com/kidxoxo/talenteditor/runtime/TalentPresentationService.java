@@ -60,6 +60,8 @@ public final class TalentPresentationService {
     public static boolean executePresentation(ServerPlayer player, CompiledAction action, boolean synthesis) {
         if (action instanceof PlaySoundAction soundAction) {
             if (synthesis) playSynthesisSound(player, soundAction);
+            else if (soundAction.source() == net.minecraft.sounds.SoundSource.VOICE)
+                EditorNetwork.sendSynthesisSound(player, soundAction, TalentEditorMod.SETTINGS.current().soundOverlapPolicy());
             else playVanillaSound(player, soundAction);
             return true;
         }
@@ -100,7 +102,9 @@ public final class TalentPresentationService {
     private static void showMessage(ServerPlayer player, ShowMessageAction action) {
         var text = action.text().component();
         if (action.mode() == MessageDisplay.CHAT) {
-            player.sendSystemMessage(text);
+            int duration = com.kidxoxo.talenteditor.domain.PresentationChatTiming.visibleTicks(action.stayTicks());
+            if (duration > 200) EditorNetwork.sendPresentationChat(player, text, duration);
+            else player.sendSystemMessage(text);
             return;
         }
         if (action.mode() == MessageDisplay.ACTION_BAR) {

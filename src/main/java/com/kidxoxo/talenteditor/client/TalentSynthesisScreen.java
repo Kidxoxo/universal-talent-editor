@@ -12,7 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 
-public final class TalentSynthesisScreen extends Screen {
+public final class TalentSynthesisScreen extends EditorScreen {
     private final TalentEditScreen parent;
     private final Screen returnScreen;
     private boolean enabled;
@@ -45,7 +45,7 @@ public final class TalentSynthesisScreen extends Screen {
     protected void init() {
         int formWidth = Math.min(540, width - 32);
         int x = (width - formWidth) / 2;
-        enabledButton = addRenderableWidget(Button.builder(enabledLabel(), button -> {
+        enabledButton = addRenderableWidget(EditorWidgets.button(enabledLabel(), button -> {
             enabled = !enabled;
             enabledButton.setMessage(enabledLabel());
         }).bounds(x, 42, formWidth, 20).build());
@@ -54,26 +54,26 @@ public final class TalentSynthesisScreen extends Screen {
         int fieldWidth = formWidth - chooseWidth - 6;
         talentsField = field(x, 83, fieldWidth, "screen.talent_editor.synthesis.talents",
                 talentsValue, value -> talentsValue = value);
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.reference_picker.choose"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.reference_picker.choose"),
                         button -> openPicker(ResourceReferencePickerScreen.Source.TALENT, this::chooseTalent))
                 .bounds(x + fieldWidth + 6, 83, chooseWidth, 20).build());
         countersField = field(x, 124, fieldWidth, "screen.talent_editor.synthesis.counters",
                 countersValue, value -> countersValue = value);
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.reference_picker.choose"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.reference_picker.choose"),
                         button -> openPicker(ResourceReferencePickerScreen.Source.COUNTER, this::chooseCounter))
                 .bounds(x + fieldWidth + 6, 124, chooseWidth, 20).build());
         itemsField = field(x, 165, fieldWidth, "screen.talent_editor.synthesis.items",
                 itemsValue, value -> itemsValue = value);
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.reference_picker.choose"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.reference_picker.choose"),
                         button -> openPicker(ResourceReferencePickerScreen.Source.ITEM, this::chooseItem))
                 .bounds(x + fieldWidth + 6, 165, chooseWidth, 20).build());
 
         int half = (formWidth - 6) / 2;
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.synthesis.apply"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.synthesis.apply"), EditorTheme.Tone.PRIMARY,
                         button -> apply())
-                .bounds(x, height - 28, half, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.cancel"), button -> onClose())
                 .bounds(x + half + 6, height - 28, formWidth - half - 6, 20).build());
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.cancel"), button -> onClose())
+                .bounds(x, height - 28, half, 20).build());
     }
 
     private EditBox field(int x, int y, int width, String key, String value,
@@ -96,7 +96,7 @@ public final class TalentSynthesisScreen extends Screen {
         int x = (width - formWidth) / 2;
         EditorTheme.panel(graphics, x - 8, 31, formWidth + 16, 178);
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 13, EditorTheme.TEXT);
+        EditorTheme.title(graphics,font,title,width);
         label(graphics, "screen.talent_editor.synthesis.talents", x, 72);
         label(graphics, "screen.talent_editor.synthesis.counters", x, 113);
         label(graphics, "screen.talent_editor.synthesis.items", x, 154);
@@ -113,12 +113,12 @@ public final class TalentSynthesisScreen extends Screen {
             ), x, 193, ReferenceDiagnostics.color(references), false);
         } else {
             graphics.drawString(font, font.plainSubstrByWidth(status, formWidth), x,
-                    height - 47, 0xFF7777, false);
+                    height - 47, EditorTheme.ERROR, false);
         }
     }
 
     private void label(GuiGraphics graphics, String key, int x, int y) {
-        graphics.drawString(font, Component.translatable(key), x, y, 0xA0A0A0, false);
+        graphics.drawString(font, Component.translatable(key), x, y, EditorTheme.MUTED, false);
     }
 
     private void apply() {

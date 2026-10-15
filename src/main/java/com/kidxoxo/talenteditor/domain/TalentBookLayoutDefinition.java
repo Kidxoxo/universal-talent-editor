@@ -25,7 +25,9 @@ public record TalentBookLayoutDefinition(
         int iconSize,
         boolean showGeneratedEffects,
         List<SlotDefinition> slots,
-        List<PageDefinition> pages
+        List<PageDefinition> pages,
+        Optional<UiDocument> bookUi,
+        Optional<UiDocument> drawUi
 ) {
     public static final ResourceLocation DEFAULT_ID = new ResourceLocation("talent_editor", "default");
     public static final TalentBookLayoutDefinition DEFAULT = new TalentBookLayoutDefinition(
@@ -33,7 +35,16 @@ public record TalentBookLayoutDefinition(
             List.of(), List.of()
     );
 
+    public TalentBookLayoutDefinition(ResourceLocation id, int schema, boolean enabled, int priority,
+            Optional<ResourceLocation> background, int panelPercent, int columns, int rows, int slotWidth,
+            int slotHeight, int iconSize, boolean showGeneratedEffects, List<SlotDefinition> slots, List<PageDefinition> pages) {
+        this(id, schema, enabled, priority, background, panelPercent, columns, rows, slotWidth, slotHeight,
+                iconSize, showGeneratedEffects, slots, pages, Optional.empty(), Optional.empty());
+    }
+
     public TalentBookLayoutDefinition {
+        bookUi = bookUi == null ? Optional.empty() : bookUi;
+        drawUi = drawUi == null ? Optional.empty() : drawUi;
         background = background == null ? Optional.empty() : background;
         slots = slots == null ? List.of() : List.copyOf(slots);
         pages = pages == null ? List.of() : List.copyOf(pages);

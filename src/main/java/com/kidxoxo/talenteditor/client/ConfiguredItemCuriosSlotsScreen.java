@@ -11,7 +11,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 
 /** Selects actual player slot types synced by Curios, while retaining unavailable saved choices. */
-public final class ConfiguredItemCuriosSlotsScreen extends Screen {
+public final class ConfiguredItemCuriosSlotsScreen extends EditorScreen {
     private static final int ROW_HEIGHT = 19;
     private final ConfiguredItemEditScreen parent;
     private final boolean mainhandOnly;
@@ -38,18 +38,18 @@ public final class ConfiguredItemCuriosSlotsScreen extends Screen {
         union.addAll(selected);
         shown = List.copyOf(union);
         int w = Math.min(550, width - 32), x = (width - w) / 2;
-        enabledButton = addRenderableWidget(Button.builder(enabledLabel(), b -> {
+        enabledButton = addRenderableWidget(EditorWidgets.button(enabledLabel(), b -> {
             enabled = !enabled;
             enabledButton.setMessage(enabledLabel());
         }).bounds(x, 36, (w - 6) / 2, 20).build());
         enabledButton.active = !mainhandOnly;
-        anyButton = addRenderableWidget(Button.builder(anyLabel(), b -> {
+        anyButton = addRenderableWidget(EditorWidgets.button(anyLabel(), b -> {
             selected.clear();
             anyButton.setMessage(anyLabel());
         }).bounds(x + (w + 6) / 2, 36, (w - 6) / 2, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.cancel"), b -> onClose())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.cancel"), b -> onClose())
                 .bounds(x, height - 28, (w - 6) / 2, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.done"), b -> apply())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.done"), b -> apply())
                 .bounds(x + (w + 6) / 2, height - 28, (w - 6) / 2, 20).build());
     }
 
@@ -70,7 +70,7 @@ public final class ConfiguredItemCuriosSlotsScreen extends Screen {
         int w = Math.min(550, width - 32), x = (width - w) / 2;
         EditorTheme.panel(graphics, x - 8, 28, w + 16, Math.max(110, height - 66));
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 12, EditorTheme.TEXT);
+        EditorTheme.title(graphics,font,title,width);
         String help = Component.translatable(mainhandOnly
                 ? "screen.talent_editor.configured_item.curios_slots.mainhand_locked"
                 : "screen.talent_editor.configured_item.curios_slots.help").getString();

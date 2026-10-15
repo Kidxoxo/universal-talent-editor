@@ -95,7 +95,7 @@ public final class TalentCompiler {
     );
     private static final Set<String> LAYOUT_FIELDS = Set.of(
             "schema", "enabled", "priority", "background", "panelPercent", "columns", "rows",
-            "slotWidth", "slotHeight", "iconSize", "showGeneratedEffects", "slots", "pages"
+            "slotWidth", "slotHeight", "iconSize", "showGeneratedEffects", "slots", "pages", "bookUi", "drawUi"
     );
     private static final Set<String> LAYOUT_SLOT_FIELDS = Set.of(
             "id", "x", "y", "width", "height", "iconSize", "talent"
@@ -197,7 +197,7 @@ public final class TalentCompiler {
                 .sorted(Map.Entry.comparingByKey(Comparator.comparing(ResourceLocation::toString)))
                 .forEach(entry -> layouts.put(
                         entry.getKey(), compileLayout(
-                                entry.getKey(), entry.getValue(), raw.talents().keySet(), report
+                                entry.getKey(), entry.getValue(), raw.talents().keySet(), pools.keySet(), report
                         )
                 ));
 
@@ -624,6 +624,7 @@ public final class TalentCompiler {
             ResourceLocation id,
             JsonObject json,
             Set<ResourceLocation> knownTalents,
+            Set<ResourceLocation> knownPools,
             ValidationReport.Builder report
     ) {
         String source = "layout " + id;
@@ -669,9 +670,27 @@ public final class TalentCompiler {
             report.error("LAYOUT_ICON_TOO_TALL", source, "$.iconSize",
                     "Icon size must leave at least four pixels of vertical slot padding");
         }
+        var bookUi = json.has("bookUi") ? Optional.of(UiDocumentCodec.compile(
+                JsonAccess.object(json, "bookUi", false, source, "$", report), false, source, "$.bookUi", report))
+                : Optional.<com.kidxoxo.talenteditor.domain.UiDocument>empty();
+        var drawUi = json.has("drawUi") ? Optional.of(UiDocumentCodec.compile(
+                JsonAccess.object(json, "drawUi", false, source, "$", report), true, source, "$.drawUi", report))
+                : Optional.<com.kidxoxo.talenteditor.domain.UiDocument>empty();
+        bookUi.ifPresent(ui -> {
+            for (int i = 0; i < ui.elements().size(); i++) {
+                var element = ui.elements().get(i);
+                if (element.type().equals("button") && element.action().equals("draw") && !element.target().isBlank()) {
+                    var pool = ResourceLocation.tryParse(element.target());
+                    if (pool != null && !knownPools.contains(pool)) report.error("UNKNOWN_UI_POOL", source,
+                            "$.bookUi.elements[" + i + "].target", "Unknown draw pool: " + element.target());
+                }
+            }
+            if (pages.stream().anyMatch(p -> p.slots().size() > ui.slotCount()))
+                report.error("UI_PAGE_CAPACITY", source, "$.bookUi", "UI must provide at least as many slots as each configured page");
+        });
         return new TalentBookLayoutDefinition(
                 id, SCHEMA_VERSION, enabled, priority, Optional.ofNullable(background), panelPercent,
-                columns, rows, slotWidth, slotHeight, iconSize, showGeneratedEffects, slots, pages
+                columns, rows, slotWidth, slotHeight, iconSize, showGeneratedEffects, slots, pages, bookUi, drawUi
         );
     }
 

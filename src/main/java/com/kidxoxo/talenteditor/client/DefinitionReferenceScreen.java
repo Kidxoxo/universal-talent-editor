@@ -11,7 +11,7 @@ import net.minecraft.resources.ResourceLocation;
 
 import java.util.List;
 
-final class DefinitionReferenceScreen extends Screen {
+final class DefinitionReferenceScreen extends EditorScreen {
     private static final int ROW_HEIGHT = 28;
 
     private final Screen parent;
@@ -51,10 +51,10 @@ final class DefinitionReferenceScreen extends Screen {
                 : totalCount > 0
                 ? Component.translatable("screen.talent_editor.delete.blocked", totalCount)
                 : Component.translatable("screen.talent_editor.delete.open");
-        deleteButton = addRenderableWidget(Button.builder(deleteLabel, button -> openDeletion(source))
+        deleteButton = addRenderableWidget(EditorWidgets.button(deleteLabel, button -> openDeletion(source))
                 .bounds(16, height - 28, 132, 20).build());
         deleteButton.active = generated && totalCount == 0 && fileBacked(targetKind);
-        addRenderableWidget(Button.builder(Component.translatable("gui.back"), button -> returnParent())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.back"), button -> returnParent())
                 .bounds(width - 86, height - 28, 70, 20).build());
     }
 
@@ -62,12 +62,12 @@ final class DefinitionReferenceScreen extends Screen {
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics);
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 10, 0xFFFFFF);
+        EditorTheme.title(graphics,font,title,width);
         String target = kindName(targetKind) + " " + targetId;
         graphics.drawString(font, font.plainSubstrByWidth(target, width - 32), 16, 28, 0xE8E8E8, false);
         graphics.drawString(font, Component.translatable(
                 "screen.talent_editor.references.count", references.size(), totalCount
-        ), 16, 42, 0xA0A0A0, false);
+        ), 16, 42, EditorTheme.MUTED, false);
 
         int top = 63;
         int rows = Math.max(1, (height - top - 39) / ROW_HEIGHT);
@@ -94,7 +94,7 @@ final class DefinitionReferenceScreen extends Screen {
             graphics.drawString(font, font.plainSubstrByWidth(
                             Component.translatable("screen.talent_editor.references.truncated").getString(),
                             width - 112),
-                    16, height - 24, 0xFFAA55, false);
+                    16, height - 24, EditorTheme.WARNING, false);
         }
     }
 
@@ -144,6 +144,10 @@ final class DefinitionReferenceScreen extends Screen {
                     this, bootstrap, targetKind, targetId, source
             ));
         }
+    }
+
+    void openDeletionFromActions() {
+        if(deleteButton!=null&&deleteButton.active)openDeletion(source());
     }
 
     private String source() {

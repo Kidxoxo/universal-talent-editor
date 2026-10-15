@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.function.Consumer;
 
-public final class ConfiguredItemLootConditionScreen extends Screen {
+public final class ConfiguredItemLootConditionScreen extends EditorScreen {
     private static final List<String> TARGETS = List.of("this_entity", "killer_entity");
 
     private final ConfiguredItemLootScreen parent;
@@ -46,17 +46,17 @@ public final class ConfiguredItemLootConditionScreen extends Screen {
         int formWidth = Math.min(680, width - 32);
         int x = (width - formWidth) / 2;
         dimensionsField = field(x, 38, formWidth, 2_048);
-        targetButton = addRenderableWidget(Button.builder(Component.empty(), button -> {
+        targetButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> {
             targetIndex = (targetIndex + 1) % TARGETS.size();
             updateTargetButton();
         }).bounds(x, 68, formWidth, 20).build());
         entityTypesField = field(x, 98, formWidth - 92, 4_096);
-        addRenderableWidget(Button.builder(Component.translatable(
+        addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.configured_item.loot.conditions.choose_type"),
                         button -> choose(ResourceReferencePickerScreen.Source.ENTITY_TYPE, entityTypesField))
                 .bounds(x + formWidth - 86, 98, 86, 20).build());
         entityTagsField = field(x, 128, formWidth - 92, 4_096);
-        addRenderableWidget(Button.builder(Component.translatable(
+        addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.configured_item.loot.conditions.choose_tag"),
                         button -> choose(ResourceReferencePickerScreen.Source.ENTITY_TYPE_TAG, entityTagsField))
                 .bounds(x + formWidth - 86, 128, 86, 20).build());
@@ -64,11 +64,11 @@ public final class ConfiguredItemLootConditionScreen extends Screen {
 
         int gap = 6;
         int half = (formWidth - gap) / 2;
-        addRenderableWidget(Button.builder(Component.translatable(
+        addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.configured_item.loot.conditions.apply"), button -> apply())
-                .bounds(x, height - 28, half, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.cancel"), button -> returnParent())
                 .bounds(x + half + gap, height - 28, formWidth - half - gap, 20).build());
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.cancel"), button -> returnParent())
+                .bounds(x, height - 28, half, 20).build());
 
         dimensionsField.setValue(join(original.dimensions()));
         entityTypesField.setValue(join(original.entityTypes()));
@@ -92,7 +92,7 @@ public final class ConfiguredItemLootConditionScreen extends Screen {
         int x = (width - formWidth) / 2;
         EditorTheme.panel(graphics, x - 8, 27, formWidth + 16, 187);
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 10, 0xFFFFFF);
+        EditorTheme.title(graphics,font,title,width);
         label(graphics, "dimensions", x, 27);
         label(graphics, "entity_target", x, 57);
         label(graphics, "entity_types", x, 87);
@@ -116,7 +116,7 @@ public final class ConfiguredItemLootConditionScreen extends Screen {
 
     private void label(GuiGraphics graphics, String suffix, int x, int y) {
         graphics.drawString(font, Component.translatable(
-                "screen.talent_editor.configured_item.loot.conditions." + suffix), x, y, 0xA0A0A0, false);
+                "screen.talent_editor.configured_item.loot.conditions." + suffix), x, y, EditorTheme.MUTED, false);
     }
 
     private void updateTargetButton() {

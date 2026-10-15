@@ -42,6 +42,21 @@ class PresentationCueDecoderTest {
                 .anyMatch(issue -> issue.code().equals("PRESENTATION_TIMELINE_PLACEMENT")));
     }
 
+    @Test void chatHoldAndLineBreaksSurviveCompilation() {
+        ValidationReport.Builder report = ValidationReport.builder();
+        var json = new com.google.gson.JsonObject();
+        json.addProperty("type", "show_message");
+        json.addProperty("text", "First\nSecond");
+        json.addProperty("stayTicks", 1960);
+        json.addProperty("atTick", 520);
+        var action = (ShowMessageAction) new ShowMessageActionDecoder().decode(
+                context(report, ActionPlacement.ON_ACQUIRE), json).orElseThrow();
+        assertFalse(report.build().hasErrors());
+        assertEquals(1960, action.stayTicks());
+        assertEquals("First\nSecond", action.text().fallbackText());
+        assertEquals(520, action.atTick());
+    }
+
     private ActionDecodeContext context(ValidationReport.Builder report, ActionPlacement placement) {
         return new ActionDecodeContext(new ResourceLocation("example:talent"), "test", "onAcquire[0]",
                 placement, environment, List.of(), report);

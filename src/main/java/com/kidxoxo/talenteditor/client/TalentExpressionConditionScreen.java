@@ -10,7 +10,7 @@ import net.minecraft.network.chat.Component;
 import java.util.List;
 
 /** Visual editor for expression_compare trigger conditions. */
-public final class TalentExpressionConditionScreen extends Screen {
+public final class TalentExpressionConditionScreen extends EditorScreen {
     private static final List<String> OPERATORS = List.of("lt", "lte", "eq", "neq", "gte", "gt");
     private final Screen returnScreen;
     private final TalentEditScreen owner;
@@ -39,7 +39,7 @@ public final class TalentExpressionConditionScreen extends Screen {
         int formWidth = Math.min(650, width - 32);
         int x = (width - formWidth) / 2;
         left = field(x, 61, formWidth, current.expression() ? current.left() : "0");
-        operatorButton = addRenderableWidget(Button.builder(operatorLabel(), button ->
+        operatorButton = addRenderableWidget(EditorWidgets.button(operatorLabel(), button ->
                 options.open(Component.translatable("screen.talent_editor.option.choose"),
                         OPERATORS.stream().map(value -> Component.translatable(
                                 "screen.talent_editor.expression_condition.operator_help." + value)).toList(),
@@ -49,12 +49,12 @@ public final class TalentExpressionConditionScreen extends Screen {
                         }, height)).bounds(x, 101, formWidth, 20).build());
         right = field(x, 141, formWidth, current.expression() ? current.right() : "0");
         int third = (formWidth - 12) / 3;
-        addRenderableWidget(Button.builder(Component.translatable("gui.cancel"), button -> returnParent())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.cancel"), button -> returnParent())
                 .bounds(x, height - 28, third, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable(
+        addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.expression_condition.clear"), button -> clear())
                 .bounds(x + third + 6, height - 28, third, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.done"), button -> apply())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.done"), button -> apply())
                 .bounds(x + (third + 6) * 2, height - 28,
                         formWidth - (third + 6) * 2, 20).build());
     }
@@ -103,7 +103,7 @@ public final class TalentExpressionConditionScreen extends Screen {
         int x = (width - formWidth) / 2;
         EditorTheme.panel(graphics, x - 7, 27, formWidth + 14, 151);
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 10, EditorTheme.TEXT);
+        EditorTheme.title(graphics,font,title,width);
         label(graphics, "left", x, 48);
         label(graphics, "right", x, 128);
         graphics.drawWordWrap(font, Component.translatable(
@@ -112,7 +112,7 @@ public final class TalentExpressionConditionScreen extends Screen {
                                 : "screen.talent_editor.expression_condition.help"),
                 x, 185, formWidth, replacingOtherCondition ? 0xFFAA55 : EditorTheme.MUTED);
         if (!status.isBlank()) graphics.drawString(font, font.plainSubstrByWidth(status, formWidth),
-                x, height - 47, 0xFF7777, false);
+                x, height - 47, EditorTheme.ERROR, false);
         options.render(graphics, font, width, height);
     }
 

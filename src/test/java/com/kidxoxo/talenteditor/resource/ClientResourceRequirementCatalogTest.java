@@ -26,6 +26,24 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ClientResourceRequirementCatalogTest {
     @Test
+    void includesNormalAndHoverImagesFromBothUiDocuments() {
+        var book = com.kidxoxo.talenteditor.compile.UiDocumentCodec.read("""
+                {"elements":[{"id":"slot","type":"slot","texture":"test:textures/book.png","hoverTexture":"test:textures/hover.png"}]}
+                """, false);
+        var draw = new com.google.gson.JsonObject();var elements = new com.google.gson.JsonArray();draw.add("elements", elements);
+        for (int i=0;i<5;i++) elements.add(com.google.gson.JsonParser.parseString(
+                "{\"id\":\"o"+i+"\",\"type\":\"offer\",\"index\":"+i+",\"texture\":\"test:textures/draw.png\",\"hoverTexture\":\"test:textures/hover.png\"}"));
+        var layout = new TalentBookLayoutDefinition(id("test:ui"),2,true,10,Optional.empty(),60,2,3,120,56,48,true,
+                List.of(),List.of(),Optional.of(book),Optional.of(com.kidxoxo.talenteditor.compile.UiDocumentCodec.read(draw.toString(),true)));
+        var snapshot = RuntimeSnapshot.candidate("0".repeat(64),Map.of(),Map.of(),Map.of(),Map.of(),Map.of(layout.id(),layout),Map.of());
+        var result = ClientResourceRequirementCatalog.from(snapshot);
+        assertEquals(3,result.textureCount());
+        assertEquals(List.of(requirement(ClientResourceRequirement.Kind.TEXTURE,"test:textures/book.png"),
+                requirement(ClientResourceRequirement.Kind.TEXTURE,"test:textures/draw.png"),
+                requirement(ClientResourceRequirement.Kind.TEXTURE,"test:textures/hover.png")),result.requirements());
+    }
+
+    @Test
     void derivesDistinctAssetsFromActiveDefinitionsAndLayout() {
         TalentDefinition active = talent(true, true);
         TalentDefinition disabled = new TalentDefinition(

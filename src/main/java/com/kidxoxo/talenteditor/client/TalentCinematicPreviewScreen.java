@@ -3,6 +3,8 @@ package com.kidxoxo.talenteditor.client;
 import com.google.gson.JsonObject;
 import com.kidxoxo.talenteditor.network.ParticleWavePacket;
 import com.kidxoxo.talenteditor.domain.ParticleTint;
+import com.kidxoxo.talenteditor.domain.PresentationChatTiming;
+import net.minecraft.util.FormattedCharSequence;
 import com.kidxoxo.talenteditor.domain.PresentationTransformAction;
 import net.minecraft.client.CameraType;
 import net.minecraft.client.gui.GuiGraphics;
@@ -21,7 +23,7 @@ import java.util.List;
 import java.util.Locale;
 
 /** Live-world, client-only preview of the complete acquisition or synthesis presentation. */
-final class TalentCinematicPreviewScreen extends Screen {
+final class TalentCinematicPreviewScreen extends EditorScreen {
     private final Screen parent;
     private final List<Cue> cues;
     private final List<SoundInstance> playing = new ArrayList<>();
@@ -54,7 +56,7 @@ final class TalentCinematicPreviewScreen extends Screen {
                 .noneMatch(row -> row.type().equals("show_message"));
         talentName = Component.literal(draft.name());
         int ending = Math.max(cues.stream().mapToInt(Cue::endTick).max().orElse(0),
-                defaultAcquireMessage ? 180 : 0);
+                defaultAcquireMessage ? 200 : 0);
         ending = Math.max(ending, defaultSynthesisTitle ? 100 : 0);
         totalTicks = Math.max(60, Math.min(16_000, ending + 30));
         cameraDistance = cues.stream().filter(cue -> cue.type.equals("spawn_particles"))
@@ -80,18 +82,18 @@ final class TalentCinematicPreviewScreen extends Screen {
     @Override protected void init() {
         int w = Math.min(620, width - 24), x = (width - w) / 2, y = height - 30;
         int quarter = (w - 12) / 4;
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.particles.preview_replay"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.particles.preview_replay"),
                 button -> restart()).bounds(x, y, quarter, 20).build());
-        pauseButton = addRenderableWidget(Button.builder(Component.empty(), button -> {
+        pauseButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> {
             paused = !paused; updateButtons();
         }).bounds(x + quarter + 4, y, quarter, 20).build());
-        cameraButton = addRenderableWidget(Button.builder(Component.empty(), button -> {
+        cameraButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> {
             if (minecraft == null) return;
             minecraft.options.setCameraType(minecraft.options.getCameraType() == CameraType.THIRD_PERSON_BACK
                     ? CameraType.THIRD_PERSON_FRONT : CameraType.THIRD_PERSON_BACK);
             updateButtons();
         }).bounds(x + (quarter + 4) * 2, y, quarter, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.back"), button -> close())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.back"), button -> close())
                 .bounds(x + (quarter + 4) * 3, y, w - (quarter + 4) * 3, 20).build());
         if (!cameraCaptured && minecraft != null) {
             originalCamera = minecraft.options.getCameraType();
@@ -126,6 +128,7 @@ final class TalentCinematicPreviewScreen extends Screen {
     @Override public void tick() {
         if (paused || minecraft == null || minecraft.level == null || minecraft.player == null) return;
         if (age < totalTicks) playAt(age++);
+        else if (age < 16_000 && playing.stream().anyMatch(minecraft.getSoundManager()::isActive)) age++;
         else restart();
     }
 
@@ -223,7 +226,7 @@ final class TalentCinematicPreviewScreen extends Screen {
         graphics.fill(0, 0, width, 45, 0x980B1721);
         graphics.fill(0, height - 40, width, height, 0x980B1721);
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 6, EditorTheme.TEXT);
+        EditorTheme.title(graphics,font,title,width);
         graphics.drawCenteredString(font, Component.translatable("screen.talent_editor.presentation.preview_clock",
                 Math.min(age, totalTicks), totalTicks, cues.size()), width / 2, 20, EditorTheme.MUTED);
         int progressWidth = Math.min(360, width - 40), progressX = (width - progressWidth) / 2;
@@ -241,7 +244,7 @@ final class TalentCinematicPreviewScreen extends Screen {
             String mode = string(cue.json, "mode", "chat");
             if (mode.equals("title")) title = cue;
             else if (mode.equals("action_bar")) actionBar = cue;
-            else if (age - cue.atTick < 180) chats.add(cue);
+            else if (age - cue.atTick < chatDuration(cue.json)) chats.add(cue);
         }
         if (title != null) {
             int elapsed = age - title.atTick;
@@ -255,11 +258,18 @@ final class TalentCinematicPreviewScreen extends Screen {
                         ? (double) (total - elapsed) / fadeOut : 1;
                 int alpha = Math.max(4, Math.min(255, (int) (fade * 255)));
                 Component text = LocalizedTextDraft.parse(title.json.get("text")).component();
-                graphics.drawCenteredString(font, text, width / 2, height / 2 - 12,
-                        alpha << 24 | 0xFFFFFF);
-                if (title.json.has("subtitle")) graphics.drawCenteredString(font,
-                        LocalizedTextDraft.parse(title.json.get("subtitle")).component(),
-                        width / 2, height / 2 + 9, alpha << 24 | 0xFFFFFF);
+                List<FormattedCharSequence> lines = new ArrayList<>(font.split(text, Math.max(1, width - 40)));
+                if (title.json.has("subtitle")) {
+                    lines.add(FormattedCharSequence.EMPTY);
+                    lines.addAll(font.split(LocalizedTextDraft.parse(title.json.get("subtitle")).component(),
+                            Math.max(1, width - 40)));
+                }
+                int lineHeight = font.lineHeight + 3;
+                int maxLines = Math.max(1, (height - 120) / lineHeight);
+                if (lines.size() > maxLines) lines = lines.subList(0, maxLines);
+                int top = height / 2 - lines.size() * lineHeight / 2;
+                for (int i = 0; i < lines.size(); i++) graphics.drawCenteredString(font, lines.get(i),
+                        width / 2, top + i * lineHeight, alpha << 24 | 0xFFFFFF);
             }
         }
         if (title == null && defaultSynthesisTitle && age < 100) {
@@ -269,25 +279,44 @@ final class TalentCinematicPreviewScreen extends Screen {
                     width / 2, height / 2 - 12, color);
             graphics.drawCenteredString(font, talentName, width / 2, height / 2 + 9, color);
         }
-        if (actionBar != null && age - actionBar.atTick < 60) graphics.drawCenteredString(font,
-                LocalizedTextDraft.parse(actionBar.json.get("text")).component(),
-                width / 2, height - 62, 0xFFFFFFFF);
-        int shown = Math.min(3, chats.size()), start = chats.size() - shown;
-        for (int i = 0; i < shown; i++) {
-            Cue chat = chats.get(start + i);
-            Component message = LocalizedTextDraft.parse(chat.json.get("text")).component();
-            int y = height - 108 - (shown - i - 1) * 12;
-            int textWidth = Math.min(font.width(message) + 10, width - 28);
-            graphics.fill(8, y - 2, 8 + textWidth, y + 11, 0x90000000);
-            graphics.drawString(font, message, 13, y, 0xFFFFFFFF, false);
+        if (actionBar != null && age - actionBar.atTick < 60) {
+            var lines = font.split(LocalizedTextDraft.parse(actionBar.json.get("text")).component(),
+                    Math.max(1, width - 40));
+            int shown = Math.min(3, lines.size());
+            for (int i = 0; i < shown; i++) graphics.drawCenteredString(font, lines.get(i), width / 2,
+                    height - 62 - (shown - i - 1) * (font.lineHeight + 2), 0xFFFFFFFF);
         }
-        if (defaultAcquireMessage && age < 180) {
-            Component message = Component.translatable("message.talent_editor.talent_acquired", talentName);
-            int y = height - 120 - shown * 12;
-            graphics.fill(8, y - 2, 8 + Math.min(font.width(message) + 10, width - 28), y + 11, 0x90000000);
-            graphics.drawString(font, message, 13, y, 0xFFFFFFFF, false);
+        List<ChatLine> lines = new ArrayList<>();
+        int chatWidth = Math.max(1, Math.min(420, width - 32));
+        if (defaultAcquireMessage && age < 200) addChatLines(lines,
+                Component.translatable("message.talent_editor.talent_acquired", talentName),
+                chatWidth, PresentationChatTiming.opacity(age, 200));
+        for (Cue chat : chats) addChatLines(lines,
+                LocalizedTextDraft.parse(chat.json.get("text")).component(), chatWidth,
+                PresentationChatTiming.opacity(age - chat.atTick, chatDuration(chat.json)));
+        int lineHeight = font.lineHeight + 3;
+        int maxLines = Math.min(10, Math.max(1, (height - 150) / lineHeight));
+        int shown = Math.min(maxLines, lines.size()), start = lines.size() - shown;
+        for (int i = 0; i < shown; i++) {
+            ChatLine line = lines.get(start + i);
+            int alpha = (int) (line.opacity * 255);
+            if (alpha < 4) continue;
+            int y = height - 96 - (shown - i - 1) * lineHeight;
+            graphics.fill(8, y - 2, 18 + font.width(line.text), y + font.lineHeight + 2,
+                    (int) (line.opacity * 144) << 24);
+            graphics.drawString(font, line.text, 13, y, alpha << 24 | 0xFFFFFF, false);
         }
     }
+
+    private void addChatLines(List<ChatLine> output, Component text, int width, double opacity) {
+        for (FormattedCharSequence line : font.split(text, width)) output.add(new ChatLine(line, opacity));
+    }
+
+    private static int chatDuration(JsonObject json) {
+        return PresentationChatTiming.visibleTicks((int) number(json, "stayTicks", 200));
+    }
+
+    private record ChatLine(FormattedCharSequence text, double opacity) {}
 
     private void stopSounds() {
         if (minecraft != null) for (SoundInstance sound : playing) minecraft.getSoundManager().stop(sound);
@@ -323,7 +352,8 @@ final class TalentCinematicPreviewScreen extends Screen {
                 case "presentation_transform" -> (int) number(json, "durationTicks", 40);
                 case "show_message" -> string(json, "mode", "chat").equals("title")
                         ? (int) (number(json, "fadeInTicks", 10)
-                        + number(json, "stayTicks", 70) + number(json, "fadeOutTicks", 20)) : 180;
+                        + number(json, "stayTicks", 70) + number(json, "fadeOutTicks", 20))
+                        : string(json, "mode", "chat").equals("action_bar") ? 60 : chatDuration(json);
                 default -> 20;
             };
         }

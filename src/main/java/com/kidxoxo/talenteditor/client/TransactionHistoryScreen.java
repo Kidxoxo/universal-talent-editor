@@ -13,7 +13,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
-final class TransactionHistoryScreen extends Screen {
+final class TransactionHistoryScreen extends EditorScreen {
     private static final int ROW_HEIGHT = 30;
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
             .withZone(ZoneId.systemDefault());
@@ -32,14 +32,14 @@ final class TransactionHistoryScreen extends Screen {
 
     @Override
     protected void init() {
-        undoButton = addRenderableWidget(Button.builder(
+        undoButton = addRenderableWidget(EditorWidgets.button(
                 Component.translatable("screen.talent_editor.history.undo"), button -> openUndo()
         ).bounds(16, height - 28, 92, 20).build());
         undoButton.active = selectedTransaction() != null && selectedTransaction().canUndo();
-        addRenderableWidget(Button.builder(
+        addRenderableWidget(EditorWidgets.button(
                 Component.translatable("screen.talent_editor.history.refresh"), button -> refresh()
         ).bounds(width / 2 - 46, height - 28, 92, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.back"), button -> returnHome())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.back"), button -> returnHome())
                 .bounds(width - 86, height - 28, 70, 20).build());
     }
 
@@ -47,7 +47,7 @@ final class TransactionHistoryScreen extends Screen {
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics);
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 10, 0xFFFFFF);
+        EditorTheme.title(graphics,font,title,width);
         graphics.drawCenteredString(font, Component.translatable(
                 "screen.talent_editor.history.count", transactions.size()
         ), width / 2, 26, 0xA0A0A0);

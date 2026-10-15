@@ -52,92 +52,7 @@ public final class DefinitionService {
             CompilationEnvironment environment,
             Path datapacksRoot
     ) {
-        if (commit && baseRevision != snapshots.active().revision()) {
-            ValidationReport report = ValidationReport.builder()
-                    .error(
-                            "REVISION_CONFLICT",
-                            "talent " + id,
-                            "$",
-                            "Editor was based on revision " + baseRevision +
-                                    " but active revision is " + snapshots.active().revision()
-                    )
-                    .build();
-            return rejected(true, report);
-        }
-        if (jsonText.length() > MAX_JSON_CHARACTERS) {
-            ValidationReport report = ValidationReport.builder()
-                    .error(
-                            "JSON_SIZE_LIMIT",
-                            "talent " + id,
-                            "$",
-                            "Definition exceeds " + MAX_JSON_CHARACTERS + " characters"
-                    )
-                    .build();
-            return rejected(false, report);
-        }
-
-        JsonObject definition;
-        try {
-            JsonElement parsed = JsonParser.parseString(jsonText);
-            if (!parsed.isJsonObject()) {
-                ValidationReport report = ValidationReport.builder()
-                        .error("EXPECTED_ROOT_OBJECT", "talent " + id, "$", "Definition root must be an object")
-                        .build();
-                return rejected(false, report);
-            }
-            definition = parsed.getAsJsonObject();
-        } catch (RuntimeException ex) {
-            ValidationReport report = ValidationReport.builder()
-                    .error(
-                            "JSON_PARSE_FAILED",
-                            "talent " + id,
-                            "$",
-                            ex.getMessage() == null ? "Invalid JSON" : ex.getMessage()
-                    )
-                    .build();
-            return rejected(false, report);
-        }
-
-        RawDefinitionSet candidateDefinitions = activeRaw.get()
-                .withTalent(id, definition, EditorPackStorage.PACK_FOLDER);
-        CompilationResult compilation = compiler.compile(candidateDefinitions, environment);
-        if (compilation.report().hasErrors() || compilation.candidate().isEmpty()) {
-            return rejected(false, compilation.report());
-        }
-        if (!commit) {
-            return new EditorSubmissionResult(
-                    true,
-                    false,
-                    false,
-                    snapshots.active().revision(),
-                    snapshots.active().contentHash(),
-                    compilation.report()
-            );
-        }
-
-        try {
-            storage.writeTalent(datapacksRoot, id, definition);
-        } catch (Exception ex) {
-            ValidationReport.Builder report = ValidationReport.builder().addAll(compilation.report());
-            report.error(
-                    "PERSISTENCE_FAILED",
-                    "talent " + id,
-                    "$",
-                    ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage()
-            );
-            return rejected(false, report.build());
-        }
-
-        ActivationOutcome outcome = snapshots.apply(compilation);
-        if (outcome.accepted()) activeRaw.set(candidateDefinitions);
-        return new EditorSubmissionResult(
-                outcome.accepted(),
-                outcome.accepted(),
-                false,
-                outcome.activeRevision(),
-                outcome.activeHash(),
-                compilation.report()
-        );
+        return submit(DefinitionKind.TALENT, baseRevision, id, jsonText, commit, environment, datapacksRoot);
     }
 
     public synchronized EditorSubmissionResult submitPool(
@@ -148,92 +63,7 @@ public final class DefinitionService {
             CompilationEnvironment environment,
             Path datapacksRoot
     ) {
-        if (commit && baseRevision != snapshots.active().revision()) {
-            ValidationReport report = ValidationReport.builder()
-                    .error(
-                            "REVISION_CONFLICT",
-                            "pool " + id,
-                            "$",
-                            "Editor was based on revision " + baseRevision +
-                                    " but active revision is " + snapshots.active().revision()
-                    )
-                    .build();
-            return rejected(true, report);
-        }
-        if (jsonText.length() > MAX_JSON_CHARACTERS) {
-            ValidationReport report = ValidationReport.builder()
-                    .error(
-                            "JSON_SIZE_LIMIT",
-                            "pool " + id,
-                            "$",
-                            "Definition exceeds " + MAX_JSON_CHARACTERS + " characters"
-                    )
-                    .build();
-            return rejected(false, report);
-        }
-
-        JsonObject definition;
-        try {
-            JsonElement parsed = JsonParser.parseString(jsonText);
-            if (!parsed.isJsonObject()) {
-                ValidationReport report = ValidationReport.builder()
-                        .error("EXPECTED_ROOT_OBJECT", "pool " + id, "$", "Definition root must be an object")
-                        .build();
-                return rejected(false, report);
-            }
-            definition = parsed.getAsJsonObject();
-        } catch (RuntimeException ex) {
-            ValidationReport report = ValidationReport.builder()
-                    .error(
-                            "JSON_PARSE_FAILED",
-                            "pool " + id,
-                            "$",
-                            ex.getMessage() == null ? "Invalid JSON" : ex.getMessage()
-                    )
-                    .build();
-            return rejected(false, report);
-        }
-
-        RawDefinitionSet candidateDefinitions = activeRaw.get()
-                .withPool(id, definition, EditorPackStorage.PACK_FOLDER);
-        CompilationResult compilation = compiler.compile(candidateDefinitions, environment);
-        if (compilation.report().hasErrors() || compilation.candidate().isEmpty()) {
-            return rejected(false, compilation.report());
-        }
-        if (!commit) {
-            return new EditorSubmissionResult(
-                    true,
-                    false,
-                    false,
-                    snapshots.active().revision(),
-                    snapshots.active().contentHash(),
-                    compilation.report()
-            );
-        }
-
-        try {
-            storage.writePool(datapacksRoot, id, definition);
-        } catch (Exception ex) {
-            ValidationReport.Builder report = ValidationReport.builder().addAll(compilation.report());
-            report.error(
-                    "PERSISTENCE_FAILED",
-                    "pool " + id,
-                    "$",
-                    ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage()
-            );
-            return rejected(false, report.build());
-        }
-
-        ActivationOutcome outcome = snapshots.apply(compilation);
-        if (outcome.accepted()) activeRaw.set(candidateDefinitions);
-        return new EditorSubmissionResult(
-                outcome.accepted(),
-                outcome.accepted(),
-                false,
-                outcome.activeRevision(),
-                outcome.activeHash(),
-                compilation.report()
-        );
+        return submit(DefinitionKind.POOL, baseRevision, id, jsonText, commit, environment, datapacksRoot);
     }
 
     public synchronized EditorSubmissionResult submitRarity(
@@ -244,92 +74,64 @@ public final class DefinitionService {
             CompilationEnvironment environment,
             Path datapacksRoot
     ) {
+        return submit(DefinitionKind.RARITY, baseRevision, id, jsonText, commit, environment, datapacksRoot);
+    }
+
+    /** One validation/persistence/activation transaction shared by every file-backed definition. */
+    public synchronized EditorSubmissionResult submit(
+            DefinitionKind kind, long baseRevision, ResourceLocation id, String jsonText,
+            boolean commit, CompilationEnvironment environment, Path datapacksRoot
+    ) {
+        if (kind == DefinitionKind.TALENT_CATEGORY || kind == DefinitionKind.COUNTER_CATEGORY)
+            throw new IllegalArgumentException("Category indexes are not file-backed definitions");
+        String source = (kind == DefinitionKind.ITEM ? "configured item" : kind.serializedName()) + " " + id;
         if (commit && baseRevision != snapshots.active().revision()) {
-            ValidationReport report = ValidationReport.builder()
-                    .error(
-                            "REVISION_CONFLICT",
-                            "rarity " + id,
-                            "$",
-                            "Editor was based on revision " + baseRevision +
-                                    " but active revision is " + snapshots.active().revision()
-                    )
-                    .build();
-            return rejected(true, report);
+            return rejected(true, ValidationReport.builder().error("REVISION_CONFLICT", source, "$",
+                    "Editor was based on revision " + baseRevision
+                            + " but active revision is " + snapshots.active().revision()).build());
         }
         if (jsonText.length() > MAX_JSON_CHARACTERS) {
-            ValidationReport report = ValidationReport.builder()
-                    .error(
-                            "JSON_SIZE_LIMIT",
-                            "rarity " + id,
-                            "$",
-                            "Definition exceeds " + MAX_JSON_CHARACTERS + " characters"
-                    )
-                    .build();
-            return rejected(false, report);
+            return rejected(false, ValidationReport.builder().error("JSON_SIZE_LIMIT", source, "$",
+                    "Definition exceeds " + MAX_JSON_CHARACTERS + " characters").build());
         }
-
         JsonObject definition;
         try {
             JsonElement parsed = JsonParser.parseString(jsonText);
             if (!parsed.isJsonObject()) {
-                ValidationReport report = ValidationReport.builder()
-                        .error("EXPECTED_ROOT_OBJECT", "rarity " + id, "$", "Definition root must be an object")
-                        .build();
-                return rejected(false, report);
+                return rejected(false, ValidationReport.builder().error("EXPECTED_ROOT_OBJECT", source, "$",
+                        "Definition root must be an object").build());
             }
             definition = parsed.getAsJsonObject();
         } catch (RuntimeException ex) {
-            ValidationReport report = ValidationReport.builder()
-                    .error(
-                            "JSON_PARSE_FAILED",
-                            "rarity " + id,
-                            "$",
-                            ex.getMessage() == null ? "Invalid JSON" : ex.getMessage()
-                    )
-                    .build();
-            return rejected(false, report);
+            return rejected(false, ValidationReport.builder().error("JSON_PARSE_FAILED", source, "$",
+                    ex.getMessage() == null ? "Invalid JSON" : ex.getMessage()).build());
         }
-
-        RawDefinitionSet candidateDefinitions = activeRaw.get()
-                .withRarity(id, definition, EditorPackStorage.PACK_FOLDER);
+        RawDefinitionSet candidateDefinitions = applyTargetState(
+                activeRaw.get(), kind, id, Optional.of(definition), EditorPackStorage.PACK_FOLDER);
         CompilationResult compilation = compiler.compile(candidateDefinitions, environment);
-        if (compilation.report().hasErrors() || compilation.candidate().isEmpty()) {
+        if (compilation.report().hasErrors() || compilation.candidate().isEmpty())
             return rejected(false, compilation.report());
-        }
-        if (!commit) {
-            return new EditorSubmissionResult(
-                    true,
-                    false,
-                    false,
-                    snapshots.active().revision(),
-                    snapshots.active().contentHash(),
-                    compilation.report()
-            );
-        }
-
+        if (!commit) return new EditorSubmissionResult(true, false, false,
+                snapshots.active().revision(), snapshots.active().contentHash(), compilation.report());
         try {
-            storage.writeRarity(datapacksRoot, id, definition);
+            switch (kind) {
+                case TALENT -> storage.writeTalent(datapacksRoot, id, definition);
+                case RARITY -> storage.writeRarity(datapacksRoot, id, definition);
+                case POOL -> storage.writePool(datapacksRoot, id, definition);
+                case COUNTER -> storage.writeCounter(datapacksRoot, id, definition);
+                case LAYOUT -> storage.writeLayout(datapacksRoot, id, definition);
+                case ITEM -> storage.writeConfiguredItem(datapacksRoot, id, definition);
+                default -> throw new IllegalArgumentException("Unsupported definition kind");
+            }
         } catch (Exception ex) {
-            ValidationReport.Builder report = ValidationReport.builder().addAll(compilation.report());
-            report.error(
-                    "PERSISTENCE_FAILED",
-                    "rarity " + id,
-                    "$",
-                    ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage()
-            );
-            return rejected(false, report.build());
+            return rejected(false, ValidationReport.builder().addAll(compilation.report())
+                    .error("PERSISTENCE_FAILED", source, "$",
+                            ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage()).build());
         }
-
         ActivationOutcome outcome = snapshots.apply(compilation);
         if (outcome.accepted()) activeRaw.set(candidateDefinitions);
-        return new EditorSubmissionResult(
-                outcome.accepted(),
-                outcome.accepted(),
-                false,
-                outcome.activeRevision(),
-                outcome.activeHash(),
-                compilation.report()
-        );
+        return new EditorSubmissionResult(outcome.accepted(), outcome.accepted(), false,
+                outcome.activeRevision(), outcome.activeHash(), compilation.report());
     }
 
     public RawDefinitionSet activeRaw() {
@@ -344,64 +146,7 @@ public final class DefinitionService {
             CompilationEnvironment environment,
             Path datapacksRoot
     ) {
-        String source = "counter " + id;
-        if (commit && baseRevision != snapshots.active().revision()) {
-            return rejected(true, ValidationReport.builder().error(
-                    "REVISION_CONFLICT", source, "$",
-                    "Editor was based on revision " + baseRevision
-                            + " but active revision is " + snapshots.active().revision()
-            ).build());
-        }
-        if (jsonText.length() > MAX_JSON_CHARACTERS) {
-            return rejected(false, ValidationReport.builder().error(
-                    "JSON_SIZE_LIMIT", source, "$",
-                    "Definition exceeds " + MAX_JSON_CHARACTERS + " characters"
-            ).build());
-        }
-
-        JsonObject definition;
-        try {
-            JsonElement parsed = JsonParser.parseString(jsonText);
-            if (!parsed.isJsonObject()) {
-                return rejected(false, ValidationReport.builder().error(
-                        "EXPECTED_ROOT_OBJECT", source, "$", "Definition root must be an object"
-                ).build());
-            }
-            definition = parsed.getAsJsonObject();
-        } catch (RuntimeException ex) {
-            return rejected(false, ValidationReport.builder().error(
-                    "JSON_PARSE_FAILED", source, "$",
-                    ex.getMessage() == null ? "Invalid JSON" : ex.getMessage()
-            ).build());
-        }
-
-        RawDefinitionSet candidateDefinitions = activeRaw.get()
-                .withCounter(id, definition, EditorPackStorage.PACK_FOLDER);
-        CompilationResult compilation = compiler.compile(candidateDefinitions, environment);
-        if (compilation.report().hasErrors() || compilation.candidate().isEmpty()) {
-            return rejected(false, compilation.report());
-        }
-        if (!commit) {
-            return new EditorSubmissionResult(
-                    true, false, false, snapshots.active().revision(),
-                    snapshots.active().contentHash(), compilation.report()
-            );
-        }
-
-        try {
-            storage.writeCounter(datapacksRoot, id, definition);
-        } catch (Exception ex) {
-            ValidationReport.Builder report = ValidationReport.builder().addAll(compilation.report());
-            report.error("PERSISTENCE_FAILED", source, "$",
-                    ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage());
-            return rejected(false, report.build());
-        }
-        ActivationOutcome outcome = snapshots.apply(compilation);
-        if (outcome.accepted()) activeRaw.set(candidateDefinitions);
-        return new EditorSubmissionResult(
-                outcome.accepted(), outcome.accepted(), false,
-                outcome.activeRevision(), outcome.activeHash(), compilation.report()
-        );
+        return submit(DefinitionKind.COUNTER, baseRevision, id, jsonText, commit, environment, datapacksRoot);
     }
 
     public synchronized EditorSubmissionResult submitLayout(
@@ -412,64 +157,7 @@ public final class DefinitionService {
             CompilationEnvironment environment,
             Path datapacksRoot
     ) {
-        String source = "layout " + id;
-        if (commit && baseRevision != snapshots.active().revision()) {
-            return rejected(true, ValidationReport.builder().error(
-                    "REVISION_CONFLICT", source, "$",
-                    "Editor was based on revision " + baseRevision
-                            + " but active revision is " + snapshots.active().revision()
-            ).build());
-        }
-        if (jsonText.length() > MAX_JSON_CHARACTERS) {
-            return rejected(false, ValidationReport.builder().error(
-                    "JSON_SIZE_LIMIT", source, "$",
-                    "Definition exceeds " + MAX_JSON_CHARACTERS + " characters"
-            ).build());
-        }
-
-        JsonObject definition;
-        try {
-            JsonElement parsed = JsonParser.parseString(jsonText);
-            if (!parsed.isJsonObject()) {
-                return rejected(false, ValidationReport.builder().error(
-                        "EXPECTED_ROOT_OBJECT", source, "$", "Definition root must be an object"
-                ).build());
-            }
-            definition = parsed.getAsJsonObject();
-        } catch (RuntimeException ex) {
-            return rejected(false, ValidationReport.builder().error(
-                    "JSON_PARSE_FAILED", source, "$",
-                    ex.getMessage() == null ? "Invalid JSON" : ex.getMessage()
-            ).build());
-        }
-
-        RawDefinitionSet candidateDefinitions = activeRaw.get()
-                .withLayout(id, definition, EditorPackStorage.PACK_FOLDER);
-        CompilationResult compilation = compiler.compile(candidateDefinitions, environment);
-        if (compilation.report().hasErrors() || compilation.candidate().isEmpty()) {
-            return rejected(false, compilation.report());
-        }
-        if (!commit) {
-            return new EditorSubmissionResult(
-                    true, false, false, snapshots.active().revision(),
-                    snapshots.active().contentHash(), compilation.report()
-            );
-        }
-
-        try {
-            storage.writeLayout(datapacksRoot, id, definition);
-        } catch (Exception ex) {
-            ValidationReport.Builder report = ValidationReport.builder().addAll(compilation.report());
-            report.error("PERSISTENCE_FAILED", source, "$",
-                    ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage());
-            return rejected(false, report.build());
-        }
-        ActivationOutcome outcome = snapshots.apply(compilation);
-        if (outcome.accepted()) activeRaw.set(candidateDefinitions);
-        return new EditorSubmissionResult(
-                outcome.accepted(), outcome.accepted(), false,
-                outcome.activeRevision(), outcome.activeHash(), compilation.report()
-        );
+        return submit(DefinitionKind.LAYOUT, baseRevision, id, jsonText, commit, environment, datapacksRoot);
     }
 
     public synchronized EditorSubmissionResult submitConfiguredItem(
@@ -480,64 +168,7 @@ public final class DefinitionService {
             CompilationEnvironment environment,
             Path datapacksRoot
     ) {
-        String source = "configured item " + id;
-        if (commit && baseRevision != snapshots.active().revision()) {
-            return rejected(true, ValidationReport.builder().error(
-                    "REVISION_CONFLICT", source, "$",
-                    "Editor was based on revision " + baseRevision
-                            + " but active revision is " + snapshots.active().revision()
-            ).build());
-        }
-        if (jsonText.length() > MAX_JSON_CHARACTERS) {
-            return rejected(false, ValidationReport.builder().error(
-                    "JSON_SIZE_LIMIT", source, "$",
-                    "Definition exceeds " + MAX_JSON_CHARACTERS + " characters"
-            ).build());
-        }
-
-        JsonObject definition;
-        try {
-            JsonElement parsed = JsonParser.parseString(jsonText);
-            if (!parsed.isJsonObject()) {
-                return rejected(false, ValidationReport.builder().error(
-                        "EXPECTED_ROOT_OBJECT", source, "$", "Definition root must be an object"
-                ).build());
-            }
-            definition = parsed.getAsJsonObject();
-        } catch (RuntimeException ex) {
-            return rejected(false, ValidationReport.builder().error(
-                    "JSON_PARSE_FAILED", source, "$",
-                    ex.getMessage() == null ? "Invalid JSON" : ex.getMessage()
-            ).build());
-        }
-
-        RawDefinitionSet candidateDefinitions = activeRaw.get()
-                .withConfiguredItem(id, definition, EditorPackStorage.PACK_FOLDER);
-        CompilationResult compilation = compiler.compile(candidateDefinitions, environment);
-        if (compilation.report().hasErrors() || compilation.candidate().isEmpty()) {
-            return rejected(false, compilation.report());
-        }
-        if (!commit) {
-            return new EditorSubmissionResult(
-                    true, false, false, snapshots.active().revision(),
-                    snapshots.active().contentHash(), compilation.report()
-            );
-        }
-
-        try {
-            storage.writeConfiguredItem(datapacksRoot, id, definition);
-        } catch (Exception ex) {
-            ValidationReport.Builder report = ValidationReport.builder().addAll(compilation.report());
-            report.error("PERSISTENCE_FAILED", source, "$",
-                    ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage());
-            return rejected(false, report.build());
-        }
-        ActivationOutcome outcome = snapshots.apply(compilation);
-        if (outcome.accepted()) activeRaw.set(candidateDefinitions);
-        return new EditorSubmissionResult(
-                outcome.accepted(), outcome.accepted(), false,
-                outcome.activeRevision(), outcome.activeHash(), compilation.report()
-        );
+        return submit(DefinitionKind.ITEM, baseRevision, id, jsonText, commit, environment, datapacksRoot);
     }
 
     public Optional<JsonObject> findTalent(ResourceLocation id) {

@@ -18,7 +18,7 @@ import java.util.Map;
 import java.util.Optional;
 
 /** Unified, key-binding-style entry point for every visual talent setting. */
-public final class TalentEditScreen extends Screen {
+public final class TalentEditScreen extends EditorDefinitionScreen {
     private final EditorBootstrap bootstrap;
     private final TalentDraft draft;
     private final boolean returnToTalentTree;
@@ -88,6 +88,10 @@ public final class TalentEditScreen extends Screen {
         };
     }
 
+    static TalentEditScreen copyOf(EditorBootstrap bootstrap, ResourceLocation id, String json) {
+        return new TalentEditScreen(bootstrap,TalentDraft.parse(json),id,false);
+    }
+
     @Override
     protected void init() {
         int formWidth = Math.min(720, width - 32);
@@ -96,6 +100,7 @@ public final class TalentEditScreen extends Screen {
                 Component.translatable("screen.talent_editor.form.id"));
         idField.setMaxLength(256);
         idField.setValue(idValue);
+        idField.setResponder(value->idValue=value);
         idField.setEditable(!existing);
         addRenderableWidget(idField);
 
@@ -103,6 +108,7 @@ public final class TalentEditScreen extends Screen {
                 Component.translatable("screen.talent_editor.form.name"));
         nameField.setMaxLength(512);
         nameField.setValue(nameValue);
+        nameField.setResponder(value->nameValue=value);
         addRenderableWidget(nameField);
 
         overviewList = new TalentEditOptionList(minecraft, width, height, 108, height - 57);
@@ -114,22 +120,23 @@ public final class TalentEditScreen extends Screen {
         int bottomY = height - 28;
         int bottomGap = 6;
         int bottomWidth = Math.max(54, (formWidth - bottomGap * 3) / 4);
-        addRenderableWidget(Button.builder(Component.translatable("gui.back"), button -> returnHome())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.back"), button -> returnHome())
                 .bounds(x, bottomY, bottomWidth, 20).build());
         int referenceCount = DefinitionReferenceScreen.inboundCount(
                 bootstrap, DefinitionKind.TALENT, ResourceLocation.tryParse(idValue)
         );
-        Button references = addRenderableWidget(Button.builder(
-                        DefinitionReferenceScreen.buttonLabel(referenceCount), button -> openReferences())
+        Button references = addRenderableWidget(EditorWidgets.button(
+                        DefinitionReferenceScreen.buttonLabel(referenceCount), button -> definitionActions(bootstrap,ResourceLocation.tryParse(idField.getValue().strip()),existing,this::openReferences))
                 .bounds(x + bottomWidth + bottomGap, bottomY, bottomWidth, 20).build());
-        references.active = existing;
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.validate"),
+        references.active = true;
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.validate"),
                         button -> submit(false))
                 .bounds(x + (bottomWidth + bottomGap) * 2, bottomY, bottomWidth, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.save"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.save"), EditorTheme.Tone.PRIMARY,
                         button -> submit(true))
                 .bounds(x + (bottomWidth + bottomGap) * 3, bottomY,
                         formWidth - (bottomWidth + bottomGap) * 3, 20).build());
+        watchDefinition(DefinitionKind.TALENT);
     }
 
     private void populateOverview() {
@@ -253,7 +260,7 @@ public final class TalentEditScreen extends Screen {
         EditorTheme.panel(graphics, x - 7, 104, formWidth + 14, Math.max(1, height - 160));
         EditorTheme.panel(graphics, x - 7, height - 53, formWidth + 14, 48);
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 10, EditorTheme.TEXT);
+        EditorTheme.title(graphics,font,title,width);
         graphics.drawString(font, Component.translatable("screen.talent_editor.form.id"), x, 32,
                 EditorTheme.MUTED, false);
         graphics.drawString(font, Component.translatable("screen.talent_editor.form.name"), x, 65,
@@ -262,35 +269,7 @@ public final class TalentEditScreen extends Screen {
     }
 
     private void renderResult(GuiGraphics graphics, int x, int formWidth) {
-        ValidationResultPacket result = ClientEditorState.validation();
-        String message = localStatus;
-        int color = EditorTheme.MUTED;
-        if (result != null) {
-            if (result.committed()) {
-                message = Component.translatable("screen.talent_editor.result.saved", result.activeRevision()).getString();
-                color = 0xFF55FF55;
-                if (result.activeRevision() > baseRevision) {
-                    baseRevision = result.activeRevision();
-                    existing = true;
-                    idField.setEditable(false);
-                }
-            } else if (result.accepted()) {
-                message = Component.translatable("screen.talent_editor.result.valid").getString();
-                color = 0xFF55FF55;
-            } else if (result.conflict()) {
-                message = Component.translatable("screen.talent_editor.result.conflict",
-                        result.activeRevision()).getString();
-                color = 0xFFFF5555;
-            } else {
-                ValidationIssue first = result.issues().isEmpty() ? null : result.issues().get(0);
-                message = first == null
-                        ? Component.translatable("screen.talent_editor.result.invalid").getString()
-                        : first.code() + " " + first.path() + ": " + first.message();
-                color = 0xFFFF7777;
-            }
-        }
-        if (!message.isBlank()) graphics.drawString(font,
-                font.plainSubstrByWidth(message, formWidth), x, height - 47, color, false);
+        renderSubmissionResult(graphics, x, formWidth, localStatus);
     }
 
     public void addAttribute(ResourceLocation attribute) {
@@ -387,6 +366,10 @@ public final class TalentEditScreen extends Screen {
     void applyTriggerDraft(TalentDraft working, int selectedTriggerRawIndex) {
         draft.replaceTriggersFrom(working);
         changed(Component.translatable("screen.talent_editor.triggers_updated").getString());
+    }
+
+    TalentEditScreen detached(TalentDraft working) {
+        return new TalentEditScreen(bootstrap,working,ResourceLocation.tryParse(idValue),existing);
     }
 
     TalentDraft draft() {
@@ -503,7 +486,7 @@ public final class TalentEditScreen extends Screen {
     void openTriggerSettings(Screen returnScreen, int selectedTriggerRawIndex) {
         if (minecraft == null) return;
         captureOverviewState();
-        TalentDraft working = TalentDraft.parse(draft.toJson(nameValue));
+        TalentDraft working = TalentDraft.parse(TalentDraft.parse(draft.snapshot()).toJson(nameValue));
         minecraft.setScreen(new TalentTriggerScreen(
                 this, working, bootstrap, returnScreen, selectedTriggerRawIndex
         ));
@@ -566,7 +549,7 @@ public final class TalentEditScreen extends Screen {
 
     String currentTalentJson() {
         captureHeaderFields();
-        return draft.toJson(nameValue);
+        return TalentDraft.parse(draft.snapshot()).toJson(nameValue);
     }
 
     void openTextSettings() {
@@ -581,6 +564,7 @@ public final class TalentEditScreen extends Screen {
     }
 
     private void openReferences() {
+        EditorBootstrap bootstrap=latestBootstrap(this.bootstrap);
         if (!existing || minecraft == null) return;
         captureOverviewState();
         ResourceLocation id = ResourceLocation.tryParse(idValue.strip());
@@ -590,6 +574,7 @@ public final class TalentEditScreen extends Screen {
     }
 
     private void submit(boolean commit) {
+        if(submissionPending())return;
         captureOverviewState();
         ResourceLocation id = ResourceLocation.tryParse(idValue.strip());
         if (id == null) {
@@ -602,7 +587,7 @@ public final class TalentEditScreen extends Screen {
         }
         ClientEditorState.clearValidation();
         localStatus = Component.translatable("screen.talent_editor.result.waiting").getString();
-        EditorNetwork.submitTalent(baseRevision, id, draft.toJson(nameValue), commit);
+        sendDefinition(baseRevision, id, TalentDraft.parse(draft.snapshot()).toJson(nameValue), commit);
     }
 
     private void changed(String status) {
@@ -623,7 +608,9 @@ public final class TalentEditScreen extends Screen {
         }
     }
 
-    private void returnHome() {
+    private void returnHome() { leaveDefinition(this::leaveNow); }
+
+    private void leaveNow() {
         if (minecraft == null) return;
         if (returnToTalentTree) {
             ClientEditorState.openTalentTreeOnNextBootstrap();
@@ -647,4 +634,8 @@ public final class TalentEditScreen extends Screen {
     private static String signed(double value) {
         return value >= 0 ? "+" + compact(value) : compact(value);
     }
+
+    @Override protected String draftState() { return fieldsState()+draft.snapshot(); }
+    @Override protected void saveDraft() { submit(true); }
+    @Override protected void committed(ValidationResultPacket value) { baseRevision=value.activeRevision(); existing=true; idField.setEditable(false); }
 }

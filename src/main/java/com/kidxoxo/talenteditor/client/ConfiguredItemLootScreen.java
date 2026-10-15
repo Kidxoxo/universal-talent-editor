@@ -12,7 +12,7 @@ import net.minecraft.network.chat.Component;
 import java.util.ArrayList;
 import java.util.List;
 
-public final class ConfiguredItemLootScreen extends Screen {
+public final class ConfiguredItemLootScreen extends EditorScreen {
     private static final int MAX_RULES = 256;
     private static final List<ConfiguredItemLootTableMatch> TABLE_MATCHES = List.of(
             ConfiguredItemLootTableMatch.EXACT,
@@ -55,7 +55,7 @@ public final class ConfiguredItemLootScreen extends Screen {
         int x = (width - formWidth) / 2;
         int matchWidth = Math.min(120, Math.max(80, formWidth / 3));
         int matchGap = 6;
-        tableMatchButton = addRenderableWidget(Button.builder(Component.empty(), button -> chooseTableMatch())
+        tableMatchButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> chooseTableMatch())
                 .bounds(x, 43, matchWidth, 20).build());
         tableField = field(x + matchWidth + matchGap, 43,
                 formWidth - matchWidth - matchGap, ConfiguredItemLootRule.MAX_TABLE_EXPRESSION_LENGTH);
@@ -67,29 +67,29 @@ public final class ConfiguredItemLootScreen extends Screen {
                 formWidth - (chanceWidth + gap) * 2, 4);
 
         int actionWidth = (formWidth - gap * 3) / 4;
-        previousButton = addRenderableWidget(Button.builder(Component.translatable(
+        previousButton = addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.configured_item.loot.previous"), button -> switchRule(-1))
                 .bounds(x, 116, actionWidth, 20).build());
-        nextButton = addRenderableWidget(Button.builder(Component.translatable(
+        nextButton = addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.configured_item.loot.next"), button -> switchRule(1))
                 .bounds(x + actionWidth + gap, 116, actionWidth, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable(
+        addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.configured_item.loot.add"), button -> addRule())
                 .bounds(x + (actionWidth + gap) * 2, 116, actionWidth, 20).build());
-        deleteButton = addRenderableWidget(Button.builder(Component.translatable(
+        deleteButton = addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.configured_item.loot.delete"), button -> deleteRule())
                 .bounds(x + (actionWidth + gap) * 3, 116,
                         formWidth - (actionWidth + gap) * 3, 20).build());
-        conditionsButton = addRenderableWidget(Button.builder(Component.translatable(
+        conditionsButton = addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.configured_item.loot.conditions"), button -> openConditions())
                 .bounds(x, 146, formWidth, 20).build());
 
         int half = (formWidth - gap) / 2;
-        addRenderableWidget(Button.builder(Component.translatable(
+        addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.configured_item.loot.apply"), button -> apply())
-                .bounds(x, height - 28, half, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.cancel"), button -> returnParent())
                 .bounds(x + half + gap, height - 28, formWidth - half - gap, 20).build());
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.cancel"), button -> returnParent())
+                .bounds(x, height - 28, half, 20).build());
         loadSelected();
     }
 
@@ -111,11 +111,11 @@ public final class ConfiguredItemLootScreen extends Screen {
         int gap = 6;
         int third = (formWidth - gap * 2) / 3;
         int matchWidth = Math.min(120, Math.max(80, formWidth / 3));
-        graphics.drawCenteredString(font, title, width / 2, 10, 0xFFFFFF);
+        EditorTheme.title(graphics,font,title,width);
         graphics.drawString(font, Component.translatable(
                 "screen.talent_editor.configured_item.loot.current",
                 selected < 0 ? 0 : selected + 1, rules.size()
-        ), x, 25, 0xA0A0A0, false);
+        ), x, 25, EditorTheme.MUTED, false);
         label(graphics, "screen.talent_editor.configured_item.loot.match", x, 32);
         label(graphics, "screen.talent_editor.configured_item.loot.table_expression",
                 x + matchWidth + gap, 32);
@@ -124,10 +124,10 @@ public final class ConfiguredItemLootScreen extends Screen {
         label(graphics, "screen.talent_editor.configured_item.loot.maximum", x + (third + gap) * 2, 73);
         graphics.drawString(font, font.plainSubstrByWidth(Component.translatable(
                 "screen.talent_editor.configured_item.loot.help").getString(), formWidth),
-                x, 176, 0x808080, false);
+                x, 176, EditorTheme.MUTED, false);
         if (!status.isBlank()) {
             graphics.drawString(font, font.plainSubstrByWidth(status, formWidth), x,
-                    195, 0xFF7777, false);
+                    195, EditorTheme.ERROR, false);
         }
         options.render(graphics, font, width, height);
     }
@@ -149,7 +149,7 @@ public final class ConfiguredItemLootScreen extends Screen {
     }
 
     private void label(GuiGraphics graphics, String key, int x, int y) {
-        graphics.drawString(font, Component.translatable(key), x, y, 0xA0A0A0, false);
+        graphics.drawString(font, Component.translatable(key), x, y, EditorTheme.MUTED, false);
     }
 
     private void switchRule(int direction) {

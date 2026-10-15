@@ -11,6 +11,7 @@ import java.util.Locale;
 public final class RarityDraft {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
+    String snapshot() { return root.toString(); }
     private final JsonObject root;
 
     private RarityDraft(JsonObject root) {

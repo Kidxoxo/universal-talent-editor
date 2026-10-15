@@ -11,7 +11,7 @@ import net.minecraft.resources.ResourceLocation;
 import java.util.List;
 import java.util.Optional;
 
-public final class ConfiguredItemUseActionScreen extends Screen {
+public final class ConfiguredItemUseActionScreen extends EditorScreen {
     private static final List<String> SOUND_SOURCES = List.of(
             "master", "music", "records", "weather", "blocks",
             "hostile", "neutral", "players", "ambient", "voice"
@@ -77,47 +77,47 @@ public final class ConfiguredItemUseActionScreen extends Screen {
         int gap = 6;
         int half = (formWidth - gap) / 2;
         int third = (formWidth - gap * 2) / 3;
-        typeButton = addRenderableWidget(Button.builder(Component.empty(), button -> chooseType())
+        typeButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> chooseType())
                 .bounds(x, 32, formWidth, 20).build());
         resourceField = field(x, 58, formWidth - 92, 256);
-        chooseResourceButton = addRenderableWidget(Button.builder(Component.translatable(
+        chooseResourceButton = addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.configured_item.use.action.choose"), button -> chooseResource())
                 .bounds(x + formWidth - 86, 58, 86, 20).build());
         durationField = field(x, 84, half, 8);
         amplifierField = field(x + half + gap, 84, formWidth - half - gap, 3);
-        ambientButton = addRenderableWidget(Button.builder(Component.empty(), button -> {
+        ambientButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> {
             ambient = !ambient;
             updateWidgets();
         }).bounds(x, 110, third, 20).build());
-        particlesButton = addRenderableWidget(Button.builder(Component.empty(), button -> {
+        particlesButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> {
             particles = !particles;
             updateWidgets();
         }).bounds(x + third + gap, 110, third, 20).build());
-        iconButton = addRenderableWidget(Button.builder(Component.empty(), button -> {
+        iconButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> {
             icon = !icon;
             updateWidgets();
         }).bounds(x + (third + gap) * 2, 110, formWidth - (third + gap) * 2, 20).build());
-        soundSourceButton = addRenderableWidget(Button.builder(Component.empty(), button -> chooseSoundSource())
+        soundSourceButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> chooseSoundSource())
                 .bounds(x, 84, formWidth, 20).build());
         volumeField = field(x, 110, half, 16);
         pitchField = field(x + half + gap, 110, formWidth - half - gap, 16);
 
-        messageModeButton = addRenderableWidget(Button.builder(Component.empty(), button -> chooseMessageMode())
+        messageModeButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> chooseMessageMode())
                 .bounds(x, 58, formWidth, 20).build());
-        partButton = addRenderableWidget(Button.builder(Component.empty(), button -> cyclePart())
+        partButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> cyclePart())
                 .bounds(x, 84, half, 20).build());
-        subtitleButton = addRenderableWidget(Button.builder(Component.empty(), button -> toggleSubtitle())
+        subtitleButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> toggleSubtitle())
                 .bounds(x + half + gap, 84, formWidth - half - gap, 20).build());
         literalField = field(x, 110, formWidth, 1_024);
         literalField.setHint(Component.translatable("screen.talent_editor.multiline_hint"));
         translationField = field(x, 136, formWidth, 1_024);
         colorField = field(x, 162, third, 9);
         colorField.setHint(Component.translatable("screen.talent_editor.text.color_hint"));
-        boldButton = addRenderableWidget(Button.builder(Component.empty(), button -> {
+        boldButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> {
             bold = !bold;
             updateWidgets();
         }).bounds(x + third + gap, 162, third, 20).build());
-        italicButton = addRenderableWidget(Button.builder(Component.empty(), button -> {
+        italicButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> {
             italic = !italic;
             updateWidgets();
         }).bounds(x + (third + gap) * 2, 162, formWidth - (third + gap) * 2, 20).build());
@@ -126,9 +126,9 @@ public final class ConfiguredItemUseActionScreen extends Screen {
         fadeOutField = field(x + (third + gap) * 2, 188,
                 formWidth - (third + gap) * 2, 8);
 
-        addRenderableWidget(Button.builder(Component.translatable("gui.cancel"), button -> returnParent())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.cancel"), button -> returnParent())
                 .bounds(x, height - 28, half, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable(
+        addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.configured_item.use.action.apply"), button -> apply())
                 .bounds(x + half + gap, height - 28, formWidth - half - gap, 20).build());
         loadDraft();
@@ -149,7 +149,7 @@ public final class ConfiguredItemUseActionScreen extends Screen {
         int x = (width - formWidth) / 2;
         EditorTheme.panel(graphics, x - 7, 27, formWidth + 14, Math.min(183, height - 64));
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 10, 0xFFFFFF);
+        EditorTheme.title(graphics,font,title,width);
         switch (draft.type()) {
             case ADD_EFFECT -> {
                 label(graphics, "effect", x, 48);
@@ -173,7 +173,7 @@ public final class ConfiguredItemUseActionScreen extends Screen {
         }
         if (!status.isBlank()) {
             graphics.drawString(font, font.plainSubstrByWidth(status, formWidth),
-                    x, 20, 0xFF7777, false);
+                    x, 20, EditorTheme.ERROR, false);
         }
         options.render(graphics, font, width, height);
     }
@@ -196,7 +196,7 @@ public final class ConfiguredItemUseActionScreen extends Screen {
 
     private void label(GuiGraphics graphics, String suffix, int x, int y) {
         graphics.drawString(font, Component.translatable(
-                "screen.talent_editor.configured_item.use.action." + suffix), x, y, 0xA0A0A0, false);
+                "screen.talent_editor.configured_item.use.action." + suffix), x, y, EditorTheme.MUTED, false);
     }
 
     private void loadDraft() {

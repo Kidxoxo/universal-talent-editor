@@ -10,7 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /** Ordered visual list for trigger and lifecycle extension actions. */
-public final class TalentAdvancedActionListScreen extends Screen {
+public final class TalentAdvancedActionListScreen extends EditorScreen {
     private static final int ROW_HEIGHT = 19;
     private final Screen returnScreen;
     private final TalentEditScreen owner;
@@ -45,38 +45,38 @@ public final class TalentAdvancedActionListScreen extends Screen {
         int x = (width - formWidth) / 2;
         int gap = 6;
         int third = (formWidth - gap * 2) / 3;
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.advanced_actions.add"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.advanced_actions.add"),
                         button -> openEditor(-1))
                 .bounds(x, height - 55, third, 20).build());
-        editButton = addRenderableWidget(Button.builder(Component.translatable(
+        editButton = addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.advanced_actions.edit"), button -> editSelected())
                 .bounds(x + third + gap, height - 55, third, 20).build());
-        removeButton = addRenderableWidget(Button.builder(Component.translatable(
+        removeButton = addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.advanced_actions.remove"), button -> removeSelected())
                 .bounds(x + (third + gap) * 2, height - 55,
                         formWidth - (third + gap) * 2, 20).build());
         int bottomColumns = location == TalentDraft.AdvancedActionLocation.ACTIVE_EFFECTS
                 || isPresentationLocation() ? 3 : 4;
         int bottomWidth = (formWidth - gap * (bottomColumns - 1)) / bottomColumns;
-        upButton = addRenderableWidget(Button.builder(Component.translatable(
+        upButton = addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.advanced_actions.up"), button -> move(-1))
                 .bounds(x, height - 28, bottomWidth, 20).build());
-        downButton = addRenderableWidget(Button.builder(Component.translatable(
+        downButton = addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.advanced_actions.down"), button -> move(1))
                 .bounds(x + bottomWidth + gap, height - 28, bottomWidth, 20).build());
         if (bottomColumns == 4) {
-            previewButton = addRenderableWidget(Button.builder(Component.translatable(
+            previewButton = addRenderableWidget(EditorWidgets.button(Component.translatable(
                     "screen.talent_editor.particles.preview_group"), button -> previewGroup())
                     .bounds(x + (bottomWidth + gap) * 2, height - 28, bottomWidth, 20).build());
         }
-        addRenderableWidget(Button.builder(Component.translatable("gui.back"), button -> returnParent())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.back"), button -> returnParent())
                 .bounds(x + (bottomWidth + gap) * (bottomColumns - 1), height - 28,
                         formWidth - (bottomWidth + gap) * (bottomColumns - 1), 20).build());
-        gateButton = addRenderableWidget(Button.builder(Component.translatable(
+        gateButton = addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.action_gate.open"), button -> openGate())
                 .bounds(x + formWidth - 100, 8, 100, 20).build());
         if (location != TalentDraft.AdvancedActionLocation.ACTIVE_EFFECTS && !isPresentationLocation()) {
-            addRenderableWidget(Button.builder(Component.translatable(
+            addRenderableWidget(EditorWidgets.button(Component.translatable(
                     "screen.talent_editor.particles.add"), button -> openParticleEditor(-1))
                     .bounds(x, 8, 108, 20).build());
         }
@@ -92,7 +92,7 @@ public final class TalentAdvancedActionListScreen extends Screen {
         int bottom = height - 64;
         EditorTheme.panel(graphics, x - 7, 27, formWidth + 14, Math.max(1, bottom - 27));
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 10, EditorTheme.TEXT);
+        EditorTheme.title(graphics,font,title,width);
         graphics.drawCenteredString(font, Component.translatable("screen.talent_editor.advanced_actions.help"),
                 width / 2, 28, EditorTheme.MUTED);
         List<TalentDraft.AdvancedActionRow> rows = rows();
@@ -120,7 +120,7 @@ public final class TalentAdvancedActionListScreen extends Screen {
                 Component.translatable("screen.talent_editor.advanced_actions.empty"),
                 width / 2, top + 10, EditorTheme.MUTED);
         if (!status.isBlank()) graphics.drawString(font, font.plainSubstrByWidth(status, formWidth),
-                x, height - 73, 0xFF7777, false);
+                x, height - 73, EditorTheme.ERROR, false);
     }
 
     @Override
@@ -132,6 +132,7 @@ public final class TalentAdvancedActionListScreen extends Screen {
             int bottom = height - 64;
             if (mouseX >= x && mouseX < x + formWidth && mouseY >= top && mouseY < bottom) {
                 int index = scroll + (int) ((mouseY - top) / ROW_HEIGHT);
+                if(index>=scroll+Math.max(1,(height-44-64)/ROW_HEIGHT))return true;
                 if (index >= 0 && index < rows().size()) {
                     selected = index;
                     status = "";

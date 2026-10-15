@@ -15,7 +15,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Consumer;
 
-public final class PoolAdvancedScreen extends Screen {
+public final class PoolAdvancedScreen extends EditorScreen {
     private static final List<String> POLICIES = List.of("exclude", "refund_token", "add_counter");
     private final PoolEditScreen parent;
     private final EditorBootstrap bootstrap;
@@ -64,7 +64,7 @@ public final class PoolAdvancedScreen extends Screen {
         int selectorWidth = half - chooseWidth - gap;
         luckAttribute = field(x, 36, selectorWidth, luckAttributeValue, 256,
                 value -> luckAttributeValue = value);
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.reference_picker.choose"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.reference_picker.choose"),
                         button -> openPicker(ResourceReferencePickerScreen.Source.ATTRIBUTE,
                                 this::chooseLuckAttribute))
                 .bounds(x + selectorWidth + gap, 36, chooseWidth, 20).build());
@@ -73,29 +73,29 @@ public final class PoolAdvancedScreen extends Screen {
         luckFactors = field(x, 69, formWidth - chooseWidth - gap, luckFactorsValue, 4096,
                 value -> luckFactorsValue = value);
         luckFactors.setHint(Component.translatable("screen.talent_editor.pool.luck_factors_hint"));
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.reference_picker.choose"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.reference_picker.choose"),
                         button -> openPicker(ResourceReferencePickerScreen.Source.RARITY, this::chooseLuckFactor))
                 .bounds(x + formWidth - chooseWidth, 69, chooseWidth, 20).build());
         pityRarity = field(x, 102, selectorWidth, pityRarityValue, 256,
                 value -> pityRarityValue = value);
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.reference_picker.choose"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.reference_picker.choose"),
                         button -> openPicker(ResourceReferencePickerScreen.Source.RARITY, this::choosePityRarity))
                 .bounds(x + selectorWidth + gap, 102, chooseWidth, 20).build());
         pityAfter = field(x + half + gap, 102, formWidth - half - gap,
                 pityAfterValue, 8, value -> pityAfterValue = value);
-        policyButton = addRenderableWidget(Button.builder(policyLabel(), button -> choosePolicy())
+        policyButton = addRenderableWidget(EditorWidgets.button(policyLabel(), button -> choosePolicy())
                 .bounds(x, 135, formWidth, 20).build());
         duplicateCounter = field(x, 168, selectorWidth, duplicateCounterValue, 256,
                 value -> duplicateCounterValue = value);
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.reference_picker.choose"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.reference_picker.choose"),
                         button -> openPicker(ResourceReferencePickerScreen.Source.COUNTER,
                                 this::chooseDuplicateCounter))
                 .bounds(x + selectorWidth + gap, 168, chooseWidth, 20).build());
         duplicateAmount = field(x + half + gap, 168, formWidth - half - gap,
                 duplicateAmountValue, 18, value -> duplicateAmountValue = value);
-        addRenderableWidget(Button.builder(Component.translatable("gui.cancel"), button -> returnParent())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.cancel"), button -> returnParent())
                 .bounds(x, height - 28, 80, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.done"), button -> save())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.done"), button -> save())
                 .bounds(x + 86, height - 28, formWidth - 86, 20).build());
     }
 
@@ -120,7 +120,7 @@ public final class PoolAdvancedScreen extends Screen {
         int formWidth = Math.min(700, width - 32);
         int x = (width - formWidth) / 2;
         int half = (formWidth - 6) / 2;
-        graphics.drawCenteredString(font, title, width / 2, 10, 0xFFFFFF);
+        EditorTheme.title(graphics,font,title,width);
         label(graphics, "screen.talent_editor.pool.luck_attribute", x, 25);
         label(graphics, "screen.talent_editor.pool.sample_luck", x + half + 6, 25);
         label(graphics, "screen.talent_editor.pool.luck_factors", x, 58);
@@ -155,7 +155,7 @@ public final class PoolAdvancedScreen extends Screen {
     }
 
     private void label(GuiGraphics graphics, String key, int x, int y) {
-        graphics.drawString(font, Component.translatable(key), x, y, 0xA0A0A0, false);
+        graphics.drawString(font, Component.translatable(key), x, y, EditorTheme.MUTED, false);
     }
 
     private void choosePolicy() {

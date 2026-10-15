@@ -24,10 +24,6 @@ public record SynthesizeTalentPacket(ResourceLocation target) {
         ServerPlayer player = context.getSender();
         if (player != null) {
             SynthesisResult result = TalentEditorMod.SYNTHESES.synthesize(player, packet.target());
-            if (result.successful()) {
-                TalentAttributeRuntime.refresh(player);
-                EditorNetwork.sendPlayerState(player, false);
-            }
             EditorNetwork.sendSynthesisResult(player, result);
         }
         context.setPacketHandled(true);

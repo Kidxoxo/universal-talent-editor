@@ -136,7 +136,7 @@ public record RuntimeSnapshot(
                 .forEach(item -> {
                     for (CompiledTrigger trigger : item.triggers()) {
                         triggers.computeIfAbsent(trigger.event(), ignored -> new ArrayList<>())
-                                .add(new TriggerBinding(item.id(), trigger));
+                                .add(new TriggerBinding(DefinitionKind.ITEM, item.id(), trigger));
                     }
                     item.loot().forEach(rule -> {
                         ConfiguredItemLootBinding binding = new ConfiguredItemLootBinding(item.id(), rule);

@@ -16,7 +16,7 @@ import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 
-public final class PoolEditScreen extends Screen {
+public final class PoolEditScreen extends EditorDefinitionScreen {
     private final EditorBootstrap bootstrap;
     private final PoolDraft draft;
     private boolean existing;
@@ -33,6 +33,8 @@ public final class PoolEditScreen extends Screen {
     private Button enabledButton;
     private boolean enabled;
     private String localStatus = "";
+    private final java.util.Map<Integer,String> fieldValues=new java.util.HashMap<>();
+    private int fieldIndex;
 
     private PoolEditScreen(
             EditorBootstrap bootstrap,
@@ -61,8 +63,13 @@ public final class PoolEditScreen extends Screen {
         return new PoolEditScreen(bootstrap, PoolDraft.parse(json), id, true);
     }
 
+    static PoolEditScreen copyOf(EditorBootstrap bootstrap, ResourceLocation id, String json) {
+        return new PoolEditScreen(bootstrap,PoolDraft.parse(json),id,false);
+    }
+
     @Override
     protected void init() {
+        fieldIndex=0;
         int formWidth = Math.min(650, width - 32);
         int x = (width - formWidth) / 2;
         idField = field(x, 36, formWidth, idValue, 256);
@@ -83,12 +90,12 @@ public final class PoolEditScreen extends Screen {
         iconSizeField = field(x + (numberWidth + gap) * 3, 103,
                 formWidth - (numberWidth + gap) * 3, Integer.toString(draft.iconSize()), 2);
 
-        enabledButton = addRenderableWidget(Button.builder(enabledLabel(), button -> {
+        enabledButton = addRenderableWidget(EditorWidgets.button(enabledLabel(), button -> {
             enabled = !enabled;
             button.setMessage(enabledLabel());
             ClientEditorState.clearValidation();
         }).bounds(x, 131, (formWidth - gap) / 2, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.pool.advanced"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.pool.advanced"),
                         button -> openAdvanced())
                 .bounds(x + (formWidth - gap) / 2 + gap, 131,
                         formWidth - (formWidth - gap) / 2 - gap, 20).build());
@@ -99,29 +106,31 @@ public final class PoolEditScreen extends Screen {
         int bottomY = height - 28;
         int bottomGap = 6;
         int bottomWidth = Math.max(54, (formWidth - bottomGap * 3) / 4);
-        addRenderableWidget(Button.builder(Component.translatable("gui.back"), button -> returnList())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.back"), button -> returnList())
                 .bounds(x, bottomY, bottomWidth, 20).build());
         int referenceCount = DefinitionReferenceScreen.inboundCount(
                 bootstrap, DefinitionKind.POOL, ResourceLocation.tryParse(idValue)
         );
-        Button references = addRenderableWidget(Button.builder(
-                        DefinitionReferenceScreen.buttonLabel(referenceCount), button -> openReferences())
+        Button references = addRenderableWidget(EditorWidgets.button(
+                        DefinitionReferenceScreen.buttonLabel(referenceCount), button -> definitionActions(bootstrap,ResourceLocation.tryParse(idField.getValue().strip()),existing,this::openReferences))
                 .bounds(x + bottomWidth + bottomGap, bottomY, bottomWidth, 20).build());
-        references.active = existing;
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.validate"),
+        references.active = true;
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.validate"),
                         button -> submit(false))
                 .bounds(x + (bottomWidth + bottomGap) * 2, bottomY, bottomWidth, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.save"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.save"), EditorTheme.Tone.PRIMARY,
                         button -> submit(true))
                 .bounds(x + (bottomWidth + bottomGap) * 3, bottomY,
                         formWidth - (bottomWidth + bottomGap) * 3, 20).build());
+        watchDefinition(DefinitionKind.POOL);
     }
 
     private EditBox field(int x, int y, int width, String value, int maxLength) {
         EditBox field = new EditBox(font, x, y, width, 20, Component.empty());
         field.setMaxLength(maxLength);
-        field.setValue(value);
-        field.setResponder(ignored -> ClientEditorState.clearValidation());
+        int key=fieldIndex++;
+        field.setValue(fieldValues.getOrDefault(key,value));
+        field.setResponder(next -> {fieldValues.put(key,next);ClientEditorState.clearValidation();});
         addRenderableWidget(field);
         return field;
     }
@@ -134,7 +143,7 @@ public final class PoolEditScreen extends Screen {
         int x = (width - formWidth) / 2;
         int gap = 6;
         int numberWidth = (formWidth - gap * 3) / 4;
-        graphics.drawCenteredString(font, title, width / 2, 10, 0xFFFFFF);
+        EditorTheme.title(graphics,font,title,width);
         label(graphics, "screen.talent_editor.pool.id", x, 25);
         label(graphics, "screen.talent_editor.pool.name", x, 58);
         label(graphics, "screen.talent_editor.pool.choices", x, 92, numberWidth);
@@ -145,52 +154,22 @@ public final class PoolEditScreen extends Screen {
         label(graphics, "screen.talent_editor.pool.weights", x, 164);
         graphics.drawString(font, font.plainSubstrByWidth(
                 Component.translatable("screen.talent_editor.pool.weights_help").getString(), formWidth
-        ), x, 198, 0x808080, false);
+        ), x, 198, EditorTheme.MUTED, false);
         renderResult(graphics, x, formWidth);
     }
 
     private void label(GuiGraphics graphics, String key, int x, int y) {
-        graphics.drawString(font, Component.translatable(key), x, y, 0xA0A0A0, false);
+        graphics.drawString(font, Component.translatable(key), x, y, EditorTheme.MUTED, false);
     }
 
     private void label(GuiGraphics graphics, String key, int x, int y, int maximumWidth) {
         String text = Component.translatable(key).getString();
         graphics.drawString(font, font.plainSubstrByWidth(text, Math.max(8, maximumWidth)),
-                x, y, 0xA0A0A0, false);
+                x, y, EditorTheme.MUTED, false);
     }
 
     private void renderResult(GuiGraphics graphics, int x, int formWidth) {
-        ValidationResultPacket result = ClientEditorState.validation();
-        String message = localStatus;
-        int color = 0xA0A0A0;
-        if (result != null) {
-            if (result.committed()) {
-                message = Component.translatable("screen.talent_editor.result.saved", result.activeRevision()).getString();
-                color = 0x55FF55;
-                if (result.activeRevision() > baseRevision) {
-                    baseRevision = result.activeRevision();
-                    existing = true;
-                    idField.setEditable(false);
-                }
-            } else if (result.accepted()) {
-                message = Component.translatable("screen.talent_editor.result.valid").getString();
-                color = 0x55FF55;
-            } else if (result.conflict()) {
-                message = Component.translatable("screen.talent_editor.result.conflict",
-                        result.activeRevision()).getString();
-                color = 0xFF5555;
-            } else {
-                ValidationIssue first = result.issues().isEmpty() ? null : result.issues().get(0);
-                message = first == null
-                        ? Component.translatable("screen.talent_editor.result.invalid").getString()
-                        : first.code() + " " + first.path() + ": " + first.message();
-                color = 0xFF7777;
-            }
-        }
-        if (!message.isBlank()) {
-            graphics.drawString(font, font.plainSubstrByWidth(message, formWidth),
-                    x, height - 47, color, false);
-        }
+        renderSubmissionResult(graphics, x, formWidth, localStatus);
     }
 
     private Component enabledLabel() {
@@ -200,11 +179,12 @@ public final class PoolEditScreen extends Screen {
     }
 
     private void submit(boolean commit) {
+        if(submissionPending())return;
         BaseValues values = readBase();
         if (values == null) return;
         ClientEditorState.clearValidation();
         localStatus = Component.translatable("screen.talent_editor.result.waiting").getString();
-        EditorNetwork.submitPool(baseRevision, values.id(), draft.toJson(
+        sendDefinition(baseRevision, values.id(), PoolDraft.parse(draft.snapshot()).toJson(
                 values.displayName(), enabled, values.choices(), values.refreshes(), values.maxOwned(),
                 values.iconSize(), values.weights(), draft.advanced()
         ), commit);
@@ -249,16 +229,17 @@ public final class PoolEditScreen extends Screen {
     private void openAdvanced() {
         BaseValues values = readBase();
         if (values == null || minecraft == null) return;
-        draft.toJson(values.displayName(), enabled, values.choices(), values.refreshes(), values.maxOwned(),
+        PoolDraft.parse(draft.snapshot()).toJson(values.displayName(), enabled, values.choices(), values.refreshes(), values.maxOwned(),
                 values.iconSize(), values.weights(), draft.advanced());
         minecraft.setScreen(new PoolAdvancedScreen(this, bootstrap));
     }
 
     private void openReferences() {
+        EditorBootstrap bootstrap=latestBootstrap(this.bootstrap);
         if (!existing || minecraft == null) return;
         BaseValues values = readBase();
         if (values == null) return;
-        draft.toJson(values.displayName(), enabled, values.choices(), values.refreshes(), values.maxOwned(),
+        PoolDraft.parse(draft.snapshot()).toJson(values.displayName(), enabled, values.choices(), values.refreshes(), values.maxOwned(),
                 values.iconSize(), values.weights(), draft.advanced());
         int count = DefinitionReferenceScreen.inboundCount(bootstrap, DefinitionKind.POOL, values.id());
         minecraft.setScreen(new DefinitionReferenceScreen(
@@ -322,7 +303,9 @@ public final class PoolEditScreen extends Screen {
         }
     }
 
-    private void returnList() {
+    private void returnList() { leaveDefinition(this::leaveNow); }
+
+    private void leaveNow() {
         if (minecraft == null) return;
         EditorBootstrap latest = ClientEditorState.bootstrap();
         minecraft.setScreen(new PoolListScreen(latest == null ? bootstrap : latest));
@@ -355,4 +338,8 @@ public final class PoolEditScreen extends Screen {
             Map<ResourceLocation, Double> weights
     ) {
     }
+
+    @Override protected String draftState() { return fieldsState()+enabled+draft.snapshot(); }
+    @Override protected void saveDraft() { submit(true); }
+    @Override protected void committed(ValidationResultPacket value) { baseRevision=value.activeRevision(); existing=true; idField.setEditable(false); }
 }

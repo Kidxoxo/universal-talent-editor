@@ -9,7 +9,7 @@ import net.minecraft.resources.ResourceLocation;
 
 import java.util.List;
 
-public final class CounterMetadataScreen extends Screen {
+public final class CounterMetadataScreen extends EditorScreen {
     private static final List<String> VISIBILITIES = List.of("full", "condition_only", "hidden");
     private final CounterEditScreen parent;
     private String categoriesValue;
@@ -45,7 +45,7 @@ public final class CounterMetadataScreen extends Screen {
             status = "";
         });
         addRenderableWidget(categoriesField);
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.reference_picker.choose"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.reference_picker.choose"),
                         button -> openCategoryPicker())
                 .bounds(x + fieldWidth + 6, 54, chooseWidth, 20).build());
         displayCategoryField = new EditBox(font, x, 96, fieldWidth, 20,
@@ -57,14 +57,14 @@ public final class CounterMetadataScreen extends Screen {
             status = "";
         });
         addRenderableWidget(displayCategoryField);
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.reference_picker.choose"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.reference_picker.choose"),
                         button -> openDisplayCategoryPicker())
                 .bounds(x + fieldWidth + 6, 96, chooseWidth, 20).build());
-        visibilityButton = addRenderableWidget(Button.builder(visibilityLabel(), button -> chooseVisibility())
+        visibilityButton = addRenderableWidget(EditorWidgets.button(visibilityLabel(), button -> chooseVisibility())
                 .bounds(x, 138, formWidth, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.cancel"), button -> returnParent())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.cancel"), button -> returnParent())
                 .bounds(x, height - 28, 80, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.done"), button -> save())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.done"), button -> save())
                 .bounds(x + 86, height - 28, formWidth - 86, 20).build());
     }
 
@@ -74,11 +74,11 @@ public final class CounterMetadataScreen extends Screen {
         super.render(graphics, mouseX, mouseY, partialTick);
         int formWidth = Math.min(600, width - 32);
         int x = (width - formWidth) / 2;
-        graphics.drawCenteredString(font, title, width / 2, 15, 0xFFFFFF);
+        EditorTheme.title(graphics,font,title,width);
         graphics.drawString(font, Component.translatable("screen.talent_editor.counter.metadata.categories"),
-                x, 43, 0xA0A0A0, false);
+                x, 43, EditorTheme.MUTED, false);
         graphics.drawString(font, Component.translatable("screen.talent_editor.counter.metadata.display_category"),
-                x, 85, 0xA0A0A0, false);
+                x, 85, EditorTheme.MUTED, false);
         ReferenceDiagnostics.Summary references = ReferenceDiagnostics.summarize(
                 parent.bootstrap(), ResourceReferencePickerScreen.Source.COUNTER_CATEGORY,
                 categoriesValue, false
@@ -90,7 +90,7 @@ public final class CounterMetadataScreen extends Screen {
                 "screen.talent_editor.counter.metadata.help"), x, 185, formWidth, 0x808080);
         if (!status.isBlank()) {
             graphics.drawString(font, font.plainSubstrByWidth(status, formWidth),
-                    x, height - 45, 0xFF7777, false);
+                    x, height - 45, EditorTheme.ERROR, false);
         }
         options.render(graphics, font, width, height);
     }

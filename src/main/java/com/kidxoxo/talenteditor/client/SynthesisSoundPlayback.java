@@ -9,7 +9,7 @@ import net.minecraft.util.RandomSource;
 
 import java.util.ArrayDeque;
 
-/** Owns only synthesis sounds, so ordinary Minecraft audio is never interrupted by this setting. */
+/** Owns synthesis audio and acquisition voice cues; ordinary Minecraft audio is untouched. */
 public final class SynthesisSoundPlayback {
     private static final int MAX_QUEUED_SOUNDS = 64;
     private static final ArrayDeque<SynthesisSoundPacket> QUEUE = new ArrayDeque<>();

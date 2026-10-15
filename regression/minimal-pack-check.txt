@@ -1,0 +1,6 @@
+SCREEN net.minecraft.client.gui.screens.ConfirmScreen
+Accepted disposable-world confirmation
+SCREEN net.minecraft.client.gui.screens.LevelLoadingScreen
+SCREEN net.minecraft.client.gui.screens.ReceivingLevelScreen
+SCREEN null
+PASS entered integrated world; talents=77; configuredItems=7; all expected particles registered; zero talent compilation errors; default 5% talent point loot active

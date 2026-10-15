@@ -41,6 +41,8 @@ public record EditorManagementActionPacket(EditorSettingsService.ManagementActio
         if (player != null) {
             if (!player.hasPermissions(2)) {
                 player.sendSystemMessage(Component.translatable("message.talent_editor.permission_denied"));
+                EditorNetwork.sendManagementResult(player, new EditorSettingsService.ManagementResult(packet.action(), false,
+                        Component.translatable("message.talent_editor.permission_denied").getString()));
             } else {
                 if (packet.action() == EditorSettingsService.ManagementAction.IMPORT) {
                     beginImport(player, packet.input());
@@ -48,10 +50,14 @@ public record EditorManagementActionPacket(EditorSettingsService.ManagementActio
                     return;
                 }
                 try {
+                    if(packet.action()==EditorSettingsService.ManagementAction.PREVIEW_IMPORT){
+                        EditorNetwork.sendManagementResult(player,new EditorSettingsService.ManagementResult(packet.action(),true,TalentEditorMod.SETTINGS.previewImport(player.server,packet.input())));
+                        context.setPacketHandled(true);return;
+                    }
                     Path result = switch (packet.action()) {
                         case EXPORT -> TalentEditorMod.SETTINGS.exportCurrent(player.server);
                         case INSTALL_GLOBAL -> TalentEditorMod.SETTINGS.installGlobalTemplate(player.server);
-                        case UPDATE_SETTINGS, IMPORT -> throw new IllegalArgumentException("Invalid management action");
+                        case UPDATE_SETTINGS, IMPORT, PREVIEW_IMPORT -> throw new IllegalArgumentException("Invalid management action");
                     };
                     EditorNetwork.sendManagementResult(player, new EditorSettingsService.ManagementResult(
                             packet.action(), true, result.toString()

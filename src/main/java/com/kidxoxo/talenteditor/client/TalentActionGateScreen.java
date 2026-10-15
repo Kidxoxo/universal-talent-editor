@@ -12,7 +12,7 @@ import net.minecraft.resources.ResourceLocation;
 import java.util.List;
 
 /** Visual editor for the two independent conditions on an individual action. */
-public final class TalentActionGateScreen extends Screen {
+public final class TalentActionGateScreen extends EditorScreen {
     private static final List<String> OPERATORS = List.of("lt", "lte", "eq", "neq", "gte", "gt");
     private final Screen parent;
     private final TalentEditScreen owner;
@@ -50,18 +50,18 @@ public final class TalentActionGateScreen extends Screen {
         int listWidth = Math.min(190, Math.max(110, w * 38 / 100));
         int rightX = x + listWidth + 12;
         int rightWidth = w - listWidth - 12;
-        modeButton = addRenderableWidget(Button.builder(Component.empty(), button ->
+        modeButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button ->
                 options.open(Component.translatable("screen.talent_editor.option.choose"),
                         List.of(0, 1, 2).stream().map(index -> Component.translatable(
                                 "screen.talent_editor.action_gate.mode." + index)).toList(),
                         Math.min(mode, 2), index -> { mode = index; status = ""; updateControls(); }, height))
                 .bounds(rightX, 43, rightWidth, 20).build());
         talentId = field(rightX, 87, rightWidth - 96, 256);
-        chooseTalentButton = addRenderableWidget(Button.builder(Component.translatable(
+        chooseTalentButton = addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.action_gate.choose"), button -> chooseTalent())
                 .bounds(rightX + rightWidth - 90, 87, 90, 20).build());
         left = field(rightX, 87, rightWidth, 512);
-        operatorButton = addRenderableWidget(Button.builder(Component.empty(), button ->
+        operatorButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button ->
                 options.open(Component.translatable("screen.talent_editor.option.choose"),
                         OPERATORS.stream().map(value -> Component.translatable(
                                 "screen.talent_editor.expression_condition.operator_help." + value)).toList(),
@@ -69,11 +69,11 @@ public final class TalentActionGateScreen extends Screen {
                 .bounds(rightX, 117, rightWidth, 20).build());
         right = field(rightX, 147, rightWidth, 512);
         int third = (w - 12) / 3;
-        addRenderableWidget(Button.builder(Component.translatable("gui.cancel"), button -> close())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.cancel"), button -> close())
                 .bounds(x, height - 28, third, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.action_gate.clear"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.action_gate.clear"),
                 button -> clear()).bounds(x + third + 6, height - 28, third, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.done"), button -> save())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.done"), button -> save())
                 .bounds(x + (third + 6) * 2, height - 28, w - (third + 6) * 2, 20).build());
         load();
     }
@@ -177,7 +177,7 @@ public final class TalentActionGateScreen extends Screen {
         int rightX = x + listWidth + 12;
         EditorTheme.panel(graphics, x - 7, 27, w + 14, height >= 260 ? 178 : 155);
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 10, EditorTheme.TEXT);
+        EditorTheme.title(graphics,font,title,width);
         graphics.drawString(font, Component.translatable("screen.talent_editor.action_gate.direction_list"),
                 x + 3, 46, EditorTheme.MUTED, false);
         for (int index = 0; index < keys.length; index++) {

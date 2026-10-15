@@ -9,7 +9,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 /** Edits a bounded model and position cue in the acquisition/synthesis timeline. */
-final class TalentPresentationTransformScreen extends Screen {
+final class TalentPresentationTransformScreen extends EditorScreen {
     private final Screen parent;
     private final TalentEditScreen owner;
     private final TalentDraft.AdvancedActionLocation location;
@@ -47,17 +47,17 @@ final class TalentPresentationTransformScreen extends Screen {
         y = field(left + third + 8, first + step * 3, third, value("offsetY", "0"));
         z = field(left + (third + 8) * 2, first + step * 3,
                 w - (third + 8) * 2, value("offsetZ", "0"));
-        positionModeButton = addRenderableWidget(Button.builder(Component.empty(), button -> {
+        positionModeButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> {
             positionMode = positionMode.equals("return") ? "hold" : "return";
             updatePositionMode();
         }).bounds(left, first + step * 3 + 27, w, 20).build());
         updatePositionMode();
         int bottom = height - 28;
-        addRenderableWidget(Button.builder(Component.translatable("gui.cancel"), button -> close())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.cancel"), button -> close())
                 .bounds(left, bottom, 90, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.presentation.preview_full"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.presentation.preview_full"),
                 button -> preview()).bounds(left + 98, bottom, half - 98, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.done"), button -> save())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.done"), button -> save())
                 .bounds(left + half + 8, bottom, half, 20).build());
     }
 
@@ -132,7 +132,7 @@ final class TalentPresentationTransformScreen extends Screen {
         int first = compact ? 44 : 60, step = compact ? 34 : 40;
         EditorTheme.panel(graphics, left - 7, 25, w + 14, Math.min(height - 58, compact ? 205 : 235));
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 10, EditorTheme.TEXT);
+        EditorTheme.title(graphics,font,title,width);
         label(graphics, "at", left, first - 12);
         label(graphics, "duration", left + half + 8, first - 12);
         label(graphics, "alpha_from", left, first + step - 12);
@@ -145,7 +145,7 @@ final class TalentPresentationTransformScreen extends Screen {
         graphics.drawString(font, Component.translatable("screen.talent_editor.presentation.transform.hint"),
                 left, first + step * 3 + 51, EditorTheme.MUTED, false);
         if (!status.isBlank()) graphics.drawString(font, font.plainSubstrByWidth(status, w),
-                left, height - 42, 0xFF7777, false);
+                left, height - 42, EditorTheme.ERROR, false);
     }
 
     private void label(GuiGraphics graphics, String key, int x, int y) {

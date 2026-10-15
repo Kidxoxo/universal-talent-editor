@@ -11,7 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
-public final class TalentTextStyleScreen extends Screen {
+public final class TalentTextStyleScreen extends EditorScreen {
     private static final int ROW_HEIGHT = 18;
     private static final int MAX_DESCRIPTIONS = 64;
 
@@ -55,28 +55,28 @@ public final class TalentTextStyleScreen extends Screen {
 
         int gap = 6;
         int toggleWidth = (formWidth - gap) / 2;
-        boldButton = addRenderableWidget(Button.builder(boldLabel(), button -> {
+        boldButton = addRenderableWidget(EditorWidgets.button(boldLabel(), button -> {
             bold = !bold;
             button.setMessage(boldLabel());
         }).bounds(x, 142, toggleWidth, 20).build());
-        italicButton = addRenderableWidget(Button.builder(italicLabel(), button -> {
+        italicButton = addRenderableWidget(EditorWidgets.button(italicLabel(), button -> {
             italic = !italic;
             button.setMessage(italicLabel());
         }).bounds(x + toggleWidth + gap, 142, formWidth - toggleWidth - gap, 20).build());
 
         int listButtonWidth = Math.max(44, (divider - 28) / 2);
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.text.add_description"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.text.add_description"),
                         button -> addDescription())
                 .bounds(12, height - 55, listButtonWidth, 20).build());
-        removeButton = addRenderableWidget(Button.builder(
+        removeButton = addRenderableWidget(EditorWidgets.button(
                         Component.translatable("screen.talent_editor.text.remove_description"),
                         button -> removeDescription())
                 .bounds(18 + listButtonWidth, height - 55, divider - listButtonWidth - 30, 20).build());
 
         int bottomWidth = Math.max(64, (formWidth - gap) / 2);
-        addRenderableWidget(Button.builder(Component.translatable("gui.back"), button -> returnToParent())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.back"), button -> returnToParent())
                 .bounds(x, height - 28, bottomWidth, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.text.apply"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.text.apply"), EditorTheme.Tone.PRIMARY,
                         button -> apply())
                 .bounds(x + bottomWidth + gap, height - 28,
                         formWidth - bottomWidth - gap, 20).build());
@@ -100,7 +100,7 @@ public final class TalentTextStyleScreen extends Screen {
         EditorTheme.panel(graphics, 5, 27, divider - 8, Math.max(1, height - 64));
         EditorTheme.panel(graphics, x - 7, 27, formWidth + 14, Math.max(1, height - 64));
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 10, EditorTheme.TEXT);
+        EditorTheme.title(graphics,font,title,width);
         graphics.drawString(font, Component.translatable("screen.talent_editor.text.parts"),
                 12, 34, EditorTheme.MUTED, false);
         renderParts(graphics, mouseX, mouseY, divider);
@@ -110,7 +110,7 @@ public final class TalentTextStyleScreen extends Screen {
         renderPreview(graphics, x, formWidth);
         if (!status.isBlank()) {
             graphics.drawString(font, font.plainSubstrByWidth(status, formWidth),
-                    x, height - 47, 0xFF7777, false);
+                    x, height - 47, EditorTheme.ERROR, false);
         }
     }
 
@@ -151,12 +151,12 @@ public final class TalentTextStyleScreen extends Screen {
         int textColor = parsedColor == null ? 0xFFD0D0D0 : 0xFF000000 | (parsedColor & 0xFFFFFF);
         preview.withStyle(style -> style.withColor(textColor & 0xFFFFFF).withBold(bold).withItalic(italic));
         graphics.drawString(font, Component.translatable("screen.talent_editor.text.preview"),
-                x, 170, 0xA0A0A0, false);
+                x, 170, EditorTheme.MUTED, false);
         graphics.drawString(font, preview, x, 184, textColor, false);
     }
 
     private void label(GuiGraphics graphics, String key, int x, int y) {
-        graphics.drawString(font, Component.translatable(key), x, y, 0xA0A0A0, false);
+        graphics.drawString(font, Component.translatable(key), x, y, EditorTheme.MUTED, false);
     }
 
     @Override

@@ -70,6 +70,7 @@ public final class ClientForgeEvents {
 
     @SubscribeEvent
     public static void loggingOut(ClientPlayerNetworkEvent.LoggingOut event) {
+        ResourceReferencePickerScreen.clearRecent();EditorListMemory.clear();EditorDefinitionScreen.clearPending();
         ClientVisualState.clear();
         ClientCreativeItems.clear();
     }

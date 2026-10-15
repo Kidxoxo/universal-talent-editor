@@ -16,7 +16,7 @@ import net.minecraft.server.packs.repository.PackRepository;
 
 import java.util.Optional;
 
-public final class EditorSettingsScreen extends Screen {
+public final class EditorSettingsScreen extends EditorScreen {
     private final EditorBootstrap bootstrap;
     private boolean automaticSynthesis;
     private EditorRuntimeSettings.SynthesisSoundAudience soundAudience;
@@ -28,6 +28,9 @@ public final class EditorSettingsScreen extends Screen {
     private Button messageAudienceButton;
     private Button overlapButton;
     private EditBox importField;
+    private String importValue="";
+    private boolean transferTab, settingsPending, managementPending;
+    boolean busy(){return settingsPending||managementPending;}
     private Component status = Component.empty();
     private int statusColor = EditorTheme.MUTED;
 
@@ -46,47 +49,54 @@ public final class EditorSettingsScreen extends Screen {
     protected void init() {
         int formWidth = Math.min(620, width - 32);
         int x = (width - formWidth) / 2;
-        synthesisButton = addRenderableWidget(Button.builder(synthesisLabel(), button -> {
+        synthesisButton = addRenderableWidget(EditorWidgets.button(synthesisLabel(), button -> {
             automaticSynthesis = !automaticSynthesis;
             button.setMessage(synthesisLabel());
             saveSettings();
-        }).bounds(x, 28, formWidth, 20).build());
+        }).bounds(x, 60, formWidth, 20).build());
         int gap = 8;
         int half = (formWidth - gap) / 2;
-        audienceButton = addRenderableWidget(Button.builder(audienceLabel(), button -> {
+        audienceButton = addRenderableWidget(EditorWidgets.button(audienceLabel(), button -> {
             soundAudience = soundAudience.next();
             button.setMessage(audienceLabel());
             saveSettings();
-        }).bounds(x, 52, half, 20).build());
-        messageAudienceButton = addRenderableWidget(Button.builder(messageAudienceLabel(), button -> {
+        }).bounds(x, 84, half, 20).build());
+        messageAudienceButton = addRenderableWidget(EditorWidgets.button(messageAudienceLabel(), button -> {
             messageAudience = messageAudience.next();
             button.setMessage(messageAudienceLabel());
             saveSettings();
-        }).bounds(x + half + gap, 52, formWidth - half - gap, 20).build());
-        overlapButton = addRenderableWidget(Button.builder(overlapLabel(), button -> {
+        }).bounds(x + half + gap, 84, formWidth - half - gap, 20).build());
+        overlapButton = addRenderableWidget(EditorWidgets.button(overlapLabel(), button -> {
             overlapPolicy = overlapPolicy.next();
             button.setMessage(overlapLabel());
             saveSettings();
-        }).bounds(x, 76, formWidth, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.settings.export"),
+        }).bounds(x, 108, formWidth, 20).build());
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.settings.export"),
                 button -> run(EditorSettingsService.ManagementAction.EXPORT))
-                .bounds(x, 104, half, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.settings.install_global"),
-                button -> run(EditorSettingsService.ManagementAction.INSTALL_GLOBAL))
-                .bounds(x + half + gap, 104, formWidth - half - gap, 20).build());
+                .bounds(x, 60, half, 20).build());
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.settings.install_global"),
+                button -> minecraft.setScreen(new EditorConfirmScreen(yes->{minecraft.setScreen(this);if(yes)run(EditorSettingsService.ManagementAction.INSTALL_GLOBAL);},EditorDefinitionScreen.tr("global_template"),EditorDefinitionScreen.tr("global_template_hint"))))
+                .bounds(x + half + gap, 60, formWidth - half - gap, 20).build());
         int importButtonWidth = Math.min(160, Math.max(90, formWidth / 3));
         importField = new EditBox(
-                font, x, 140, formWidth - importButtonWidth - gap, 20,
+                font, x, 100, formWidth - importButtonWidth - gap, 20,
                 Component.translatable("screen.talent_editor.settings.import_path")
         );
         importField.setMaxLength(4_096);
         importField.setHint(Component.translatable("screen.talent_editor.settings.import_hint"));
+        importField.setValue(importValue);importField.setResponder(value->importValue=value);
         addRenderableWidget(importField);
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.settings.import"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.settings.import"),
                 button -> importSettings())
-                .bounds(x + formWidth - importButtonWidth, 140, importButtonWidth, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.back"), button -> returnHome())
+                .bounds(x + formWidth - importButtonWidth, 100, importButtonWidth, 20).build());
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.back"), button -> returnHome())
                 .bounds(width / 2 - 55, height - 28, 110, 20).build());
+        var controls=children().stream().filter(c->c instanceof net.minecraft.client.gui.components.AbstractWidget).map(c->(net.minecraft.client.gui.components.AbstractWidget)c).toList();
+        for(int i=0;i<4;i++)controls.get(i).visible=!transferTab;
+        for(int i=4;i<8;i++)controls.get(i).visible=transferTab;
+        addRenderableWidget(EditorWidgets.button(EditorDefinitionScreen.tr("runtime_settings"),b->{transferTab=false;rebuildWidgets();}).bounds(x,28,half,20).build());
+        addRenderableWidget(EditorWidgets.button(EditorDefinitionScreen.tr("pack_tools"),b->{transferTab=true;rebuildWidgets();}).bounds(x+half+gap,28,formWidth-half-gap,20).build());
+
     }
 
     @Override
@@ -95,16 +105,14 @@ public final class EditorSettingsScreen extends Screen {
         int formWidth = Math.min(620, width - 32);
         int x = (width - formWidth) / 2;
         EditorTheme.panel(graphics, x - 7, 23, formWidth + 14, Math.max(1, height - 59));
+        for (var child : children()) if (child instanceof net.minecraft.client.gui.components.AbstractWidget widget) widget.active = !busy();
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 10, 0xFFFFFF);
-        graphics.drawString(font, Component.translatable("screen.talent_editor.settings.import_path"),
-                x, 129, EditorTheme.MUTED, false);
-        Component help = Component.translatable(
-                        globalTemplateAvailable
-                                ? "screen.talent_editor.settings.global_installed"
-                                : "screen.talent_editor.settings.global_help");
-        graphics.drawString(font, font.plainSubstrByWidth(help.getString(), formWidth),
-                x, 166, globalTemplateAvailable ? 0xFF77DD88 : EditorTheme.MUTED, false);
+        EditorTheme.title(graphics,font,title,width);
+        EditorTheme.selectedTab(graphics,transferTab?x+halfWidth(formWidth)+8:x,28,halfWidth(formWidth));
+        if(transferTab){
+            graphics.drawString(font,Component.translatable("screen.talent_editor.settings.import_path"),x,89,EditorTheme.MUTED,false);
+            graphics.drawWordWrap(font,EditorDefinitionScreen.tr("pack_scope"),x,133,formWidth,EditorTheme.MUTED);
+        }else graphics.drawWordWrap(font,EditorDefinitionScreen.tr("immediate_settings"),x,145,formWidth,EditorTheme.MUTED);
         if (!status.getString().isBlank()) {
             if (height >= 300) graphics.drawWordWrap(font, status, x, 181, formWidth, statusColor);
             else graphics.drawString(font, font.plainSubstrByWidth(status.getString(), formWidth),
@@ -112,7 +120,11 @@ public final class EditorSettingsScreen extends Screen {
         }
     }
 
+    private static int halfWidth(int width){return (width-8)/2;}
+
     public void acceptSettings(EditorSettingsPacket packet) {
+        boolean saved = settingsPending;
+        settingsPending=false;
         automaticSynthesis = packet.automaticSynthesis();
         soundAudience = packet.synthesisSoundAudience();
         messageAudience = packet.synthesisMessageAudience();
@@ -122,11 +134,16 @@ public final class EditorSettingsScreen extends Screen {
         if (audienceButton != null) audienceButton.setMessage(audienceLabel());
         if (messageAudienceButton != null) messageAudienceButton.setMessage(messageAudienceLabel());
         if (overlapButton != null) overlapButton.setMessage(overlapLabel());
-        status = Component.translatable("screen.talent_editor.settings.saved");
-        statusColor = 0xFF77DD88;
+        if (saved) {
+            status = Component.translatable("screen.talent_editor.settings.saved");
+            statusColor = 0xFF77DD88;
+        }
     }
 
     public void acceptManagementResult(EditorManagementResultPacket packet) {
+        managementPending=false;
+        if(packet.action()==EditorSettingsService.ManagementAction.UPDATE_SETTINGS)settingsPending=false;
+        if(packet.successful()&&packet.action()==EditorSettingsService.ManagementAction.PREVIEW_IMPORT){minecraft.setScreen(new EditorImportPreviewScreen(this,packet.detail()));return;}
         if (packet.successful() && packet.action() == EditorSettingsService.ManagementAction.EXPORT
                 && importField != null) importField.setValue(packet.detail());
         status = Component.translatable(
@@ -142,18 +159,25 @@ public final class EditorSettingsScreen extends Screen {
     }
 
     private void run(EditorSettingsService.ManagementAction action) {
+        if(busy())return;managementPending=true;
         status = Component.translatable("screen.talent_editor.settings.working");
         statusColor = EditorTheme.ACCENT;
         EditorNetwork.runManagementAction(action);
     }
 
     private void importSettings() {
+        if(busy())return;managementPending=true;
         status = Component.translatable("screen.talent_editor.settings.import_working");
         statusColor = EditorTheme.ACCENT;
-        EditorNetwork.importSettings(importField == null ? "" : importField.getValue());
+        EditorNetwork.previewImport(importField == null ? "" : importField.getValue());
+    }
+
+    void confirmImport(String frozen){
+        if(busy())return;managementPending=true;status=Component.translatable("screen.talent_editor.settings.import_working");EditorNetwork.importSettings(frozen);
     }
 
     private void saveSettings() {
+        if(busy())return;settingsPending=true;
         status = Component.translatable("screen.talent_editor.settings.saving");
         statusColor = EditorTheme.ACCENT;
         EditorNetwork.updateSettings(new EditorRuntimeSettings(
@@ -226,6 +250,7 @@ public final class EditorSettingsScreen extends Screen {
     }
 
     private void returnHome() {
+        if(busy())return;
         if (minecraft == null) return;
         EditorBootstrap latest = ClientEditorState.bootstrap();
         minecraft.setScreen(new EditorHomeScreen(latest == null ? bootstrap : latest));

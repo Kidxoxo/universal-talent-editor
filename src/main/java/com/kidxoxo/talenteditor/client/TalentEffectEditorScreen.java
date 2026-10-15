@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.Locale;
 
 /** Manages ordinary attributes, maintained effects, and effect immunities in one list. */
-public final class TalentEffectEditorScreen extends Screen {
+public final class TalentEffectEditorScreen extends EditorScreen {
     private static final List<String> OPERATIONS = List.of("addition", "multiply_base", "multiply_total");
     private static final int ROW_HEIGHT = 20;
 
@@ -43,13 +43,13 @@ public final class TalentEffectEditorScreen extends Screen {
         int x = (width - formWidth) / 2;
         int gap = 6;
         int third = (formWidth - gap * 2) / 3;
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.add_attribute"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.add_attribute"),
                         button -> chooseAttribute())
                 .bounds(x, 43, third, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.add_maintained_effect"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.add_maintained_effect"),
                         button -> chooseMaintainedEffect())
                 .bounds(x + third + gap, 43, third, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.add_immunity"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.add_immunity"),
                         button -> chooseImmunity())
                 .bounds(x + (third + gap) * 2, 43, formWidth - (third + gap) * 2, 20).build());
 
@@ -59,19 +59,19 @@ public final class TalentEffectEditorScreen extends Screen {
                 Component.translatable("screen.talent_editor.form.amount"));
         amountField.setMaxLength(48);
         addRenderableWidget(amountField);
-        operationButton = addRenderableWidget(Button.builder(operationLabel(), button -> chooseOperation())
+        operationButton = addRenderableWidget(EditorWidgets.button(operationLabel(), button -> chooseOperation())
                 .bounds(x + half + gap, detailY, formWidth - half - gap, 20).build());
 
         int bottom = height - 28;
-        addRenderableWidget(Button.builder(Component.translatable("gui.back"), button -> returnOwner())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.back"), button -> returnOwner())
                 .bounds(x, bottom, third, 20).build());
-        applyButton = addRenderableWidget(Button.builder(
+        applyButton = addRenderableWidget(EditorWidgets.button(
                         Component.translatable("screen.talent_editor.effect_editor.apply"), button -> applySelected())
                 .bounds(x + third + gap, bottom, third, 20).build());
-        removeButton = addRenderableWidget(Button.builder(
+        removeButton = addRenderableWidget(EditorWidgets.button(
                         Component.translatable("screen.talent_editor.remove_effect"), button -> removeSelected())
                 .bounds(x + (third + gap) * 2, bottom, formWidth - (third + gap) * 2, 20).build());
-        gateButton = addRenderableWidget(Button.builder(Component.translatable(
+        gateButton = addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.action_gate.open"), button -> editGate())
                 .bounds(x + formWidth - 100, 8, 100, 20).build());
         syncSelection();
@@ -87,7 +87,7 @@ public final class TalentEffectEditorScreen extends Screen {
         EditorTheme.panel(graphics, x - 7, 75, formWidth + 14, Math.max(1, listBottom - 75));
         EditorTheme.panel(graphics, x - 7, height - 89, formWidth + 14, 54);
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 9, EditorTheme.TEXT);
+        EditorTheme.title(graphics,font,title,width);
         graphics.drawCenteredString(font, Component.translatable("screen.talent_editor.effect_editor.manage_help"),
                 width / 2, 29, EditorTheme.MUTED);
         renderRows(graphics, mouseX, mouseY, x, formWidth);
@@ -133,6 +133,7 @@ public final class TalentEffectEditorScreen extends Screen {
             int bottom = height - 96;
             if (mouseX >= x && mouseX < x + formWidth && mouseY >= top && mouseY < bottom) {
                 int index = scroll + (int) ((mouseY - top) / ROW_HEIGHT);
+                if(index>=scroll+Math.max(1,(height-84-96)/ROW_HEIGHT))return true;
                 if (index >= 0 && index < rows().size()) {
                     selectedRawIndex = rows().get(index).rawIndex();
                     status = "";

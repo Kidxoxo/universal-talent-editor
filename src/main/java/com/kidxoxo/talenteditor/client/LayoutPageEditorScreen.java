@@ -13,15 +13,17 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-public final class LayoutPageEditorScreen extends Screen {
+public final class LayoutPageEditorScreen extends EditorScreen {
     private static final int MAX_PAGES = 64;
     private static final int MAX_TOTAL_SLOTS = 4_096;
-    private static final int ROW_HEIGHT = 22;
     private final LayoutEditScreen parent;
     private final List<LayoutDraft.SlotDraft> defaultSlots;
     private final ArrayList<LayoutDraft.PageDraft> pages;
+    private final List<LayoutDraft.PageDraft> originalPages;
+    private boolean loadingFields;
     private int selected = -1;
-    private int scroll;
+    private final EditorOptionPopup options=new EditorOptionPopup();
+    private Button pagePicker,contents;
     private EditBox idField;
     private EditBox backgroundField;
     private Button backgroundPickerButton;
@@ -35,131 +37,43 @@ public final class LayoutPageEditorScreen extends Screen {
         super(Component.translatable("screen.talent_editor.layout.page_editor.title"));
         this.parent = parent;
         this.pages = new ArrayList<>(pages);
+        this.originalPages = List.copyOf(pages);
         this.defaultSlots = List.copyOf(defaultSlots);
         if (!pages.isEmpty()) selected = 0;
     }
 
     @Override
     protected void init() {
-        int formWidth = Math.min(700, width - 32);
-        int x = (width - formWidth) / 2;
-        int leftWidth = Math.min(250, Math.max(150, formWidth / 3));
-        int rightX = x + leftWidth + 12;
-        int rightWidth = formWidth - leftWidth - 12;
-        idField = new EditBox(font, rightX, 58, rightWidth, 20, Component.empty());
-        idField.setMaxLength(64);
-        addRenderableWidget(idField);
-        int gap = 5;
-        int chooseWidth = Math.min(72, Math.max(52, rightWidth / 4));
-        backgroundField = new EditBox(font, rightX, 90, rightWidth - chooseWidth - gap, 20,
-                Component.empty());
-        backgroundField.setMaxLength(512);
-        addRenderableWidget(backgroundField);
-        backgroundPickerButton = addRenderableWidget(Button.builder(
-                        Component.translatable("screen.talent_editor.reference_picker.choose"),
-                        button -> openBackgroundPicker())
-                .bounds(rightX + rightWidth - chooseWidth, 90, chooseWidth, 20).build());
-
-        int half = (rightWidth - gap) / 2;
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.layout.page.slots"),
-                        button -> openSlots())
-                .bounds(rightX, 122, half, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.layout.page.add"),
-                        button -> addPage())
-                .bounds(rightX + half + gap, 122, rightWidth - half - gap, 20).build());
-        int third = (rightWidth - gap * 2) / 3;
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.layout.page.remove"),
-                        button -> removePage())
-                .bounds(rightX, 148, third, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.layout.page.up"),
-                        button -> movePage(-1))
-                .bounds(rightX + third + gap, 148, third, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.layout.page.down"),
-                        button -> movePage(1))
-                .bounds(rightX + (third + gap) * 2, 148,
-                        rightWidth - (third + gap) * 2, 20).build());
-
-        int bottom = height - 28;
-        addRenderableWidget(Button.builder(Component.translatable("gui.back"), button -> returnWithoutApplying())
-                .bounds(x, bottom, (formWidth - gap) / 2, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.layout.page.apply"),
-                        button -> apply())
-                .bounds(x + (formWidth - gap) / 2 + gap, bottom,
-                        formWidth - (formWidth - gap) / 2 - gap, 20).build());
+        int x=16,w=width-32,gap=6;
+        pagePicker=addRenderableWidget(EditorWidgets.button(Component.empty(),b->options.open(title,pages.stream().map(page->Component.literal(page.id())).toList(),Math.max(0,selected),i->{storeSelected();selected=i;loadSelected();},height)).bounds(x,30,w,20).build());
+        int q=(w-3*gap)/4;
+        String[] keys={"add","up","down","remove"};
+        Runnable[] actions={this::addPage,()->movePage(-1),()->movePage(1),this::removePage};
+        for(int i=0;i<4;i++){int at=i;addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.layout.page."+keys[i]),b->actions[at].run()).bounds(x+i*(q+gap),57,q,20).build());}
+        idField=new EditBox(font,x,100,w,20,Component.translatable("screen.talent_editor.layout.page.id"));idField.setMaxLength(64);addRenderableWidget(idField);
+        backgroundField=new EditBox(font,x,136,w-54,20,Component.translatable("screen.talent_editor.layout.page.background"));backgroundField.setMaxLength(512);addRenderableWidget(backgroundField);
+        backgroundPickerButton=addRenderableWidget(EditorWidgets.button(Component.literal("…"),b->openBackgroundPicker()).bounds(x+w-48,136,48,20).build());
+        contents=addRenderableWidget(EditorWidgets.button(UiCanvasEditorScreen.tr("bindings"),b->openSlots()).bounds(x,166,w,20).build());
+        int half=(w-gap)/2;
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.cancel"),b->returnWithoutApplying()).bounds(x,height-28,half,20).build());
+        addRenderableWidget(EditorWidgets.button(UiCanvasEditorScreen.tr("apply_layout"),b->apply()).bounds(x+half+gap,height-28,w-half-gap,20).build());
         loadSelected();
+        idField.setResponder(value->{if(!loadingFields){storeSelected();status="";}});
+        backgroundField.setResponder(value->{if(!loadingFields){storeSelected();status="";}});
     }
-
-    @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(graphics);
-        super.render(graphics, mouseX, mouseY, partialTick);
-        int formWidth = Math.min(700, width - 32);
-        int x = (width - formWidth) / 2;
-        int leftWidth = Math.min(250, Math.max(150, formWidth / 3));
-        int rightX = x + leftWidth + 12;
-        graphics.drawCenteredString(font, title, width / 2, 9, 0xFFFFFF);
-        graphics.drawString(font, Component.translatable("screen.talent_editor.layout.page.list"),
-                x, 35, 0xA0A0A0, false);
-        graphics.drawString(font, Component.translatable("screen.talent_editor.layout.page.id"),
-                rightX, 47, 0xA0A0A0, false);
-        graphics.drawString(font, Component.translatable("screen.talent_editor.layout.page.background"),
-                rightX, 79, 0xA0A0A0, false);
-        int rows = visibleRows();
-        scroll = clamp(scroll, pages.size(), rows);
-        int end = Math.min(pages.size(), scroll + rows);
-        for (int index = scroll; index < end; index++) {
-            LayoutDraft.PageDraft page = pages.get(index);
-            int y = 51 + (index - scroll) * ROW_HEIGHT;
-            boolean hovered = mouseX >= x && mouseX < x + leftWidth
-                    && mouseY >= y - 3 && mouseY < y + 16;
-            if (index == selected || hovered) {
-                graphics.fill(x, y - 3, x + leftWidth, y + 16,
-                        index == selected ? 0x704A90E2 : 0x404A90E2);
-            }
-            String label = (index + 1) + ". " + page.id() + "  [" + page.slots().size() + "]";
-            graphics.drawString(font, font.plainSubstrByWidth(label, leftWidth - 8),
-                    x + 4, y, index == selected ? 0xFFFFFF : 0xC0C0C0, false);
-        }
-        if (pages.isEmpty()) {
-            graphics.drawString(font, Component.translatable("screen.talent_editor.layout.page.empty"),
-                    x + 4, 54, 0x808080, false);
-        }
-        graphics.drawString(font, Component.translatable("screen.talent_editor.layout.page.help"),
-                rightX, 177, 0xA0A0A0, false);
-        if (!status.isBlank()) {
-            graphics.drawString(font, font.plainSubstrByWidth(status, formWidth),
-                    x, height - 42, 0xFF7777, false);
-        }
+    @Override public void render(GuiGraphics g,int mx,int my,float tick){
+        renderBackground(g);super.render(g,mx,my,tick);
+        EditorTheme.title(g,font,title,width);
+        g.drawString(font,Component.translatable("screen.talent_editor.layout.page.id"),16,88,EditorTheme.MUTED,false);
+        g.drawString(font,Component.translatable("screen.talent_editor.layout.page.background"),16,124,EditorTheme.MUTED,false);
+        if(height>=290)g.drawWordWrap(font,UiCanvasEditorScreen.tr("pages_hint"),16,195,width-32,EditorTheme.MUTED);
+        if(!status.isBlank())g.drawString(font,font.plainSubstrByWidth(status,width-32),16,height-42,0xFFAA66,false);
+        options.render(g,font,width,height);
     }
-
-    @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        int formWidth = Math.min(700, width - 32);
-        int x = (width - formWidth) / 2;
-        int leftWidth = Math.min(250, Math.max(150, formWidth / 3));
-        if (button == 0 && mouseX >= x && mouseX < x + leftWidth
-                && mouseY >= 48 && mouseY < height - 40) {
-            int index = scroll + (int) ((mouseY - 48) / ROW_HEIGHT);
-            if (index >= 0 && index < pages.size()) {
-                storeSelected();
-                selected = index;
-                loadSelected();
-                status = "";
-                return true;
-            }
-        }
-        return super.mouseClicked(mouseX, mouseY, button);
-    }
-
-    @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
-        scroll = clamp(scroll - (int) Math.signum(delta) * 3, pages.size(), visibleRows());
-        return true;
-    }
-
-    private int visibleRows() {
-        return Math.max(1, (height - 51 - 45) / ROW_HEIGHT);
-    }
+    @Override public boolean mouseClicked(double x,double y,int b){return options.mouseClicked(x,y,b,width,height)||super.mouseClicked(x,y,b);}
+    @Override public boolean mouseScrolled(double x,double y,double d){return options.mouseScrolled(d,height)||super.mouseScrolled(x,y,d);}
+    @Override public boolean keyPressed(int k,int s,int m){return options.keyPressed(k,height)||super.keyPressed(k,s,m);}
+    @Override public boolean charTyped(char c,int m){return options.isOpen()||super.charTyped(c,m);}
 
     private void addPage() {
         storeSelected();
@@ -200,8 +114,8 @@ public final class LayoutPageEditorScreen extends Screen {
         storeSelected();
         LayoutDraft.PageDraft page = pages.get(selected);
         List<LayoutDraft.SlotDraft> initial = page.slots().isEmpty() ? defaultSlots : page.slots();
-        minecraft.setScreen(new LayoutSlotEditorScreen(
-                this, initial, defaultSlots, this::updateSelectedSlots, parent.bootstrap(), true
+        minecraft.setScreen(new LayoutBindingScreen(
+                this, parent.bootstrap(), initial, defaultSlots.size(), this::updateSelectedSlots
         ));
     }
 
@@ -278,6 +192,10 @@ public final class LayoutPageEditorScreen extends Screen {
 
     private void loadSelected() {
         if (idField == null || backgroundField == null) return;
+        loadingFields=true;
+        try {
+        pagePicker.setMessage(pages.isEmpty()?UiCanvasEditorScreen.tr("no_pages"):Component.literal((selected+1)+" / "+pages.size()+" · "+pages.get(selected).id()));
+        pagePicker.active=!pages.isEmpty();contents.active=selected>=0&&selected<pages.size();
         if (selected < 0 || selected >= pages.size()) {
             idField.setValue("");
             backgroundField.setValue("");
@@ -292,16 +210,18 @@ public final class LayoutPageEditorScreen extends Screen {
             idField.setValue(page.id());
             backgroundField.setValue(page.background());
         }
+        } finally { loadingFields=false; }
     }
 
     private void returnWithoutApplying() {
-        if (minecraft != null) minecraft.setScreen(parent);
+        if (minecraft == null) return;
+        storeSelected();
+        if(pages.equals(originalPages))minecraft.setScreen(parent);
+        else minecraft.setScreen(new EditorConfirmScreen(
+                yes->minecraft.setScreen(yes?parent:this),UiCanvasEditorScreen.tr("discard"),UiCanvasEditorScreen.tr("discard_confirm")));
     }
 
     @Override
     public void onClose() { returnWithoutApplying(); }
 
-    private static int clamp(int value, int size, int rows) {
-        return Math.max(0, Math.min(value, Math.max(0, size - rows)));
-    }
 }

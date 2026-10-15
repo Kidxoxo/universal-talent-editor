@@ -9,7 +9,7 @@ import net.minecraft.network.chat.Component;
 import java.util.List;
 
 /** Visual editor for self/event/damage-source/nearby targeting and nearby filters. */
-public final class TalentEntitySelectorScreen extends Screen {
+public final class TalentEntitySelectorScreen extends EditorScreen {
     private static final List<String> TARGETS = List.of("self", "event_entity", "damage_source", "nearby");
     private static final List<String> RELATIONS = List.of("any", "ally", "enemy");
     private static final List<String> ORDERS = List.of("nearest", "farthest", "random");
@@ -47,7 +47,7 @@ public final class TalentEntitySelectorScreen extends Screen {
         int x = (width - formWidth) / 2;
         int gap = 6;
         int half = (formWidth - gap) / 2;
-        targetButton = addRenderableWidget(Button.builder(Component.empty(), button ->
+        targetButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button ->
                 options.open(Component.translatable("screen.talent_editor.option.choose"),
                         TARGETS.stream().map(value -> Component.translatable(
                                 "screen.talent_editor.advanced_selector.target." + value)).toList(),
@@ -55,21 +55,21 @@ public final class TalentEntitySelectorScreen extends Screen {
                 .bounds(x, 47, formWidth, 20).build());
         radiusField = field(x, 82, half, Double.toString(initialRadius));
         limitField = field(x + half + gap, 82, formWidth - half - gap, Integer.toString(initialLimit));
-        relationButton = addRenderableWidget(Button.builder(Component.empty(), button ->
+        relationButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button ->
                 options.open(Component.translatable("screen.talent_editor.option.choose"),
                         RELATIONS.stream().map(value -> Component.translatable(
                                 "screen.talent_editor.advanced_selector.relation." + value)).toList(),
                         relationIndex, index -> { relationIndex = index; updateWidgets(); }, height))
                 .bounds(x, 117, half, 20).build());
-        orderButton = addRenderableWidget(Button.builder(Component.empty(), button ->
+        orderButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button ->
                 options.open(Component.translatable("screen.talent_editor.option.choose"),
                         ORDERS.stream().map(value -> Component.translatable(
                                 "screen.talent_editor.advanced_selector.order." + value)).toList(),
                         orderIndex, index -> { orderIndex = index; updateWidgets(); }, height))
                 .bounds(x + half + gap, 117, formWidth - half - gap, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.cancel"), button -> returnParent())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.cancel"), button -> returnParent())
                 .bounds(x, height - 28, 80, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.done"), button -> apply())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.done"), button -> apply())
                 .bounds(x + 86, height - 28, formWidth - 86, 20).build());
         updateWidgets();
     }
@@ -122,14 +122,14 @@ public final class TalentEntitySelectorScreen extends Screen {
         int x = (width - formWidth) / 2;
         EditorTheme.panel(graphics, x - 7, 28, formWidth + 14, 116);
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 10, EditorTheme.TEXT);
+        EditorTheme.title(graphics,font,title,width);
         graphics.drawString(font, Component.translatable("screen.talent_editor.advanced_selector.radius"),
                 x, 70, EditorTheme.MUTED, false);
         graphics.drawString(font, Component.translatable("screen.talent_editor.advanced_selector.limit"),
                 x + (formWidth - 6) / 2 + 6, 70, EditorTheme.MUTED, false);
         graphics.drawWordWrap(font, Component.translatable("screen.talent_editor.advanced_selector.help"),
                 x, 151, formWidth, EditorTheme.MUTED);
-        if (!status.isBlank()) graphics.drawString(font, status, x, height - 47, 0xFF7777, false);
+        if (!status.isBlank()) graphics.drawString(font, status, x, height - 47, EditorTheme.ERROR, false);
         options.render(graphics, font, width, height);
     }
 

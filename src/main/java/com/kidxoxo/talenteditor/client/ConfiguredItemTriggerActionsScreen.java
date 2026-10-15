@@ -11,7 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /** Ordered normal or recovery actions for one configured-item event. */
-public final class ConfiguredItemTriggerActionsScreen extends Screen {
+public final class ConfiguredItemTriggerActionsScreen extends EditorScreen {
     private final ConfiguredItemTriggerScreen parent;
     private final EditorBootstrap bootstrap;
     private final boolean failure;
@@ -39,25 +39,25 @@ public final class ConfiguredItemTriggerActionsScreen extends Screen {
     @Override protected void init() {
         int w = Math.min(660, width - 32), x = (width - w) / 2;
         int quarter = (w - 18) / 4;
-        addRenderableWidget(Button.builder(Component.translatable(
+        addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.configured_item.triggers.add_action"), b -> addAction())
                 .bounds(x, height - 56, quarter, 20).build());
-        editButton = addRenderableWidget(Button.builder(Component.translatable(
+        editButton = addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.configured_item.triggers.edit_action"), b -> editAction())
                 .bounds(x + quarter + 6, height - 56, quarter, 20).build());
-        removeButton = addRenderableWidget(Button.builder(Component.translatable(
+        removeButton = addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.configured_item.triggers.remove_action"), b -> removeAction())
                 .bounds(x + (quarter + 6) * 2, height - 56, quarter, 20).build());
         int movesWidth = w - (quarter + 6) * 3;
-        upButton = addRenderableWidget(Button.builder(Component.literal("↑"), b -> move(-1))
+        upButton = addRenderableWidget(EditorWidgets.button(Component.literal("↑"), b -> move(-1))
                 .bounds(x + (quarter + 6) * 3, height - 56, (movesWidth - 4) / 2, 20).build());
-        downButton = addRenderableWidget(Button.builder(Component.literal("↓"), b -> move(1))
+        downButton = addRenderableWidget(EditorWidgets.button(Component.literal("↓"), b -> move(1))
                 .bounds(x + (quarter + 6) * 3 + (movesWidth - 4) / 2 + 4, height - 56,
                         movesWidth - (movesWidth - 4) / 2 - 4, 20).build());
         int half = (w - 6) / 2;
-        addRenderableWidget(Button.builder(Component.translatable("gui.cancel"), b -> close())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.cancel"), b -> close())
                 .bounds(x, height - 28, half, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable(
+        addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.configured_item.triggers.apply"), b -> apply())
                 .bounds(x + half + 6, height - 28, w - half - 6, 20).build());
         sync();
@@ -128,7 +128,7 @@ public final class ConfiguredItemTriggerActionsScreen extends Screen {
         int w = Math.min(660, width - 32), x = (width - w) / 2;
         EditorTheme.panel(graphics, x - 7, 27, w + 14, Math.max(1, height - 91));
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 10, EditorTheme.TEXT);
+        EditorTheme.title(graphics,font,title,width);
         graphics.drawString(font, Component.translatable("screen.talent_editor.configured_item.triggers.action_list"),
                 x + 3, 35, EditorTheme.MUTED, false);
         int visible = Math.max(1, (height - 111) / 20);

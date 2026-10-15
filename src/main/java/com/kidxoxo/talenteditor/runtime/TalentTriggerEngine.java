@@ -37,10 +37,19 @@ public final class TalentTriggerEngine {
             List<TriggerBinding> bindings,
             Set<ResourceLocation> ownedTalents
     ) {
+        return ownedBindings(bindings, ownedTalents, Set.of());
+    }
+
+    public static List<TriggerBinding> ownedBindings(
+            List<TriggerBinding> bindings,
+            Set<ResourceLocation> ownedTalents,
+            Set<ResourceLocation> equippedItems
+    ) {
         return bindings.stream()
-                .filter(binding -> ownedTalents.contains(binding.talentId()))
+                .filter(binding -> binding.ownedBy(ownedTalents, equippedItems))
                 .sorted(Comparator.comparingInt((TriggerBinding binding) -> binding.trigger().priority()).reversed()
                         .thenComparing(binding -> binding.talentId().toString())
+                        .thenComparing(binding -> binding.sourceKind().name())
                         .thenComparing(binding -> binding.trigger().id()))
                 .toList();
     }

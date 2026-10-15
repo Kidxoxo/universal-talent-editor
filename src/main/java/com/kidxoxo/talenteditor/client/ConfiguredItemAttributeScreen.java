@@ -14,7 +14,7 @@ import java.util.HashSet;
 import java.util.List;
 
 /** List of item attributes with an editor for the selected row. */
-public final class ConfiguredItemAttributeScreen extends Screen {
+public final class ConfiguredItemAttributeScreen extends EditorScreen {
     private static final int MAX_MODIFIERS = 256;
     private static final int ROW_HEIGHT = 27;
     private static final List<String> OPERATIONS = List.of("addition", "multiply_base", "multiply_total");
@@ -55,27 +55,27 @@ public final class ConfiguredItemAttributeScreen extends Screen {
     @Override protected void init() {
         int x = formX(), w = formWidth();
         attributeField = field(x + 8, 53, w - 116, 256);
-        chooseButton = addRenderableWidget(Button.builder(Component.translatable(
+        chooseButton = addRenderableWidget(EditorWidgets.button(Component.translatable(
                 "screen.talent_editor.configured_item.attributes.choose"), b -> chooseAttribute())
                 .bounds(x + w - 100, 53, 92, 20).build());
         amountField = field(x + 8, 91, Math.max(70, (w - 24) / 2), 32);
-        operationButton = addRenderableWidget(Button.builder(Component.empty(), b -> chooseOperation())
+        operationButton = addRenderableWidget(EditorWidgets.button(Component.empty(), b -> chooseOperation())
                 .bounds(x + 16 + (w - 24) / 2, 91, w - 24 - (w - 24) / 2, 20).build());
-        slotsButton = addRenderableWidget(Button.builder(Component.empty(), b -> chooseSlots())
+        slotsButton = addRenderableWidget(EditorWidgets.button(Component.empty(), b -> chooseSlots())
                 .bounds(x + 8, 129, w - 16, 20).build());
         keyField = field(x + 8, 167, w - 16, 160);
         int lx = leftX(), lw = listWidth();
-        addRenderableWidget(Button.builder(Component.translatable(
+        addRenderableWidget(EditorWidgets.button(Component.translatable(
                 "screen.talent_editor.configured_item.attributes.add"), b -> addModifier())
                 .bounds(lx + 8, height - 57, (lw - 22) / 2, 20).build());
-        deleteButton = addRenderableWidget(Button.builder(Component.translatable(
+        deleteButton = addRenderableWidget(EditorWidgets.button(Component.translatable(
                 "screen.talent_editor.configured_item.attributes.delete"), b -> deleteModifier())
                 .bounds(lx + 14 + (lw - 22) / 2, height - 57, (lw - 22) / 2, 20).build());
         int half = (contentWidth() - 6) / 2;
-        addRenderableWidget(Button.builder(Component.translatable(
+        addRenderableWidget(EditorWidgets.button(Component.translatable(
                 "screen.talent_editor.configured_item.attributes.apply"), b -> apply())
                 .bounds(lx, height - 28, half, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.cancel"), b -> returnParent())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.cancel"), b -> returnParent())
                 .bounds(lx + half + 6, height - 28, contentWidth() - half - 6, 20).build());
         loadSelected();
     }
@@ -93,7 +93,7 @@ public final class ConfiguredItemAttributeScreen extends Screen {
         EditorTheme.panel(graphics, leftX(), 28, listWidth(), height - 62);
         EditorTheme.panel(graphics, formX(), 28, formWidth(), Math.min(height - 62, 225));
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 10, EditorTheme.TEXT);
+        EditorTheme.title(graphics,font,title,width);
         graphics.drawString(font, Component.translatable(
                 "screen.talent_editor.configured_item.attributes.list", modifiers.size()),
                 leftX() + 8, 38, EditorTheme.TEXT, false);

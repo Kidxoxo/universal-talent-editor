@@ -101,6 +101,7 @@ public final class TalentDraft {
             "durationTicks", "removeAfterDraws", "retainEffects", "retainCategoryContribution", "retainTriggers"
     );
 
+    String snapshot() { return root.toString(); }
     private final JsonObject root;
     private final ArrayList<JsonObject> effects;
 

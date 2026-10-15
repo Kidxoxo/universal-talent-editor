@@ -44,6 +44,14 @@ public final class ClientResourceRequirementCatalog {
             ))));
         }
 
+        java.util.stream.Stream.concat(layout.bookUi().stream(), layout.drawUi().stream())
+                .flatMap(ui -> ui.elements().stream()).forEach(element -> {
+                    for (String texture : List.of(element.texture(), element.hoverTexture())) {
+                        if (!texture.isBlank()) found.add(requirement(ClientResourceRequirement.Kind.TEXTURE,
+                                new net.minecraft.resources.ResourceLocation(texture)));
+                    }
+                });
+
         snapshot.configuredItems().values().stream()
                 .filter(item -> item.enabled() && item.available() && item.use().enabled())
                 .sorted(Comparator.comparing(item -> item.id().toString()))

@@ -155,7 +155,7 @@ public record PlayerTalentStatePacket(
         );
     }
 
-    private static void encodeLayout(FriendlyByteBuf buffer, TalentBookLayoutDefinition layout) {
+    static void encodeLayout(FriendlyByteBuf buffer, TalentBookLayoutDefinition layout) {
         buffer.writeResourceLocation(layout.id());
         buffer.writeVarInt(layout.schema());
         buffer.writeBoolean(layout.enabled());
@@ -189,6 +189,19 @@ public record PlayerTalentStatePacket(
                 encodeLayoutSlot(buffer, slot);
             }
         }
+        encodeUi(buffer, layout.bookUi());
+        encodeUi(buffer, layout.drawUi());
+    }
+
+    static void encodeUi(FriendlyByteBuf buffer, java.util.Optional<com.kidxoxo.talenteditor.domain.UiDocument> ui) {
+        buffer.writeBoolean(ui.isPresent());
+        ui.ifPresent(value -> buffer.writeUtf(com.kidxoxo.talenteditor.compile.UiDocumentCodec.toJson(value).toString(),
+                com.kidxoxo.talenteditor.compile.UiDocumentCodec.MAX_JSON));
+    }
+
+    static java.util.Optional<com.kidxoxo.talenteditor.domain.UiDocument> decodeUi(FriendlyByteBuf buffer, boolean draw) {
+        return buffer.readBoolean() ? java.util.Optional.of(com.kidxoxo.talenteditor.compile.UiDocumentCodec.read(
+                buffer.readUtf(com.kidxoxo.talenteditor.compile.UiDocumentCodec.MAX_JSON), draw)) : java.util.Optional.empty();
     }
 
     private static void encodeLayoutSlot(
@@ -205,7 +218,7 @@ public record PlayerTalentStatePacket(
         slot.talent().ifPresent(buffer::writeResourceLocation);
     }
 
-    private static TalentBookLayoutDefinition decodeLayout(FriendlyByteBuf buffer) {
+    static TalentBookLayoutDefinition decodeLayout(FriendlyByteBuf buffer) {
         net.minecraft.resources.ResourceLocation id = buffer.readResourceLocation();
         int schema = bounded(buffer.readVarInt(), 1, 2, "schema");
         boolean enabled = buffer.readBoolean();
@@ -258,7 +271,7 @@ public record PlayerTalentStatePacket(
         }
         return new TalentBookLayoutDefinition(
                 id, schema, enabled, priority, background, panelPercent, columns, rows, slotWidth, slotHeight,
-                iconSize, showGeneratedEffects, slots, pages
+                iconSize, showGeneratedEffects, slots, pages, decodeUi(buffer, false), decodeUi(buffer, true)
         );
     }
 

@@ -17,14 +17,21 @@ final class EditorOptionPopup {
     private int selected;
     private int scroll;
     private boolean open;
+    private java.util.function.IntPredicate enabled = index -> true;
 
     void open(Component title, List<? extends Component> choices, int selected, IntConsumer select, int height) {
+        open(title, choices, selected, select, height, index -> true);
+    }
+
+    void open(Component title, List<? extends Component> choices, int selected, IntConsumer select, int height,
+              java.util.function.IntPredicate enabled) {
         if (choices.isEmpty()) return;
         this.title = title;
         this.choices = List.copyOf(choices);
         this.selected = Math.max(0, Math.min(choices.size() - 1, selected));
         this.select = select;
         this.open = true;
+        this.enabled = enabled;
         int visible = visible(height);
         scroll = Math.max(0, Math.min(choices.size() - visible, this.selected - visible / 2));
     }
@@ -45,7 +52,7 @@ final class EditorOptionPopup {
             int index = scroll + row;
             if (index >= choices.size()) break;
             int y = top + 23 + row * ROW;
-            if (index == selected) graphics.fill(x, y - 2, x + w, y + 18, 0xFF285078);
+            EditorTheme.row(graphics, x, y - 2, w, 20, index == selected, false);
         }
         if (choices.size() > visible) {
             int barX = x + w - 4, barTop = top + 23, barHeight = visible * ROW;
@@ -61,7 +68,7 @@ final class EditorOptionPopup {
             if (index >= choices.size()) break;
             int y = top + 23 + row * ROW;
             graphics.drawString(font, font.plainSubstrByWidth(choices.get(index).getString(), w - 16),
-                    x + 8, y + 3, index == selected ? EditorTheme.TEXT : EditorTheme.MUTED, false);
+                    x + 8, y + 3, !enabled.test(index) ? 0xFF657383 : index == selected ? EditorTheme.TEXT : EditorTheme.MUTED, false);
         }
         graphics.flush();
         graphics.pose().popPose();
@@ -76,6 +83,7 @@ final class EditorOptionPopup {
         if (mouseX >= x && mouseX < x + w && mouseY >= top + 23
                 && row >= 0 && row < visible && scroll + row < choices.size()) {
             int chosen = scroll + row;
+            if (!enabled.test(chosen)) { selected=chosen; return true; }
             open = false;
             select.accept(chosen);
         } else open = false;
@@ -101,6 +109,7 @@ final class EditorOptionPopup {
         }
         if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
             int chosen = selected;
+            if (!enabled.test(chosen)) return true;
             open = false;
             select.accept(chosen);
             return true;

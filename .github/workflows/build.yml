@@ -18,7 +18,7 @@ jobs:
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
       - name: Build and test
-        run: ./gradlew build --stacktrace
+        run: bash ./gradlew build --stacktrace
       - name: Upload JARs
         if: success()
         uses: actions/upload-artifact@v4

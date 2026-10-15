@@ -13,7 +13,7 @@ import net.minecraft.resources.ResourceLocation;
 import java.util.List;
 
 /** Visual parameters for the three expression actions used by configured-item event rules. */
-public final class ConfiguredItemTriggerActionScreen extends Screen {
+public final class ConfiguredItemTriggerActionScreen extends EditorScreen {
     private static final List<String> TYPES = List.of(
             "timed_attribute_modifier", "modify_damage_expression", "affect_health_expression");
     private final ConfiguredItemTriggerActionsScreen parent;
@@ -44,24 +44,24 @@ public final class ConfiguredItemTriggerActionScreen extends Screen {
 
     @Override protected void init() {
         int w = Math.min(680, width - 32), x = (width - w) / 2, half = (w - 6) / 2;
-        typeButton = addRenderableWidget(Button.builder(Component.empty(), b -> chooseType())
+        typeButton = addRenderableWidget(EditorWidgets.button(Component.empty(), b -> chooseType())
                 .bounds(x, 32, w, 20).build());
         attributeField = field(x, 70, w - 92, 256);
-        attributeButton = addRenderableWidget(Button.builder(Component.translatable(
+        attributeButton = addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.configured_item.triggers.choose_attribute"), b -> chooseAttribute())
                 .bounds(x + w - 86, 70, 86, 20).build());
         expressionField = field(x, 108, w, NumericExpression.MAX_LENGTH);
-        operationButton = addRenderableWidget(Button.builder(Component.empty(), b -> chooseOperation())
+        operationButton = addRenderableWidget(EditorWidgets.button(Component.empty(), b -> chooseOperation())
                 .bounds(x, 146, w, 20).build());
         valueAField = field(x, 184, half, 160);
         valueBField = field(x + half + 6, 184, w - half - 6, 32);
-        rawButton = addRenderableWidget(Button.builder(Component.translatable(
+        rawButton = addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.configured_item.triggers.raw"), b -> openRaw())
                 .bounds(x, 216, w, 20).build());
         rawButton.visible = height >= 270;
-        addRenderableWidget(Button.builder(Component.translatable("gui.cancel"), b -> close())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.cancel"), b -> close())
                 .bounds(x, height - 28, half, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable(
+        addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.configured_item.triggers.apply"), b -> apply())
                 .bounds(x + half + 6, height - 28, w - half - 6, 20).build());
         load();
@@ -230,7 +230,7 @@ public final class ConfiguredItemTriggerActionScreen extends Screen {
         int w = Math.min(680, width - 32), x = (width - w) / 2, half = (w - 6) / 2;
         EditorTheme.panel(graphics, x - 7, 27, w + 14, 213);
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 10, EditorTheme.TEXT);
+        EditorTheme.title(graphics,font,title,width);
         if (kind.equals("timed_attribute_modifier")) {
             label(graphics, x, 59, "attribute");
             label(graphics, x, 173, "modifier_key");

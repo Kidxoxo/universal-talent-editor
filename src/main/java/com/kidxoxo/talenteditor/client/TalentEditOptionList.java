@@ -117,7 +117,7 @@ final class TalentEditOptionList extends ContainerObjectSelectionList<TalentEdit
             this.configured = configured;
             this.advanced = advanced;
             this.action = action;
-            this.edit = Button.builder(Component.translatable("screen.talent_editor.overview.edit"),
+            this.edit = EditorWidgets.button(Component.translatable("screen.talent_editor.overview.edit"),
                     button -> open()).bounds(0, 0, EDIT_WIDTH, 20).build();
         }
 
@@ -127,8 +127,7 @@ final class TalentEditOptionList extends ContainerObjectSelectionList<TalentEdit
                 int mouseX, int mouseY, boolean hovered, float partialTick
         ) {
             boolean selected = getSelected() == this;
-            if (hovered || selected) graphics.fill(left, top + 1, left + width, top + height - 1,
-                    selected ? 0x7050A0E8 : 0x404A90E2);
+            EditorTheme.row(graphics, left, top + 1, width, height - 2, selected, hovered);
             edit.setX(left + width - EDIT_WIDTH - 3);
             edit.setY(top + 5);
             edit.render(graphics, mouseX, mouseY, partialTick);
@@ -147,7 +146,7 @@ final class TalentEditOptionList extends ContainerObjectSelectionList<TalentEdit
             graphics.drawString(minecraft.font,
                     minecraft.font.plainSubstrByWidth(summaryText, contentWidth),
                     left + 6, top + 16,
-                    advanced ? 0xFFFFAA55 : configured ? 0xFFFFD060 : EditorTheme.MUTED, false);
+                    advanced ? EditorTheme.WARNING : configured ? EditorTheme.SUCCESS : EditorTheme.MUTED, false);
         }
 
         @Override

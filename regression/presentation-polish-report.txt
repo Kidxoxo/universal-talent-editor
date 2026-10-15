@@ -1,0 +1,15 @@
+WORLD presentation-regression-1792034177609; test1 untouched
+PASS one server packet creates one chat-history entry with real line breaks
+PASS real Mixin extends only the presentation timestamp
+PASS ordinary chat immediately returns to vanilla timestamp
+PASS wrapped lines retain extended lifetime after chat resize
+PASS packet insertion scope resets after use
+PASS ordinary acquisition voice uses personal non-positional playback
+PASS full preview opens from ACQUIRE
+PASS full preview combines both phase lists from ACQUIRE
+PASS chat hold controls preview end from ACQUIRE
+PASS full preview opens from SYNTHESIZE
+PASS full preview combines both phase lists from SYNTHESIZE
+PASS chat hold controls preview end from SYNTHESIZE
+PASS real font preserves explicit Chinese line breaks
+PASS multiline preview renders with real client font and framebuffer

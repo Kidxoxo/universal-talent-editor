@@ -17,7 +17,7 @@ import java.util.List;
 import java.util.Set;
 
 /** A client-only, live-world scene for checking an unsaved particle action. */
-final class TalentParticlePreviewScreen extends Screen {
+final class TalentParticlePreviewScreen extends EditorScreen {
     private static final int REPLAY_GAP_TICKS = 20;
 
     private final Screen parent;
@@ -54,20 +54,20 @@ final class TalentParticlePreviewScreen extends Screen {
         int buttonWidth = (barWidth - 12) / 4;
         int x = (width - barWidth) / 2;
         int y = height - 31;
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.particles.preview_replay"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.particles.preview_replay"),
                 button -> restart()).bounds(x, y, buttonWidth, 20).build());
-        pauseButton = addRenderableWidget(Button.builder(Component.empty(), button -> {
+        pauseButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> {
             paused = !paused;
             updateButtons();
         }).bounds(x + buttonWidth + 4, y, buttonWidth, 20).build());
-        cameraButton = addRenderableWidget(Button.builder(Component.empty(), button -> {
+        cameraButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> {
             if (minecraft == null) return;
             CameraType current = minecraft.options.getCameraType();
             minecraft.options.setCameraType(current == CameraType.THIRD_PERSON_BACK
                     ? CameraType.THIRD_PERSON_FRONT : CameraType.THIRD_PERSON_BACK);
             updateButtons();
         }).bounds(x + (buttonWidth + 4) * 2, y, buttonWidth, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.back"), button -> returnParent())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.back"), button -> returnParent())
                 .bounds(x + (buttonWidth + 4) * 3, y,
                         barWidth - (buttonWidth + 4) * 3, 20).build());
 
@@ -168,7 +168,7 @@ final class TalentParticlePreviewScreen extends Screen {
         graphics.fill(0, 0, width, 58, 0x980B1721);
         graphics.fill(0, height - 42, width, height, 0x980B1721);
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 8, EditorTheme.TEXT);
+        EditorTheme.title(graphics,font,title,width);
         String details = layers.size() == 1
                 ? Component.translatable("screen.talent_editor.particles.preview_details",
                         layers.get(0).particleId, layers.get(0).count,

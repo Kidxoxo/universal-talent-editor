@@ -14,43 +14,46 @@ import net.minecraft.util.FormattedCharSequence;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 public final class TalentDrawScreen extends Screen {
     private final DrawSessionView view;
+    private final com.kidxoxo.talenteditor.domain.TalentBookLayoutDefinition layout;
+    private UiScene uiScene;
+    private boolean requestPending;
     private int selectedIndex = -1;
     private Button confirmButton;
     private Button refreshButton;
-    private Button effectsButton;
     private boolean showGeneratedEffects;
     private String status = "";
     private final int[] cardScroll;
 
-    public TalentDrawScreen(DrawSessionView view) {
+    public TalentDrawScreen(DrawSessionView view) { this(view, com.kidxoxo.talenteditor.domain.TalentBookLayoutDefinition.DEFAULT); }
+
+    public TalentDrawScreen(DrawSessionView view, com.kidxoxo.talenteditor.domain.TalentBookLayoutDefinition layout) {
         super(Component.translatable("screen.talent_editor.draw.title"));
         this.view = view;
+        this.layout = layout;
         this.cardScroll = new int[view.offers().size()];
     }
 
     @Override
     protected void init() {
-        int buttonWidth = Math.max(64, Math.min(112, (width - 38) / 4));
-        int total = buttonWidth * 4 + 18;
+        if (layout.drawUi().isPresent()) {
+            uiScene = new UiScene(layout.drawUi().orElseThrow(), customContext());
+            uiScene.install(width, height, button -> addRenderableWidget(button)); return;
+        }
+        int buttonWidth = Math.max(64, Math.min(112, (width - 32) / 3));
+        int total = buttonWidth * 3 + 12;
         int x = (width - total) / 2;
         int y = height - 28;
         refreshButton = addRenderableWidget(Button.builder(refreshLabel(), button -> {
-            refreshButton.active = false;
-            confirmButton.active = false;
-            status = Component.translatable("screen.talent_editor.draw.waiting").getString();
-            EditorNetwork.refreshDraw(view.sessionId());
+            refresh();
         }).bounds(x, y, buttonWidth, 20).build());
         confirmButton = addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.draw.confirm"),
                 button -> confirm()).bounds(x + buttonWidth + 6, y, buttonWidth, 20).build());
-        effectsButton = addRenderableWidget(Button.builder(effectsLabel(), button -> {
-            showGeneratedEffects = !showGeneratedEffects;
-            effectsButton.setMessage(effectsLabel());
-        }).bounds(x + (buttonWidth + 6) * 2, y, buttonWidth, 20).build());
         addRenderableWidget(Button.builder(Component.translatable("gui.cancel"), button -> onClose())
-                .bounds(x + (buttonWidth + 6) * 3, y, buttonWidth, 20).build());
+                .bounds(x + (buttonWidth + 6) * 2, y, buttonWidth, 20).build());
         confirmButton.active = false;
         refreshButton.active = canRefresh();
     }
@@ -59,21 +62,22 @@ public final class TalentDrawScreen extends Screen {
         status = Component.translatable(
                 "screen.talent_editor.draw.result." + result.name().toLowerCase(Locale.ROOT)
         ).getString();
-        confirmButton.active = selectedIndex >= 0;
-        refreshButton.active = canRefresh();
+        requestPending = false;
+        if (confirmButton != null) confirmButton.active = selectedIndex >= 0;
+        if (refreshButton != null) refreshButton.active = canRefresh();
     }
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        if (uiScene != null) { uiScene.render(graphics, mouseX, mouseY, width, height); return; }
         renderBackground(graphics);
         super.render(graphics, mouseX, mouseY, partialTick);
         graphics.drawCenteredString(font, title, width / 2, 8, 0xFFFFFF);
         graphics.drawCenteredString(font, Component.translatable(
-                "screen.talent_editor.draw.summary", view.poolName(), view.drawTokens(), view.refreshesRemaining()
+                "screen.talent_editor.draw.summary_compact", view.drawTokens(), view.refreshesRemaining()
         ), width / 2, 23, 0xA0A0A0);
         String mechanics = Component.translatable(
-                "screen.talent_editor.draw.mechanics", compact(view.luckValue()),
-                view.pityAfter() <= 0 ? "-" : view.pityProgress() + "/" + view.pityAfter(),
+                "screen.talent_editor.draw.mechanics_compact", compact(view.luckValue()),
                 probabilitySummary()
         ).getString();
         graphics.drawCenteredString(font, font.plainSubstrByWidth(mechanics, width - 24),
@@ -165,6 +169,8 @@ public final class TalentDrawScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (uiScene != null) return uiScene.click(mouseX, mouseY, button) || super.mouseClicked(mouseX, mouseY, button);
+        if (requestPending) return super.mouseClicked(mouseX, mouseY, button);
         if (button == 0 && mouseY >= 63 && mouseY < height - 39 && !view.offers().isEmpty()) {
             int count = view.offers().size();
             int gap = 7;
@@ -184,6 +190,7 @@ public final class TalentDrawScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        if (uiScene != null) return uiScene.scroll(mouseX, mouseY, delta);
         int index = cardAt(mouseX, mouseY);
         if (index < 0) return super.mouseScrolled(mouseX, mouseY, delta);
         int count = view.offers().size();
@@ -215,11 +222,58 @@ public final class TalentDrawScreen extends Screen {
     }
 
     private void confirm() {
-        if (selectedIndex < 0 || selectedIndex >= view.offers().size()) return;
-        confirmButton.active = false;
-        refreshButton.active = false;
+        if (requestPending || selectedIndex < 0 || selectedIndex >= view.offers().size()) return;
+        requestPending = true;
+        if (confirmButton != null) confirmButton.active = false;
+        if (refreshButton != null) refreshButton.active = false;
         status = Component.translatable("screen.talent_editor.draw.waiting").getString();
         EditorNetwork.selectDraw(view.sessionId(), view.offers().get(selectedIndex).id());
+    }
+
+    private void refresh() {
+        if (requestPending || !canRefresh()) return;
+        requestPending = true;
+        if (refreshButton != null) refreshButton.active = false;
+        if (confirmButton != null) confirmButton.active = false;
+        status = Component.translatable("screen.talent_editor.draw.waiting").getString();
+        EditorNetwork.refreshDraw(view.sessionId());
+    }
+
+    private UiScene.Context customContext() {
+        return new UiScene.Context() {
+            public Component text(String binding) {
+                return switch (binding) {
+                    case "title" -> title;
+                    case "summary" -> Component.translatable("screen.talent_editor.draw.summary_compact", view.drawTokens(), view.refreshesRemaining());
+                    case "mechanics" -> Component.translatable("screen.talent_editor.draw.mechanics_compact", compact(view.luckValue()), probabilitySummary());
+                    case "status" -> Component.literal(status);
+                    default -> Component.empty();
+                };
+            }
+            public Component label(String action) {
+                return switch (action) {
+                    case "confirm" -> Component.translatable("screen.talent_editor.draw.confirm");
+                    case "refresh" -> refreshLabel(); case "effects" -> effectsLabel();
+                    default -> Component.translatable("gui.cancel");
+                };
+            }
+            public boolean enabled(String action) {
+                return switch (action) { case "confirm" -> !requestPending && selectedIndex >= 0;
+                    case "refresh" -> !requestPending && canRefresh(); default -> true; };
+            }
+            public void action(String action, String target) {
+                if (!enabled(action)) return;
+                switch (action) { case "confirm" -> confirm(); case "refresh" -> refresh();
+                    case "effects" -> { showGeneratedEffects = !showGeneratedEffects; uiScene.resetScroll(); }
+                    case "close" -> onClose(); }
+            }
+            public UiScene.Card card(com.kidxoxo.talenteditor.domain.UiDocument.Element e) {
+                return e.index() < view.offers().size() ? UiCards.talent(view.offers().get(e.index()), selectedIndex == e.index(), showGeneratedEffects, List.of()) : null;
+            }
+            public void select(com.kidxoxo.talenteditor.domain.UiDocument.Element e) {
+                if (!requestPending) { selectedIndex = e.index(); status = ""; }
+            }
+        };
     }
 
     private Component refreshLabel() {
@@ -261,9 +315,13 @@ public final class TalentDrawScreen extends Screen {
     }
 
     private String probabilitySummary() {
-        if (view.rarityProbabilities().isEmpty()) return "-";
-        return view.rarityProbabilities().entrySet().stream()
-                .map(entry -> shortAttribute(entry.getKey().toString()) + " "
+        return probabilitySummary(view.rarityProbabilities());
+    }
+
+    static String probabilitySummary(Map<ResourceLocation, Double> probabilities) {
+        return probabilities.entrySet().stream()
+                .filter(entry -> entry.getValue() > 0.0D)
+                .map(entry -> entry.getKey().getPath() + " "
                         + String.format(Locale.ROOT, "%.1f%%", entry.getValue() * 100.0D))
                 .reduce((left, right) -> left + " · " + right)
                 .orElse("-");

@@ -16,7 +16,7 @@ import net.minecraft.resources.ResourceLocation;
 import java.util.Optional;
 import java.util.List;
 
-public final class LayoutEditScreen extends Screen {
+public final class LayoutEditScreen extends EditorDefinitionScreen {
     private final EditorBootstrap bootstrap;
     private final LayoutDraft draft;
     private ResourceLocation definitionId;
@@ -35,14 +35,19 @@ public final class LayoutEditScreen extends Screen {
     private String slotWidthValue;
     private String slotHeightValue;
     private String iconSizeValue;
+    private Optional<com.kidxoxo.talenteditor.domain.UiDocument> bookUi;
+    private Optional<com.kidxoxo.talenteditor.domain.UiDocument> drawUi;
     private EditBox idField;
     private String localStatus = "";
+    private boolean dirty;
 
     private LayoutEditScreen(EditorBootstrap bootstrap, LayoutDraft draft, ResourceLocation id, boolean existing) {
         super(Component.translatable(existing
                 ? "screen.talent_editor.layout.edit.title" : "screen.talent_editor.layout.create.title"));
         this.bootstrap = bootstrap;
         this.draft = draft;
+        this.bookUi = draft.ui(false);
+        this.drawUi = draft.ui(true);
         this.definitionId = id;
         this.existing = existing;
         this.baseRevision = bootstrap.revision();
@@ -71,70 +76,32 @@ public final class LayoutEditScreen extends Screen {
         return new LayoutEditScreen(bootstrap, LayoutDraft.parse(json), id, true);
     }
 
+    static LayoutEditScreen copyOf(EditorBootstrap bootstrap, ResourceLocation id, String json) {
+        return new LayoutEditScreen(bootstrap,LayoutDraft.parse(json),id,false);
+    }
+
     @Override
     protected void init() {
-        int formWidth = Math.min(700, width - 32);
-        int x = (width - formWidth) / 2;
-        int gap = 5;
-        idField = field(x, 29, formWidth, idValue, 256, value -> idValue = value);
+        int formWidth=Math.min(700,width-32),x=(width-formWidth)/2,gap=6;
+        int priorityWidth=Math.max(65,formWidth/5);
+        idField=field(x,38,formWidth-priorityWidth-gap,idValue,256,value->idValue=value);
         idField.setEditable(!existing);
-        int chooseWidth = Math.min(80, Math.max(56, formWidth / 7));
-        field(x, 57, formWidth - chooseWidth - gap, backgroundValue, 512,
-                value -> backgroundValue = value);
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.reference_picker.choose"),
-                        button -> openBackgroundPicker())
-                .bounds(x + formWidth - chooseWidth, 57, chooseWidth, 20).build());
-
-        int quarter = (formWidth - gap * 3) / 4;
-        field(x, 89, quarter, priorityValue, 8, value -> priorityValue = value);
-        field(x + quarter + gap, 89, quarter, panelPercentValue, 3, value -> panelPercentValue = value);
-        field(x + (quarter + gap) * 2, 89, quarter, columnsValue, 2, value -> columnsValue = value);
-        field(x + (quarter + gap) * 3, 89, formWidth - (quarter + gap) * 3,
-                rowsValue, 2, value -> rowsValue = value);
-
-        int third = (formWidth - gap * 2) / 3;
-        field(x, 121, third, slotWidthValue, 3, value -> slotWidthValue = value);
-        field(x + third + gap, 121, third, slotHeightValue, 3, value -> slotHeightValue = value);
-        field(x + (third + gap) * 2, 121, formWidth - (third + gap) * 2,
-                iconSizeValue, 2, value -> iconSizeValue = value);
-
-        int toggleWidth = (formWidth - gap * 2) / 3;
-        addRenderableWidget(Button.builder(enabledLabel(), button -> {
-            enabled = !enabled;
-            button.setMessage(enabledLabel());
-            ClientEditorState.clearValidation();
-        }).bounds(x, 151, toggleWidth, 20).build());
-        addRenderableWidget(Button.builder(effectsLabel(), button -> {
-            showGeneratedEffects = !showGeneratedEffects;
-            button.setMessage(effectsLabel());
-            ClientEditorState.clearValidation();
-        }).bounds(x + toggleWidth + gap, 151, toggleWidth, 20).build());
-        addRenderableWidget(Button.builder(slotLabel(), button -> openSlotEditor())
-                .bounds(x + (toggleWidth + gap) * 2, 151,
-                        formWidth - (toggleWidth + gap) * 2, 20).build());
-        addRenderableWidget(Button.builder(pageLabel(), button -> openPageEditor())
-                .bounds(x, 177, formWidth, 20).build());
-
-        int bottom = height - 28;
-        int buttonWidth = Math.max(42, (formWidth - gap * 4) / 5);
-        addRenderableWidget(Button.builder(Component.translatable("gui.back"), button -> returnList())
-                .bounds(x, bottom, buttonWidth, 20).build());
-        Button references = addRenderableWidget(Button.builder(
-                        DefinitionReferenceScreen.buttonLabel(DefinitionReferenceScreen.inboundCount(
-                                bootstrap, DefinitionKind.LAYOUT, definitionId
-                        )), button -> openReferences())
-                .bounds(x + buttonWidth + gap, bottom, buttonWidth, 20).build());
-        references.active = existing;
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.layout.preview"),
-                        button -> preview())
-                .bounds(x + (buttonWidth + gap) * 2, bottom, buttonWidth, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.validate"),
-                        button -> submit(false))
-                .bounds(x + (buttonWidth + gap) * 3, bottom, buttonWidth, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.save"),
-                        button -> submit(true))
-                .bounds(x + (buttonWidth + gap) * 4, bottom,
-                        formWidth - (buttonWidth + gap) * 4, 20).build());
+        field(x+formWidth-priorityWidth,38,priorityWidth,priorityValue,8,value->priorityValue=value);
+        int half=(formWidth-gap)/2;
+        addRenderableWidget(EditorWidgets.button(enabledLabel(),b->{dirty=true;enabled=!enabled;b.setMessage(enabledLabel());ClientEditorState.clearValidation();})
+                .bounds(x,66,half,20).build());
+        addRenderableWidget(EditorWidgets.button(effectsLabel(),b->{dirty=true;showGeneratedEffects=!showGeneratedEffects;b.setMessage(effectsLabel());ClientEditorState.clearValidation();})
+                .bounds(x+half+gap,66,formWidth-half-gap,20).build());
+        addRenderableWidget(EditorWidgets.button(UiCanvasEditorScreen.tr("book_editor"),b->openUi(false)).bounds(x,107,half,24).build());
+        addRenderableWidget(EditorWidgets.button(UiCanvasEditorScreen.tr("draw_editor"),b->openUi(true)).bounds(x+half+gap,107,formWidth-half-gap,24).build());
+        addRenderableWidget(EditorWidgets.button(UiCanvasEditorScreen.tr("page_contents",pages.size()),b->openPageEditor()).bounds(x,160,formWidth,20).build());
+        int bottom=height-28,bw=(formWidth-gap*3)/4;
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.back"),b->returnList()).bounds(x,bottom,bw,20).build());
+        Button references=addRenderableWidget(EditorWidgets.button(DefinitionReferenceScreen.buttonLabel(DefinitionReferenceScreen.inboundCount(bootstrap,DefinitionKind.LAYOUT,definitionId)),b->definitionActions(bootstrap,ResourceLocation.tryParse(idField.getValue().strip()),existing,this::openReferences)).bounds(x+bw+gap,bottom,bw,20).build());
+        references.active=true;
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.validate"),b->submit(false)).bounds(x+2*(bw+gap),bottom,bw,20).build());
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.save"), EditorTheme.Tone.PRIMARY,b ->submit(true)).bounds(x+3*(bw+gap),bottom,formWidth-3*(bw+gap),20).build());
+        watchDefinition(DefinitionKind.LAYOUT);
     }
 
     private EditBox field(int x, int y, int width, String value, int maxLength,
@@ -143,6 +110,7 @@ public final class LayoutEditScreen extends Screen {
         field.setMaxLength(maxLength);
         field.setValue(value);
         field.setResponder(next -> {
+            dirty=true;
             responder.accept(next);
             ClientEditorState.clearValidation();
             localStatus = "";
@@ -152,104 +120,33 @@ public final class LayoutEditScreen extends Screen {
     }
 
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(graphics);
-        super.render(graphics, mouseX, mouseY, partialTick);
-        int formWidth = Math.min(700, width - 32);
-        int x = (width - formWidth) / 2;
-        int gap = 5;
-        int quarter = (formWidth - gap * 3) / 4;
-        int third = (formWidth - gap * 2) / 3;
-        graphics.drawCenteredString(font, title, width / 2, 8, 0xFFFFFF);
-        label(graphics, "screen.talent_editor.layout.id", x, 18);
-        label(graphics, "screen.talent_editor.layout.background", x, 46);
-        renderBackgroundDiagnostic(graphics, x, 46, formWidth);
-        label(graphics, "screen.talent_editor.layout.priority", x, 78);
-        label(graphics, "screen.talent_editor.layout.panel_percent", x + quarter + gap, 78);
-        label(graphics, "screen.talent_editor.layout.columns", x + (quarter + gap) * 2, 78);
-        label(graphics, "screen.talent_editor.layout.rows", x + (quarter + gap) * 3, 78);
-        label(graphics, "screen.talent_editor.layout.slot_width", x, 110);
-        label(graphics, "screen.talent_editor.layout.slot_height", x + third + gap, 110);
-        label(graphics, "screen.talent_editor.layout.icon_size", x + (third + gap) * 2, 110);
-        if (height >= 265) graphics.drawString(font, Component.translatable("screen.talent_editor.layout.help"),
-                x, 204, 0xA0A0A0, false);
-        renderResult(graphics, x, formWidth);
-    }
-
-    private void label(GuiGraphics graphics, String key, int x, int y) {
-        graphics.drawString(font, Component.translatable(key), x, y, 0xA0A0A0, false);
-    }
-
-    private void renderBackgroundDiagnostic(GuiGraphics graphics, int x, int y, int formWidth) {
-        if (minecraft == null) return;
-        Component label = Component.translatable("screen.talent_editor.layout.background");
-        int diagnosticX = x + font.width(label) + 8;
-        int availableWidth = Math.max(1, x + formWidth - diagnosticX);
-        ClientResourceDiagnostics.Result result = ClientResourceDiagnostics.inspect(
-                backgroundValue, id -> minecraft.getResourceManager().getResource(id).isPresent()
-        );
-        Component message;
-        int color;
-        if (result.state() == ClientResourceDiagnostics.State.AVAILABLE) {
-            message = Component.translatable("screen.talent_editor.resource.available_short");
-            color = 0xFF77DD88;
-        } else if (result.state() == ClientResourceDiagnostics.State.MISSING) {
-            message = Component.translatable("screen.talent_editor.resource.texture_missing_short");
-            color = 0xFFFFAA55;
-        } else if (result.state() == ClientResourceDiagnostics.State.INVALID) {
-            message = Component.translatable("screen.talent_editor.resource.invalid_short");
-            color = 0xFFFF7777;
-        } else {
-            return;
-        }
-        graphics.drawString(font, font.plainSubstrByWidth(message.getString(), availableWidth),
-                diagnosticX, y, color, false);
+    public void render(GuiGraphics g,int mx,int my,float tick) {
+        renderBackground(g);
+        int formWidth=Math.min(700,width-32),x=(width-formWidth)/2;
+        EditorTheme.panel(g,x-6,94,formWidth+12,92);
+        super.render(g,mx,my,tick);
+        EditorTheme.title(g,font,title,width);
+        g.drawString(font,Component.translatable("screen.talent_editor.layout.id"),x,26,EditorTheme.MUTED,false);
+        int priorityWidth=Math.max(65,formWidth/5);
+        g.drawString(font,Component.translatable("screen.talent_editor.layout.priority"),x+formWidth-priorityWidth,26,EditorTheme.MUTED,false);
+        int half=(formWidth-6)/2;
+        g.drawString(font,font.plainSubstrByWidth(UiCanvasEditorScreen.tr(bookUi.isPresent()?"custom_base":"current_base").getString(),half),x,138,EditorTheme.MUTED,false);
+        g.drawString(font,font.plainSubstrByWidth(UiCanvasEditorScreen.tr(drawUi.isPresent()?"custom_base":"current_base").getString(),half),x+half+6,138,EditorTheme.MUTED,false);
+        if(height>=290) g.drawWordWrap(font,UiCanvasEditorScreen.tr("layout_flow"),x,194,formWidth,EditorTheme.MUTED);
+        renderResult(g,x,formWidth);
     }
 
     private void renderResult(GuiGraphics graphics, int x, int formWidth) {
-        ValidationResultPacket result = ClientEditorState.validation();
-        String message = localStatus;
-        int color = 0xA0A0A0;
-        if (result != null) {
-            if (result.committed()) {
-                message = Component.translatable("screen.talent_editor.result.saved", result.activeRevision()).getString();
-                color = 0x55FF55;
-                if (result.activeRevision() > baseRevision) {
-                    baseRevision = result.activeRevision();
-                    existing = true;
-                    ResourceLocation savedId = ResourceLocation.tryParse(idValue.strip());
-                    if (savedId != null) definitionId = savedId;
-                    idField.setEditable(false);
-                }
-            } else if (result.accepted()) {
-                message = Component.translatable("screen.talent_editor.result.valid").getString();
-                color = 0x55FF55;
-            } else if (result.conflict()) {
-                message = Component.translatable("screen.talent_editor.result.conflict", result.activeRevision()).getString();
-                color = 0xFF5555;
-            } else {
-                ValidationIssue first = result.issues().isEmpty() ? null : result.issues().get(0);
-                message = first == null ? Component.translatable("screen.talent_editor.result.invalid").getString()
-                        : first.code() + " " + first.path() + ": " + first.message();
-                color = 0xFF7777;
-            }
-        }
-        if (!message.isBlank()) graphics.drawString(font, font.plainSubstrByWidth(message, formWidth),
-                x, height - 42, color, false);
+        renderSubmissionResult(graphics, x, formWidth, localStatus);
     }
 
     private void submit(boolean commit) {
+        if(submissionPending())return;
         Parsed parsed = parseForm();
         if (parsed == null) return;
         ClientEditorState.clearValidation();
         localStatus = Component.translatable("screen.talent_editor.result.waiting").getString();
-        EditorNetwork.submitLayout(baseRevision, parsed.id(), parsed.json(), commit);
-    }
-
-    private void preview() {
-        Parsed parsed = parseForm();
-        if (parsed == null || minecraft == null) return;
-        minecraft.setScreen(new LayoutPreviewScreen(this, parsed.definition()));
+        sendDefinition(baseRevision, parsed.id(), parsed.json(), commit);
     }
 
     private Parsed parseForm() {
@@ -276,10 +173,19 @@ public final class LayoutEditScreen extends Screen {
                 || slotWidth < 0 || slotHeight < 0 || iconSize < 0 || iconSize > slotHeight - 4) {
             return invalid("screen.talent_editor.layout.invalid_geometry");
         }
-        String json = draft.toJson(
+        String json = LayoutDraft.parse(draft.snapshot()).toJson(
                 enabled, priority, rawBackground, panel, columns, rows, slotWidth, slotHeight,
                 iconSize, showGeneratedEffects, slots, pages
         );
+        com.google.gson.JsonObject root = com.google.gson.JsonParser.parseString(json).getAsJsonObject();
+        if (bookUi.isPresent()) root.add("bookUi", com.kidxoxo.talenteditor.compile.UiDocumentCodec.toJson(bookUi.orElseThrow()));
+        else root.remove("bookUi");
+        if (drawUi.isPresent()) root.add("drawUi", com.kidxoxo.talenteditor.compile.UiDocumentCodec.toJson(drawUi.orElseThrow()));
+        else root.remove("drawUi");
+        json = root.toString();
+        if (json.length() > com.kidxoxo.talenteditor.editor.DefinitionService.MAX_JSON_CHARACTERS) {
+            localStatus = UiCanvasEditorScreen.tr("too_large").getString(); return null;
+        }
         List<TalentBookLayoutDefinition.SlotDefinition> slotDefinitions = slots.stream()
                 .map(LayoutDraft.SlotDraft::definition)
                 .toList();
@@ -292,9 +198,27 @@ public final class LayoutEditScreen extends Screen {
                 .toList();
         TalentBookLayoutDefinition definition = new TalentBookLayoutDefinition(
                 id, 2, enabled, priority, background, panel, columns, rows,
-                slotWidth, slotHeight, iconSize, showGeneratedEffects, slotDefinitions, pageDefinitions
+                slotWidth, slotHeight, iconSize, showGeneratedEffects, slotDefinitions, pageDefinitions, bookUi, drawUi
         );
         return new Parsed(id, json, definition);
+    }
+
+    private void openUi(boolean draw) {
+        if (minecraft == null) return;
+        var current = draw ? drawUi : bookUi;
+        com.kidxoxo.talenteditor.domain.UiDocument initial;
+        if (current.isPresent()) {
+            // A draft that exceeds the submission limit must remain editable so it can be reduced.
+            initial = current.orElseThrow();
+        } else {
+            initial = baseUi(draw);
+        }
+        minecraft.setScreen(new UiCanvasEditorScreen(this, draw, initial, value -> {
+                    dirty=true;
+                    if (draw) drawUi = value; else bookUi = value;
+                    ClientEditorState.clearValidation();
+                    localStatus = UiCanvasEditorScreen.tr("applied_hint").getString();
+                }));
     }
 
     private Parsed invalid(String key) {
@@ -313,33 +237,22 @@ public final class LayoutEditScreen extends Screen {
                 ? "screen.talent_editor.layout.effects_yes" : "screen.talent_editor.layout.effects_no");
     }
 
-    private Component slotLabel() {
-        return Component.translatable("screen.talent_editor.layout.slots", slots.size());
-    }
-
-    private Component pageLabel() {
-        return Component.translatable("screen.talent_editor.layout.pages", pages.size());
-    }
-
-    private void openSlotEditor() {
-        if (minecraft != null) minecraft.setScreen(new LayoutSlotEditorScreen(this, slots, gridTemplate()));
-    }
-
-    private void openBackgroundPicker() {
-        if (minecraft != null) {
-            minecraft.setScreen(new ResourceReferencePickerScreen(
-                    this, ResourceReferencePickerScreen.Source.TEXTURE, bootstrap,
-                    id -> backgroundValue = id.toString()
-            ));
-        }
-    }
-
     EditorBootstrap bootstrap() { return bootstrap; }
-
-    void updateSlots(List<LayoutDraft.SlotDraft> value) {
-        slots = List.copyOf(value);
-        ClientEditorState.clearValidation();
+    com.kidxoxo.talenteditor.domain.UiDocument baseUi(boolean draw) {
+        var legacy = new TalentBookLayoutDefinition(definitionId,2,enabled,0,
+                backgroundValue.isBlank()?Optional.empty():Optional.ofNullable(ResourceLocation.tryParse(backgroundValue)),draft.panelPercent(),draft.columns(),draft.rows(),
+                draft.slotWidth(),draft.slotHeight(),draft.iconSize(),showGeneratedEffects,
+                slots.stream().map(LayoutDraft.SlotDraft::definition).toList(),
+                pages.stream().map(page->new TalentBookLayoutDefinition.PageDefinition(page.id(),
+                        page.background().isBlank()?Optional.empty():Optional.of(new ResourceLocation(page.background())),
+                        page.slots().stream().map(LayoutDraft.SlotDraft::definition).toList())).toList());
+        return UiTemplates.create(draw,legacy,ClientEditorState.editorSettings().automaticSynthesis());
     }
+
+    List<LayoutDraft.PageDraft> pages() { return pages; }
+    int requiredPageSlots() { return pages.stream().mapToInt(page->page.slots().size()).max().orElse(0); }
+
+    void editPageContents() { openPageEditor(); }
 
     private void openPageEditor() {
         if (minecraft != null) {
@@ -348,12 +261,16 @@ public final class LayoutEditScreen extends Screen {
     }
 
     void updatePages(List<LayoutDraft.PageDraft> value) {
+        dirty=true;
         pages = List.copyOf(value);
         ClientEditorState.clearValidation();
     }
 
     private List<LayoutDraft.SlotDraft> defaultPageSlots() {
-        return slots.isEmpty() ? gridTemplate() : slots;
+        var source=slots.isEmpty() ? gridTemplate() : slots;
+        int capacity=bookUi.map(com.kidxoxo.talenteditor.domain.UiDocument::slotCount)
+                .orElse(Math.max(source.size(),requiredPageSlots()));
+        return LayoutContentSlots.template(source,capacity);
     }
 
     private List<LayoutDraft.SlotDraft> gridTemplate() {
@@ -380,6 +297,7 @@ public final class LayoutEditScreen extends Screen {
     }
 
     private void openReferences() {
+        EditorBootstrap bootstrap=latestBootstrap(this.bootstrap);
         if (!existing || minecraft == null) return;
         int count = DefinitionReferenceScreen.inboundCount(bootstrap, DefinitionKind.LAYOUT, definitionId);
         minecraft.setScreen(new DefinitionReferenceScreen(
@@ -387,7 +305,9 @@ public final class LayoutEditScreen extends Screen {
         ));
     }
 
-    private void returnList() {
+    private void returnList() { leaveDefinition(this::leaveNow); }
+
+    private void leaveNow() {
         if (minecraft == null) return;
         EditorBootstrap latest = ClientEditorState.bootstrap();
         minecraft.setScreen(new LayoutListScreen(latest == null ? bootstrap : latest));
@@ -407,4 +327,8 @@ public final class LayoutEditScreen extends Screen {
 
     private record Parsed(ResourceLocation id, String json, TalentBookLayoutDefinition definition) {
     }
+
+    @Override protected String draftState() { return fieldsState()+enabled+showGeneratedEffects+slots+pages+bookUi+drawUi+draft.snapshot(); }
+    @Override protected void saveDraft() { submit(true); }
+    @Override protected void committed(ValidationResultPacket value) { baseRevision=value.activeRevision(); existing=true; idField.setEditable(false); var saved=ResourceLocation.tryParse(idField.getValue().strip()); if(saved!=null)definitionId=saved; dirty=false; }
 }

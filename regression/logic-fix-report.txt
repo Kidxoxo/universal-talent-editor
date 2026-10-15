@@ -1,0 +1,35 @@
+PASS drag/Delete/drag is safe and keeps deletion
+PASS drag/Delete/release keeps deletion
+PASS applying drag saves visible x=112
+PASS counter reference uses committed ID
+PASS delete uses latest revision 13 without changing draft revision
+PASS compiler and selector isolate same-ID talent/item sources
+PASS right release cannot finish left drag
+PASS left release finishes drag
+PASS undo during drag restores start
+PASS Enter commits drag before properties
+PASS closing an unfinished drag asks before discard
+PASS arrow after drag applies once
+PASS resize commits active drag
+PASS duplicate after drag uses visible position
+PASS ending an idle gesture preserves preview scene
+PASS preview canvas clicks remain safe and interactive
+PASS 100 idle renders do not serialize full draft again
+PASS field edits invalidate cached fingerprint
+PASS button model edits invalidate cached fingerprint
+PASS resizing or returning from child rebuilds fingerprint
+UI save acknowledgements simulated; server runtime checks below use an isolated fresh world.
+PASS health condition enables fixed attribute
+PASS health condition removes fixed attribute
+PASS reload conditional to static retains exactly one modifier
+PASS reload static to conditional removes modifier when false
+PASS NBT roundtrip retains conditional talent behavior
+PASS automatic synthesis consumes costs and follows newly acquired talent chain
+PASS no repeat synthesis after costs consumed
+PASS synthesis removes consumed talent attribute
+PASS real server talent ownership cannot fire item trigger
+PASS real server equipment cannot fire talent trigger
+PASS same-named trigger cooldowns are independent
+PASS both source triggers can activate independently
+PASS independent activation limits are respected
+WORLD logic-regression-1791892169311 (development run/saves only; test1 untouched)

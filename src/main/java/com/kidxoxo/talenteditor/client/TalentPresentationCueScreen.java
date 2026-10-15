@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.Optional;
 
 /** Edits one independently timed sound, chat/action-bar message, or title cue. */
-final class TalentPresentationCueScreen extends Screen {
+final class TalentPresentationCueScreen extends EditorScreen {
     private static final List<String> SOURCES = List.of("master", "music", "records", "weather", "blocks",
             "hostile", "neutral", "players", "ambient", "voice");
     private static final List<String> MODES = List.of("chat", "action_bar", "title");
@@ -51,9 +51,9 @@ final class TalentPresentationCueScreen extends Screen {
         atTick = field(x, 52, half, value("atTick", "0"), 8);
         if (type.equals("play_sound")) {
             sound = field(x, 108, w - 96, value("sound", "minecraft:entity.player.levelup"), 256);
-            addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.presentation.choose_sound"),
+            addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.presentation.choose_sound"),
                     button -> chooseSound()).bounds(x + w - 90, 108, 90, 20).build());
-            sourceButton = addRenderableWidget(Button.builder(Component.empty(), button -> {
+            sourceButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> {
                 options.open(Component.translatable("screen.talent_editor.option.choose"),
                         SOURCES.stream().map(Component::literal).toList(), sourceIndex, index -> {
                             sourceIndex = index;
@@ -63,13 +63,13 @@ final class TalentPresentationCueScreen extends Screen {
             volume = field(x, 172, half, value("volume", "1"), 16);
             pitch = field(x + half + 8, 172, half, value("pitch", "1"), 16);
         } else {
-            textTab = addRenderableWidget(Button.builder(Component.translatable(
+            textTab = addRenderableWidget(EditorWidgets.button(Component.translatable(
                     "screen.talent_editor.presentation.section.text"), button -> switchSection(0))
                     .bounds(x, 72, half, 20).build());
-            timingTab = addRenderableWidget(Button.builder(Component.translatable(
+            timingTab = addRenderableWidget(EditorWidgets.button(Component.translatable(
                     "screen.talent_editor.presentation.section.timing"), button -> switchSection(1))
                     .bounds(x + half + 8, 72, half, 20).build());
-            modeButton = addRenderableWidget(Button.builder(Component.empty(), button -> {
+            modeButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> {
                 options.open(Component.translatable("screen.talent_editor.option.choose"),
                         MODES.stream().map(value -> Component.translatable(
                                 "screen.talent_editor.presentation.mode." + value)).toList(),
@@ -91,10 +91,10 @@ final class TalentPresentationCueScreen extends Screen {
             color = field(x, 192, (w - 16) / 3, text.color().map(RarityDraft::formatColor).orElse(""), 9);
             color.setHint(Component.translatable("screen.talent_editor.text.color_hint"));
             int third = (w - 16) / 3;
-            boldButton = addRenderableWidget(Button.builder(Component.empty(), button -> {
+            boldButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> {
                 bold = !bold; updateButtons();
             }).bounds(x + third + 8, 192, third, 20).build());
-            italicButton = addRenderableWidget(Button.builder(Component.empty(), button -> {
+            italicButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> {
                 italic = !italic; updateButtons();
             }).bounds(x + (third + 8) * 2, 192, w - (third + 8) * 2, 20).build());
             fadeIn = field(x, 108, (w - 16) / 3, value("fadeInTicks", "10"), 8);
@@ -102,9 +102,9 @@ final class TalentPresentationCueScreen extends Screen {
             fadeOut = field(x + ((w - 16) / 3 + 8) * 2, 108,
                     w - ((w - 16) / 3 + 8) * 2, value("fadeOutTicks", "20"), 8);
         }
-        addRenderableWidget(Button.builder(Component.translatable("gui.cancel"), button -> close())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.cancel"), button -> close())
                 .bounds(x, height - 28, half, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.done"), button -> save())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.done"), button -> save())
                 .bounds(x + half + 8, height - 28, half, 20).build());
         updateButtons();
     }
@@ -135,9 +135,14 @@ final class TalentPresentationCueScreen extends Screen {
         color.visible = textPage;
         boldButton.visible = textPage;
         italicButton.visible = textPage;
-        fadeIn.visible = !textPage;
-        stay.visible = !textPage;
-        fadeOut.visible = !textPage;
+        boolean titleMode = MODES.get(modeIndex).equals("title");
+        boolean chatMode = MODES.get(modeIndex).equals("chat");
+        fadeIn.visible = !textPage && titleMode;
+        stay.visible = !textPage && (titleMode || chatMode);
+        fadeOut.visible = !textPage && titleMode;
+        int w = Math.min(680, width - 32), x = (width - w) / 2;
+        stay.setX(chatMode ? x : x + (w - 16) / 3 + 8);
+        stay.setWidth(chatMode ? w : (w - 16) / 3);
     }
 
     private void switchSection(int next) { section = next; updateButtons(); }
@@ -223,7 +228,7 @@ final class TalentPresentationCueScreen extends Screen {
         int w = Math.min(680, width - 32), x = (width - w) / 2;
         EditorTheme.panel(graphics, x - 7, 24, w + 14, Math.min(height - 56, 230));
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 10, EditorTheme.TEXT);
+        EditorTheme.title(graphics,font,title,width);
         label(graphics, x, 40, "cue_at_tick");
         if (type.equals("play_sound")) {
             label(graphics, x, 96, "sound");
@@ -232,8 +237,10 @@ final class TalentPresentationCueScreen extends Screen {
             if (height > 255) graphics.drawString(font, Component.translatable(
                     "screen.talent_editor.presentation.cue_text_hint"), x, 218, EditorTheme.MUTED, false);
         } else {
-            label(graphics, x, 96, "title_times");
-            label(graphics, x, 148, "timing_help");
+            String mode = MODES.get(modeIndex);
+            label(graphics, x, 96, mode.equals("title") ? "title_times"
+                    : mode.equals("chat") ? "chat_hold" : "action_bar_hold");
+            label(graphics, x, 148, mode.equals("chat") ? "chat_hold_help" : "timing_help");
         }
         if (!status.isBlank()) graphics.drawString(font, font.plainSubstrByWidth(status, w),
                 x, 27, 0xFFFF7777, false);

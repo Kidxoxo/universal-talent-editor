@@ -12,7 +12,7 @@ import net.minecraft.network.chat.Component;
 
 import java.util.Locale;
 
-final class UndoTransactionScreen extends Screen {
+final class UndoTransactionScreen extends EditorScreen {
     private final Screen parent;
     private final EditorTransactionSummary transaction;
     private long baseRevision;
@@ -34,11 +34,11 @@ final class UndoTransactionScreen extends Screen {
     @Override
     protected void init() {
         int center = width / 2;
-        confirmButton = addRenderableWidget(Button.builder(
+        confirmButton = addRenderableWidget(EditorWidgets.button(
                 Component.translatable("screen.talent_editor.undo.confirm"), button -> submit()
         ).bounds(center - 104, height - 32, 100, 20).build());
         confirmButton.active = !waiting && transaction.canUndo();
-        addRenderableWidget(Button.builder(Component.translatable("gui.back"), button -> returnParent())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.back"), button -> returnParent())
                 .bounds(center + 4, height - 32, 100, 20).build());
     }
 
@@ -46,7 +46,7 @@ final class UndoTransactionScreen extends Screen {
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics);
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 18, 0xFFFFFF);
+        EditorTheme.title(graphics,font,title,width);
         graphics.drawWordWrap(font, Component.translatable(
                 "screen.talent_editor.undo.target",
                 Component.translatable("screen.talent_editor.history.operation."

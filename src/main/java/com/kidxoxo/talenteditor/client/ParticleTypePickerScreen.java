@@ -13,7 +13,7 @@ import java.util.Locale;
 import java.util.function.Consumer;
 
 /** Lists only particle types that can be spawned without type-specific parameters. */
-final class ParticleTypePickerScreen extends Screen {
+final class ParticleTypePickerScreen extends EditorScreen {
     private static final int LIST_TOP = 66;
     private static final int ROW_HEIGHT = 18;
     private static final int SCROLLBAR_WIDTH = 7;
@@ -98,7 +98,7 @@ final class ParticleTypePickerScreen extends Screen {
         int w = listWidth(), x = (width - w) / 2;
         EditorTheme.panel(graphics, x - 7, 25, w + 14, height - 53);
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 10, EditorTheme.TEXT);
+        EditorTheme.title(graphics,font,title,width);
         List<ResourceLocation> visible = matches();
         scroll = clamp(scroll, visible.size());
         for (int i = scroll; i < Math.min(visible.size(), scroll + visibleRows()); i++) {

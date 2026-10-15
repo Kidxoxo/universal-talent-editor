@@ -15,7 +15,7 @@ import net.minecraftforge.registries.ForgeRegistries;
 import java.util.List;
 
 /** Visual editor for bounded server particle animations. */
-final class TalentParticleActionScreen extends Screen {
+final class TalentParticleActionScreen extends EditorScreen {
     private final Screen parent;
     private final TalentEditScreen owner;
     private final TalentDraft.AdvancedActionLocation location;
@@ -48,7 +48,7 @@ final class TalentParticleActionScreen extends Screen {
         int quarter = (w - 24) / 4;
         int particleY = compact ? 43 : 52;
         particle = field(x, particleY, w - 112, value("particle", "minecraft:end_rod"));
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.particles.search"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.particles.search"),
                 b -> openPicker()).bounds(x + w - 106, particleY, 106, 20).build());
         if (compact) {
             count = field(x, 78, quarter, value("count", "8"));
@@ -77,7 +77,7 @@ final class TalentParticleActionScreen extends Screen {
             cooldown = field(x, 212, half, value("cooldownTicks", "10"));
             previewDistance = field(x + half + 8, 212, half, value("previewCameraDistance", "4"));
         }
-        addRenderableWidget(Button.builder(Component.empty(), b -> {
+        addRenderableWidget(EditorWidgets.button(Component.empty(), b -> {
             List<String> choices = List.of("feet", "body", "head");
             options.open(Component.translatable("screen.talent_editor.option.choose"),
                     choices.stream().map(value -> choice("anchor", value)).toList(),
@@ -89,7 +89,7 @@ final class TalentParticleActionScreen extends Screen {
                 compact ? 148 : 172,
                 compact ? (presentation ? half : w) : w - (third + 8) * 2, 20).build())
                 .setMessage(choice("anchor", anchor));
-        addRenderableWidget(Button.builder(Component.empty(), b -> {
+        addRenderableWidget(EditorWidgets.button(Component.empty(), b -> {
             List<String> choices = List.of("burst", "inward", "outward", "spiral", "ring", "fountain");
             options.open(Component.translatable("screen.talent_editor.option.choose"),
                     choices.stream().map(value -> choice("motion", value)).toList(),
@@ -99,13 +99,13 @@ final class TalentParticleActionScreen extends Screen {
                     }, height);
         }).bounds(x, compact ? 183 : 252, half, 20).build())
                 .setMessage(choice("motion", motion));
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.particles.preview"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.particles.preview"),
                 b -> preview()).bounds(x + half + 8, compact ? 183 : 252, half, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.cancel"), b -> close())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.cancel"), b -> close())
                 .bounds(x, height - 28, 90, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.particles.color.open"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.particles.color.open"),
                 b -> openColor()).bounds(x + 98, height - 28, 110, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.done"), b -> save())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.done"), b -> save())
                 .bounds(x + 216, height - 28, w - 216, 20).build());
     }
 
@@ -237,7 +237,7 @@ final class TalentParticleActionScreen extends Screen {
         int w = Math.min(690, width - 32), x = (width - w) / 2, half = (w - 8) / 2;
         EditorTheme.panel(graphics, x - 7, 24, w + 14, Math.min(270, height - 54));
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 10, EditorTheme.TEXT);
+        EditorTheme.title(graphics,font,title,width);
         if (height < 310) {
             int quarter = (w - 24) / 4;
             label(graphics, "particle", x, 31);
@@ -253,7 +253,7 @@ final class TalentParticleActionScreen extends Screen {
                 label(graphics, "at_tick_short", x, 136);
             }
             if (!status.isBlank()) graphics.drawString(font, font.plainSubstrByWidth(status, w),
-                    x, height - 37, 0xFF7777, false);
+                    x, height - 37, EditorTheme.ERROR, false);
             options.render(graphics, font, width, height);
             return;
         }
@@ -270,7 +270,7 @@ final class TalentParticleActionScreen extends Screen {
             label(graphics, "at_tick", x + (third + 8) * 2, 120);
         }
         if (!status.isBlank()) graphics.drawString(font, font.plainSubstrByWidth(status, w),
-                x, height - 42, 0xFF7777, false);
+                x, height - 42, EditorTheme.ERROR, false);
         options.render(graphics, font, width, height);
     }
 

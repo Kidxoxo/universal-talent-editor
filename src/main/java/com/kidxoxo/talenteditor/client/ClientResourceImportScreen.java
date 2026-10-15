@@ -14,7 +14,7 @@ import java.util.LinkedHashSet;
 import java.util.Optional;
 import java.util.Set;
 
-public final class ClientResourceImportScreen extends Screen {
+public final class ClientResourceImportScreen extends EditorScreen {
     /** Survives closing and reopening this screen until the generated pack is successfully reloaded. */
     private static final Set<String> PENDING_RESOURCES = new LinkedHashSet<>();
     private final Screen parent;
@@ -35,11 +35,18 @@ public final class ClientResourceImportScreen extends Screen {
     private Button importButton;
     private Button reloadButton;
     private Button auditButton;
+    private java.util.function.Consumer<ResourceLocation> chooseImported;
+    private ResourceLocation lastImported;
+    private boolean useAfterReload;
     private Component status = Component.empty();
     private int statusColor = EditorTheme.MUTED;
 
     public ClientResourceImportScreen(Screen parent) {
         this(parent, null, 0);
+    }
+
+    ClientResourceImportScreen(Screen parent, java.util.function.Consumer<ResourceLocation> chooseImported) {
+        this(parent);this.chooseImported=chooseImported;
     }
 
     public ClientResourceImportScreen(Screen parent, ResourceLocation configuredItemId, int customModelData) {
@@ -62,9 +69,9 @@ public final class ClientResourceImportScreen extends Screen {
         int x = (width - formWidth) / 2;
         int gap = 6;
         int half = (formWidth - gap) / 2;
-        kindButton = addRenderableWidget(Button.builder(kindLabel(), button -> toggleKind())
+        kindButton = addRenderableWidget(EditorWidgets.button(kindLabel(), button -> toggleKind())
                 .bounds(x, 34, half, 20).build());
-        streamButton = addRenderableWidget(Button.builder(streamLabel(), button -> {
+        streamButton = addRenderableWidget(EditorWidgets.button(streamLabel(), button -> {
             stream = !stream;
             button.setMessage(streamLabel());
         }).bounds(x + half + gap, 34, formWidth - half - gap, 20).build());
@@ -75,18 +82,18 @@ public final class ClientResourceImportScreen extends Screen {
         resourceField.setHint(resourceHint());
 
         int third = (formWidth - gap * 2) / 3;
-        importButton = addRenderableWidget(Button.builder(
+        importButton = addRenderableWidget(EditorWidgets.button(
                         Component.translatable("screen.talent_editor.resource_import.import_only"),
                         button -> importOnly())
                 .bounds(x, 140, third, 20).build());
-        reloadButton = addRenderableWidget(Button.builder(reloadLabel(), button -> enableAndReloadPack())
+        reloadButton = addRenderableWidget(EditorWidgets.button(reloadLabel(), button -> enableAndReloadPack())
                 .bounds(x + third + gap, 140, third, 20).build());
-        auditButton = addRenderableWidget(Button.builder(
-                        Component.translatable("screen.talent_editor.resource_import.audit"),
-                        button -> refreshAudit())
+        auditButton = addRenderableWidget(EditorWidgets.button(
+                        chooseImported==null?Component.translatable("screen.talent_editor.resource_import.audit"):EditorDefinitionScreen.tr("import_use"),
+                        button -> {if(chooseImported==null)refreshAudit();else {lastImported=null;importOnly();if(lastImported!=null){useAfterReload=true;enableAndReloadPack();}}})
                 .bounds(x + (third + gap) * 2, 140,
                         formWidth - (third + gap) * 2, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.back"), button -> returnParent())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.back"), button -> returnParent())
                 .bounds(width / 2 - 55, height - 28, 110, 20).build());
         updateWidgets();
     }
@@ -110,7 +117,7 @@ public final class ClientResourceImportScreen extends Screen {
         int x = (width - formWidth) / 2;
         EditorTheme.panel(graphics, x - 7, 24, formWidth + 14, Math.max(1, height - 60));
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 10, 0xFFFFFF);
+        EditorTheme.title(graphics,font,title,width);
         label(graphics, x, 61, "source");
         label(graphics, x, 99, kind == ManagedClientResourcePack.ImportKind.TEXTURE
                 ? "texture_id" : "sound_id");
@@ -181,6 +188,7 @@ public final class ClientResourceImportScreen extends Screen {
 
     private void importOnly() {
         if (reloading) return;
+        lastImported=null;
         String rawId = resourceField.getValue().strip();
         ResourceLocation id = ResourceLocation.tryParse(rawId);
         if (id == null || !rawId.contains(":")) {
@@ -216,6 +224,7 @@ public final class ClientResourceImportScreen extends Screen {
         status = Component.translatable("screen.talent_editor.resource_import.imported",
                 result.resource(), result.bytes(), shortHash(result.sha256()),
                 pendingCount);
+        lastImported=result.resource();
         statusColor = 0xFF77DD88;
         updateWidgets();
     }
@@ -259,6 +268,7 @@ public final class ClientResourceImportScreen extends Screen {
                 status = Component.translatable("screen.talent_editor.resource_import.reload_complete",
                         reloadingCount);
                 statusColor = 0xFF77DD88;
+                if(useAfterReload&&lastImported!=null&&minecraft.screen==this){useAfterReload=false;chooseImported.accept(lastImported);}
             } else {
                 setStatus("reload_failed", 0xFFFF7777,
                         error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage());
@@ -284,6 +294,7 @@ public final class ClientResourceImportScreen extends Screen {
         kindButton.setMessage(kindLabel());
         streamButton.setMessage(streamLabel());
         streamButton.active = kind == ManagedClientResourcePack.ImportKind.SOUND && !reloading;
+        streamButton.visible=kind==ManagedClientResourcePack.ImportKind.SOUND;
         importButton.active = !reloading;
         reloadButton.setMessage(reloadLabel());
         reloadButton.active = !reloading && audit != null && audit.valid() && audit.total() > 0;
@@ -291,7 +302,7 @@ public final class ClientResourceImportScreen extends Screen {
         sourceField.setEditable(!reloading);
         resourceField.setEditable(!reloading);
         kindButton.active = !reloading;
-        if (configuredItemId != null) kindButton.active = false;
+        if (configuredItemId != null||chooseImported!=null) kindButton.active = false;
     }
 
     private Component kindLabel() {
@@ -327,6 +338,7 @@ public final class ClientResourceImportScreen extends Screen {
     }
 
     private void returnParent() {
+        if(reloading)return;
         if (minecraft != null) minecraft.setScreen(parent);
     }
 

@@ -8,7 +8,8 @@ import net.minecraftforge.network.NetworkEvent;
 import java.util.ArrayList;
 import java.util.function.Supplier;
 
-public record DrawSessionPacket(DrawSessionView view) {
+public record DrawSessionPacket(DrawSessionView view, com.kidxoxo.talenteditor.domain.TalentBookLayoutDefinition layout) {
+    public DrawSessionPacket(DrawSessionView view) { this(view, com.kidxoxo.talenteditor.domain.TalentBookLayoutDefinition.DEFAULT); }
     private static final int MAX_OFFERS = 5;
     private static final int MAX_POOL_NAME = 1_024;
     private static final int MAX_RARITY_PROBABILITIES = 256;
@@ -37,6 +38,7 @@ public record DrawSessionPacket(DrawSessionView view) {
         });
         buffer.writeVarInt(view.offers().size());
         view.offers().forEach(talent -> TalentViewCodec.encode(buffer, talent));
+        PlayerTalentStatePacket.encodeLayout(buffer, packet.layout());
     }
 
     static DrawSessionPacket decode(FriendlyByteBuf buffer) {
@@ -74,7 +76,7 @@ public record DrawSessionPacket(DrawSessionView view) {
         return new DrawSessionPacket(new DrawSessionView(
                 sessionId, revision, poolId, poolName, tokens, refreshes, iconSize,
                 luck, pityProgress, pityAfter, pityActive, probabilities, offers
-        ));
+        ), PlayerTalentStatePacket.decodeLayout(buffer));
     }
 
     static void handle(DrawSessionPacket packet, Supplier<NetworkEvent.Context> contextSupplier) {

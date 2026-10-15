@@ -42,7 +42,12 @@ class GeneratedRipplesPackTest {
         assertEquals("revoke_talent", actions.get(1).getAsJsonObject().get("type").getAsString());
         assertEquals("modify_counter", actions.get(2).getAsJsonObject().get("type").getAsString());
         assertEquals("0", actions.get(2).getAsJsonObject().get("expression").getAsString());
-        assertEquals("spawn_particles", actions.get(3).getAsJsonObject().get("type").getAsString());
+        // Progression grants the next talent. New packs place its full particle show
+        // in onAcquire; older packs also carry an inline progress particle action.
+        JsonObject upgraded = JsonParser.parseString(Files.readString(talents.resolve("talent_039.json")))
+                .getAsJsonObject();
+        assertTrue(actions.toString().contains("spawn_particles")
+                || upgraded.getAsJsonArray("onAcquire").toString().contains("spawn_particles"));
     }
 
     @Test

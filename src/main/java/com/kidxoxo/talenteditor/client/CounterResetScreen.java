@@ -6,7 +6,7 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
-public final class CounterResetScreen extends Screen {
+public final class CounterResetScreen extends EditorScreen {
     private final CounterEditScreen parent;
     private boolean onLogin;
     private boolean onDeath;
@@ -30,11 +30,11 @@ public final class CounterResetScreen extends Screen {
         int formWidth = Math.min(540, width - 32);
         int x = (width - formWidth) / 2;
         int half = (formWidth - 6) / 2;
-        loginButton = addRenderableWidget(Button.builder(loginLabel(), button -> {
+        loginButton = addRenderableWidget(EditorWidgets.button(loginLabel(), button -> {
             onLogin = !onLogin;
             loginButton.setMessage(loginLabel());
         }).bounds(x, 49, half, 20).build());
-        deathButton = addRenderableWidget(Button.builder(deathLabel(), button -> {
+        deathButton = addRenderableWidget(EditorWidgets.button(deathLabel(), button -> {
             onDeath = !onDeath;
             deathButton.setMessage(deathLabel());
         }).bounds(x + half + 6, 49, formWidth - half - 6, 20).build());
@@ -47,9 +47,9 @@ public final class CounterResetScreen extends Screen {
             status = "";
         });
         addRenderableWidget(intervalField);
-        addRenderableWidget(Button.builder(Component.translatable("gui.cancel"), button -> returnParent())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.cancel"), button -> returnParent())
                 .bounds(x, height - 28, 80, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.done"), button -> save())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.done"), button -> save())
                 .bounds(x + 86, height - 28, formWidth - 86, 20).build());
     }
 
@@ -59,16 +59,16 @@ public final class CounterResetScreen extends Screen {
         super.render(graphics, mouseX, mouseY, partialTick);
         int formWidth = Math.min(540, width - 32);
         int x = (width - formWidth) / 2;
-        graphics.drawCenteredString(font, title, width / 2, 15, 0xFFFFFF);
+        EditorTheme.title(graphics,font,title,width);
         graphics.drawString(font, Component.translatable("screen.talent_editor.counter.reset.triggers"),
-                x, 38, 0xA0A0A0, false);
+                x, 38, EditorTheme.MUTED, false);
         graphics.drawString(font, Component.translatable("screen.talent_editor.counter.reset.interval"),
-                x, 81, 0xA0A0A0, false);
+                x, 81, EditorTheme.MUTED, false);
         graphics.drawWordWrap(font, Component.translatable("screen.talent_editor.counter.reset.help"),
                 x, 123, formWidth, 0x808080);
         if (!status.isBlank()) {
             graphics.drawString(font, font.plainSubstrByWidth(status, formWidth),
-                    x, height - 45, 0xFF7777, false);
+                    x, height - 45, EditorTheme.ERROR, false);
         }
     }
 

@@ -1,0 +1,44 @@
+{
+  "version": "1.3.0",
+  "date": "2026-10-15",
+  "minecraft": "1.20.1",
+  "forge_build": "47.3.22",
+  "protocol": 46,
+  "schema": 2,
+  "tests": {
+    "suites": 77,
+    "tests": 358,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "development_client_checks": 14,
+  "runtime_report": "regression/presentation-polish-report.txt",
+  "manual_verification": "Isolated production client/integrated server loaded the 27-mod minimal pack, all 77 talents, the particle whitelist, and the new default talent-point loot rule; clean shutdown. Prior UI/client checks are recorded separately. Multiplayer, every presentation choreography, and unrelated third-party gameplay are not comprehensively tested.",
+  "jarSha256": "3d70a87b4a401a3d5db0c383c2bab86e793781874a768677357400808163d002",
+  "sourceJarSha256": "4c90d8201367313d9709fd9c8ce4c006787eeebfb0e1243b131c443f6832e105",
+  "archiveSha256": "48dd41e9c3260321e41f6c0c531e9a89c6a40896b6183c1f9b4b307f1b3a5c9b",
+  "artifact_checks": [
+    "version 1.3.0",
+    "protocol 46",
+    "production ChatComponentMixin refmap",
+    "no development harness",
+    "all production Java files match sources JAR"
+  ],
+  "defaultLoot": "5% chance for one talent point; regex [a-z0-9_.-]+:chests?/.*; editable built-in item rule",
+  "packaging_verification": {
+    "date": "2026-10-15",
+    "production_client": "Minecraft 1.20.1 / Forge 47.4.23 / Java 17",
+    "minimalPackMods": 27,
+    "integratedWorldLoaded": true,
+    "talents": 77,
+    "configuredItems": 7,
+    "configuredItemsExplanation": "5 pack items + 2 built-in items",
+    "particleRegistryChecks": 18,
+    "defaultTalentPointLoot": "5%, one point, fixed probability, editable item rule",
+    "cleanShutdown": true,
+    "githubSourceCleanBuild": true,
+    "downloadLinksVerified": 19
+  },
+  "testScope": "354 repository tests (including two optional pack-fixture tests), plus four release-particle-pack checks from the packaging workspace; all 358 passed."
+}

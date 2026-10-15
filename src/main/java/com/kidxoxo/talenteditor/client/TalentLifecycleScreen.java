@@ -6,7 +6,7 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
-public final class TalentLifecycleScreen extends Screen {
+public final class TalentLifecycleScreen extends EditorScreen {
     private final TalentEditScreen parent;
     private final Screen returnScreen;
     private EditBox duration;
@@ -41,21 +41,21 @@ public final class TalentLifecycleScreen extends Screen {
         duration = field(x, 58, formWidth, Integer.toString(draft.durationTicks()));
         draws = field(x, 101, formWidth, Integer.toString(draft.removeAfterDraws()));
         int half = (formWidth - 6) / 2;
-        effectsButton = addRenderableWidget(Button.builder(effectsLabel(), button -> {
+        effectsButton = addRenderableWidget(EditorWidgets.button(effectsLabel(), button -> {
             retainEffects = !retainEffects;
             effectsButton.setMessage(effectsLabel());
         }).bounds(x, 144, half, 20).build());
-        categoryButton = addRenderableWidget(Button.builder(categoryLabel(), button -> {
+        categoryButton = addRenderableWidget(EditorWidgets.button(categoryLabel(), button -> {
             retainCategory = !retainCategory;
             categoryButton.setMessage(categoryLabel());
         }).bounds(x + half + 6, 144, formWidth - half - 6, 20).build());
-        triggersButton = addRenderableWidget(Button.builder(triggersLabel(), button -> {
+        triggersButton = addRenderableWidget(EditorWidgets.button(triggersLabel(), button -> {
             retainTriggers = !retainTriggers;
             triggersButton.setMessage(triggersLabel());
         }).bounds(x, 174, formWidth, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.cancel"), button -> returnParent())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.cancel"), button -> returnParent())
                 .bounds(x, height - 28, 80, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.done"), button -> apply())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.done"), button -> apply())
                 .bounds(x + 86, height - 28, formWidth - 86, 20).build());
     }
 
@@ -107,14 +107,14 @@ public final class TalentLifecycleScreen extends Screen {
         int x = (width - formWidth) / 2;
         EditorTheme.panel(graphics, x - 7, 29, formWidth + 14, 181);
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 11, EditorTheme.TEXT);
+        EditorTheme.title(graphics,font,title,width);
         graphics.drawString(font, Component.translatable("screen.talent_editor.lifecycle.duration"),
                 x, 45, EditorTheme.MUTED, false);
         graphics.drawString(font, Component.translatable("screen.talent_editor.lifecycle.draws"),
                 x, 88, EditorTheme.MUTED, false);
         graphics.drawWordWrap(font, Component.translatable("screen.talent_editor.lifecycle.help"),
                 x, 216, formWidth, EditorTheme.MUTED);
-        if (!status.isBlank()) graphics.drawString(font, status, x, height - 47, 0xFF7777, false);
+        if (!status.isBlank()) graphics.drawString(font, status, x, height - 47, EditorTheme.ERROR, false);
     }
 
     private void returnParent() { if (minecraft != null) minecraft.setScreen(returnScreen); }

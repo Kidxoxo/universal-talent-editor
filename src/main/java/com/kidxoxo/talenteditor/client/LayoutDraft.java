@@ -12,6 +12,7 @@ import java.util.List;
 
 final class LayoutDraft {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    String snapshot() { return root.toString(); }
     private final JsonObject root;
 
     private LayoutDraft(JsonObject root) {
@@ -28,6 +29,11 @@ final class LayoutDraft {
         JsonElement parsed = JsonParser.parseString(json);
         if (!parsed.isJsonObject()) throw new IllegalArgumentException("Layout definition must be an object");
         return new LayoutDraft(parsed.getAsJsonObject().deepCopy());
+    }
+
+    java.util.Optional<com.kidxoxo.talenteditor.domain.UiDocument> ui(boolean draw) {
+        String key = draw ? "drawUi" : "bookUi";
+        return root.has(key) ? java.util.Optional.of(com.kidxoxo.talenteditor.compile.UiDocumentCodec.read(root.get(key).toString(), draw)) : java.util.Optional.empty();
     }
 
     boolean enabled() { return bool("enabled", true); }

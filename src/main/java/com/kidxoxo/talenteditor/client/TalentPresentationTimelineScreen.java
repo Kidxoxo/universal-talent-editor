@@ -9,7 +9,7 @@ import net.minecraft.network.chat.Component;
 import java.util.List;
 
 /** Ordered acquisition/synthesis cues; behavioural actions remain in their own event list. */
-final class TalentPresentationTimelineScreen extends Screen {
+final class TalentPresentationTimelineScreen extends EditorScreen {
     private static final int ROW = 22;
     private final Screen parent;
     private final TalentEditScreen owner;
@@ -21,6 +21,7 @@ final class TalentPresentationTimelineScreen extends Screen {
     private Button edit, remove, up, down;
     private Button acquirePhaseButton, synthesisPhaseButton;
     private String status = "";
+    private final EditorOptionPopup options = new EditorOptionPopup();
 
     TalentPresentationTimelineScreen(Screen parent, TalentEditScreen owner, TalentDraft.PresentationPhase phase) {
         super(Component.translatable("screen.talent_editor.presentation.timeline_title"));
@@ -33,42 +34,46 @@ final class TalentPresentationTimelineScreen extends Screen {
     @Override protected void init() {
         int w = Math.min(700, width - 32), x = (width - w) / 2;
         int phaseWidth = (w - 6) / 2;
-        acquirePhaseButton = addRenderableWidget(Button.builder(
+        acquirePhaseButton = addRenderableWidget(EditorWidgets.button(
                 Component.translatable("screen.talent_editor.presentation.phase.acquire"),
                 button -> selectPhase(TalentDraft.PresentationPhase.ACQUIRE))
                 .bounds(x, 27, phaseWidth, 20).build());
-        synthesisPhaseButton = addRenderableWidget(Button.builder(
+        synthesisPhaseButton = addRenderableWidget(EditorWidgets.button(
                 Component.translatable("screen.talent_editor.presentation.phase.synthesize"),
                 button -> selectPhase(TalentDraft.PresentationPhase.SYNTHESIZE))
                 .bounds(x + phaseWidth + 6, 27, w - phaseWidth - 6, 20).build());
+        acquirePhaseButton.setTooltip(net.minecraft.client.gui.components.Tooltip.create(
+                Component.translatable("screen.talent_editor.presentation.acquire_help")));
+        synthesisPhaseButton.setTooltip(net.minecraft.client.gui.components.Tooltip.create(
+                Component.translatable("screen.talent_editor.presentation.synthesize_help")));
         int third = (w - 12) / 3;
-        int fourth = (w - 18) / 4;
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.presentation.add_text"),
-                button -> openCue("show_message", -1)).bounds(x, 54, fourth, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.presentation.add_sound"),
-                button -> openCue("play_sound", -1)).bounds(x + fourth + 6, 54, fourth, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.presentation.add_particles"),
-                button -> openCue("spawn_particles", -1)).bounds(x + (fourth + 6) * 2, 54,
-                fourth, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.presentation.add_transform"),
-                button -> openCue("presentation_transform", -1)).bounds(x + (fourth + 6) * 3, 54,
-                w - (fourth + 6) * 3, 20).build());
+        addRenderableWidget(EditorWidgets.button(EditorDefinitionScreen.tr("add_cue"), button -> options.open(
+                EditorDefinitionScreen.tr("add_cue"), List.of(
+                    Component.translatable("screen.talent_editor.presentation.add_text"),
+                    Component.translatable("screen.talent_editor.presentation.add_sound"),
+                    EditorDefinitionScreen.tr("advanced_cue")),0,choice->{
+                        if(choice<2)openCue(choice==0?"show_message":"play_sound",-1);
+                        else options.open(EditorDefinitionScreen.tr("advanced_cue"),List.of(
+                            Component.translatable("screen.talent_editor.presentation.add_particles"),
+                            Component.translatable("screen.talent_editor.presentation.add_transform")),0,
+                            kind->openCue(kind==0?"spawn_particles":"presentation_transform",-1),height);
+                    },height)).bounds(x,54,w,20).build());
         int bottom = height - 55;
-        edit = addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.advanced_actions.edit"),
+        edit = addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.advanced_actions.edit"),
                 button -> editSelected()).bounds(x, bottom, third, 20).build());
-        remove = addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.advanced_actions.remove"),
+        remove = addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.advanced_actions.remove"),
                 button -> removeSelected()).bounds(x + third + 6, bottom, third, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.presentation.preview_full"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.presentation.preview_full"),
                 button -> preview()).bounds(x + (third + 6) * 2, bottom,
                 w - (third + 6) * 2, 20).build());
         int quarter = (w - 18) / 4;
-        down = addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.advanced_actions.down"),
-                button -> move(1)).bounds(x + quarter + 6, height - 28, quarter, 20).build());
-        up = addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.advanced_actions.up"),
-                button -> move(-1)).bounds(x, height - 28, quarter, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.cancel"), button -> close())
-                .bounds(x + (quarter + 6) * 2, height - 28, quarter, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.presentation.apply"),
+        down = addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.advanced_actions.down"),
+                button -> move(1)).bounds(x + (quarter + 6) * 2, height - 28, quarter, 20).build());
+        up = addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.advanced_actions.up"),
+                button -> move(-1)).bounds(x + quarter + 6, height - 28, quarter, 20).build());
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.cancel"), button -> close())
+                .bounds(x, height - 28, quarter, 20).build());
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.presentation.apply"), EditorTheme.Tone.PRIMARY,
                 button -> apply()).bounds(x + (quarter + 6) * 3, height - 28,
                 w - (quarter + 6) * 3, 20).build());
         updateButtons();
@@ -137,7 +142,7 @@ final class TalentPresentationTimelineScreen extends Screen {
 
     private void preview() {
         if (minecraft == null || minecraft.level == null || minecraft.player == null) return;
-        try { minecraft.setScreen(new TalentCinematicPreviewScreen(this, owner.draft(), phase)); }
+        try { minecraft.setScreen(new TalentCinematicPreviewScreen(this, owner.draft(), TalentDraft.PresentationPhase.SYNTHESIZE)); }
         catch (RuntimeException exception) { status = exception.getMessage(); }
     }
 
@@ -146,7 +151,7 @@ final class TalentPresentationTimelineScreen extends Screen {
         int w = Math.min(700, width - 32), x = (width - w) / 2;
         EditorTheme.panel(graphics, x - 7, 24, w + 14, Math.max(1, height - 87));
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 8, EditorTheme.TEXT);
+        EditorTheme.title(graphics,font,title,width);
         int phaseWidth = (w - 6) / 2;
         EditorTheme.selectedTab(graphics, phase == TalentDraft.PresentationPhase.ACQUIRE
                 ? x : x + phaseWidth + 6, 27, phase == TalentDraft.PresentationPhase.ACQUIRE
@@ -175,25 +180,31 @@ final class TalentPresentationTimelineScreen extends Screen {
         if (rows.isEmpty()) graphics.drawCenteredString(font, Component.translatable(
                 "screen.talent_editor.presentation.timeline_empty"), width / 2, top + 12, EditorTheme.MUTED);
         if (status != null && !status.isBlank()) graphics.drawString(font,
-                font.plainSubstrByWidth(status, w), x, height - 68, 0xFF7777, false);
+                font.plainSubstrByWidth(status, w), x, height - 68, EditorTheme.ERROR, false);
+        options.render(graphics,font,width,height);
     }
 
     @Override public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if(options.mouseClicked(mouseX,mouseY,button,width,height))return true;
         if (button == 0) {
             int w = Math.min(700, width - 32), x = (width - w) / 2;
             int top = 84, bottom = height - 66;
             if (mouseX >= x && mouseX < x + w && mouseY >= top && mouseY < bottom) {
                 int index = scroll + (int) ((mouseY - top) / ROW);
-                if (index < cues().size()) { selected = index; updateButtons(); return true; }
+                if (index < scroll + Math.max(1,(bottom-top)/ROW) && index < cues().size()) { selected = index; updateButtons(); return true; }
             }
         }
         return super.mouseClicked(mouseX, mouseY, button);
     }
 
     @Override public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        if(options.mouseScrolled(delta,height))return true;
         scroll = Math.max(0, scroll - (int) Math.signum(delta) * 3);
         return true;
     }
+
+    @Override public boolean keyPressed(int k,int scan,int mods){return options.keyPressed(k,height)||super.keyPressed(k,scan,mods);}
+    @Override public boolean charTyped(char c,int mods){return options.isOpen()||super.charTyped(c,mods);}
 
     private void apply() {
         applied = true;

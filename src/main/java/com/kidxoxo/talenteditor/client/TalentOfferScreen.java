@@ -11,7 +11,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 
-public final class TalentOfferScreen extends Screen {
+public final class TalentOfferScreen extends EditorScreen {
     private final TalentEditScreen parent;
     private final Screen returnScreen;
     private boolean enabled;
@@ -40,7 +40,7 @@ public final class TalentOfferScreen extends Screen {
     protected void init() {
         int formWidth = Math.min(460, width - 32);
         int x = (width - formWidth) / 2;
-        enabledButton = addRenderableWidget(Button.builder(enabledLabel(), button -> {
+        enabledButton = addRenderableWidget(EditorWidgets.button(enabledLabel(), button -> {
             enabled = !enabled;
             enabledButton.setMessage(enabledLabel());
         }).bounds(x, 55, formWidth, 20).build());
@@ -65,15 +65,15 @@ public final class TalentOfferScreen extends Screen {
             status = "";
         });
         addRenderableWidget(poolsField);
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.reference_picker.choose"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.reference_picker.choose"),
                         button -> openPoolPicker())
                 .bounds(x + formWidth - chooseWidth, 141, chooseWidth, 20).build());
 
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.offer.apply"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.offer.apply"), EditorTheme.Tone.PRIMARY,
                         button -> apply())
-                .bounds(x, height - 28, (formWidth - 6) / 2, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.cancel"), button -> onClose())
                 .bounds(x + (formWidth + 6) / 2, height - 28, (formWidth - 6) / 2, 20).build());
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.cancel"), button -> onClose())
+                .bounds(x, height - 28, (formWidth - 6) / 2, 20).build());
     }
 
     @Override
@@ -83,7 +83,7 @@ public final class TalentOfferScreen extends Screen {
         int x = (width - formWidth) / 2;
         EditorTheme.panel(graphics, x - 8, 31, formWidth + 16, 176);
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 16, EditorTheme.TEXT);
+        EditorTheme.title(graphics,font,title,width);
         graphics.drawString(font, Component.translatable("screen.talent_editor.offer.enabled"),
                 x, 44, EditorTheme.MUTED, false);
         graphics.drawString(font, Component.translatable("screen.talent_editor.offer.weight"),
@@ -91,7 +91,7 @@ public final class TalentOfferScreen extends Screen {
         graphics.drawString(font, Component.translatable("screen.talent_editor.offer.pools"),
                 x, 130, EditorTheme.MUTED, false);
         graphics.drawString(font, Component.translatable("screen.talent_editor.offer.pool_hint"),
-                x, 169, 0x808080, false);
+                x, 169, EditorTheme.MUTED, false);
         ReferenceDiagnostics.Summary references = ReferenceDiagnostics.summarize(
                 parent.bootstrap(), ResourceReferencePickerScreen.Source.POOL, poolsValue, false
         );
@@ -99,7 +99,7 @@ public final class TalentOfferScreen extends Screen {
                 ReferenceDiagnostics.label(references).getString(), formWidth
         ), x, 181, ReferenceDiagnostics.color(references), false);
         if (!status.isBlank()) graphics.drawString(font, font.plainSubstrByWidth(status, formWidth),
-                x, 193, 0xFF7777, false);
+                x, 193, EditorTheme.ERROR, false);
     }
 
     private void apply() {

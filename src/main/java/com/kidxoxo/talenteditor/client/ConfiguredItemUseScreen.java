@@ -10,7 +10,7 @@ import net.minecraft.network.chat.Component;
 import java.util.ArrayList;
 import java.util.List;
 
-public final class ConfiguredItemUseScreen extends Screen {
+public final class ConfiguredItemUseScreen extends EditorScreen {
     private static final int MAX_ACTIONS = 256;
 
     private final ConfiguredItemEditScreen parent;
@@ -56,7 +56,7 @@ public final class ConfiguredItemUseScreen extends Screen {
         int x = (width - formWidth) / 2;
         int gap = 6;
         int third = (formWidth - gap * 2) / 3;
-        enabledButton = addRenderableWidget(Button.builder(Component.empty(), button -> {
+        enabledButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> {
             enabled = !enabled;
             updateButtons();
         }).bounds(x, 42, third, 20).build());
@@ -67,38 +67,38 @@ public final class ConfiguredItemUseScreen extends Screen {
         consumeField.setValue(Integer.toString(initialConsume));
 
         int quarter = (formWidth - gap * 3) / 4;
-        previousButton = addRenderableWidget(Button.builder(Component.translatable(
+        previousButton = addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.configured_item.use.previous"), button -> select(-1))
                 .bounds(x, 84, quarter, 20).build());
-        nextButton = addRenderableWidget(Button.builder(Component.translatable(
+        nextButton = addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.configured_item.use.next"), button -> select(1))
                 .bounds(x + quarter + gap, 84, quarter, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable(
+        addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.configured_item.use.add"), button -> addAction())
                 .bounds(x + (quarter + gap) * 2, 84, quarter, 20).build()).active = editable;
-        deleteButton = addRenderableWidget(Button.builder(Component.translatable(
+        deleteButton = addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.configured_item.use.delete"), button -> deleteAction())
                 .bounds(x + (quarter + gap) * 3, 84,
                         formWidth - (quarter + gap) * 3, 20).build());
 
         int actionWidth = (formWidth - gap * 2) / 3;
-        editButton = addRenderableWidget(Button.builder(Component.translatable(
+        editButton = addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.configured_item.use.edit"), button -> editAction())
                 .bounds(x, 116, actionWidth, 20).build());
-        upButton = addRenderableWidget(Button.builder(Component.translatable(
+        upButton = addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.configured_item.use.up"), button -> move(-1))
                 .bounds(x + actionWidth + gap, 116, actionWidth, 20).build());
-        downButton = addRenderableWidget(Button.builder(Component.translatable(
+        downButton = addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.configured_item.use.down"), button -> move(1))
                 .bounds(x + (actionWidth + gap) * 2, 116,
                         formWidth - (actionWidth + gap) * 2, 20).build());
 
         int half = (formWidth - gap) / 2;
-        applyButton = addRenderableWidget(Button.builder(Component.translatable(
+        applyButton = addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.configured_item.use.apply"), button -> apply())
-                .bounds(x, height - 28, half, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.cancel"), button -> returnParent())
                 .bounds(x + half + gap, height - 28, formWidth - half - gap, 20).build());
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.cancel"), button -> returnParent())
+                .bounds(x, height - 28, half, 20).build());
         updateButtons();
     }
 
@@ -119,14 +119,14 @@ public final class ConfiguredItemUseScreen extends Screen {
         super.render(graphics, mouseX, mouseY, partialTick);
         int gap = 6;
         int third = (formWidth - gap * 2) / 3;
-        graphics.drawCenteredString(font, title, width / 2, 10, 0xFFFFFF);
+        EditorTheme.title(graphics,font,title,width);
         label(graphics, "enabled", x, 31);
         label(graphics, "cooldown", x + third + gap, 31);
         label(graphics, "consume", x + (third + gap) * 2, 31);
         graphics.drawString(font, Component.translatable(
                 "screen.talent_editor.configured_item.use.current",
                 selected < 0 ? 0 : selected + 1, actions.size()
-        ), x, 72, 0xA0A0A0, false);
+        ), x, 72, EditorTheme.MUTED, false);
         String summary = selected < 0 ? Component.translatable(
                 "screen.talent_editor.configured_item.use.no_action").getString()
                 : Component.translatable("screen.talent_editor.configured_item.use.action."
@@ -134,20 +134,20 @@ public final class ConfiguredItemUseScreen extends Screen {
         graphics.drawCenteredString(font, summary, width / 2, 151, 0xFFFFFF);
         graphics.drawString(font, font.plainSubstrByWidth(Component.translatable(
                 "screen.talent_editor.configured_item.use.help").getString(), formWidth),
-                x, 174, 0x808080, false);
+                x, 174, EditorTheme.MUTED, false);
         if (!editable) {
             graphics.drawString(font, font.plainSubstrByWidth(Component.translatable(
                     "screen.talent_editor.configured_item.use.advanced_read_only").getString(), formWidth),
                     x, 195, 0xFFFFAA55, false);
         } else if (!status.isBlank()) {
             graphics.drawString(font, font.plainSubstrByWidth(status, formWidth),
-                    x, 195, 0xFF7777, false);
+                    x, 195, EditorTheme.ERROR, false);
         }
     }
 
     private void label(GuiGraphics graphics, String suffix, int x, int y) {
         graphics.drawString(font, Component.translatable(
-                "screen.talent_editor.configured_item.use." + suffix), x, y, 0xA0A0A0, false);
+                "screen.talent_editor.configured_item.use." + suffix), x, y, EditorTheme.MUTED, false);
     }
 
     private void select(int direction) {

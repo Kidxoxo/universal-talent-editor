@@ -10,7 +10,7 @@ import net.minecraft.resources.ResourceLocation;
 import java.util.ArrayList;
 import java.util.List;
 
-public final class TalentRequirementsScreen extends Screen {
+public final class TalentRequirementsScreen extends EditorScreen {
     private static final int ROW_HEIGHT = 18;
     private static final int MAX_ROWS = 256;
     private static final List<String> OPERATORS = List.of("lt", "lte", "eq", "neq", "gte", "gt");
@@ -57,9 +57,9 @@ public final class TalentRequirementsScreen extends Screen {
         int rightX = x + leftWidth + gap;
         int rightWidth = formWidth - leftWidth - gap;
 
-        modeButton = addRenderableWidget(Button.builder(modeLabel(), button -> cycleMode())
+        modeButton = addRenderableWidget(EditorWidgets.button(modeLabel(), button -> cycleMode())
                 .bounds(x, 38, leftWidth, 20).build());
-        typeButton = addRenderableWidget(Button.builder(typeLabel(), button -> chooseType())
+        typeButton = addRenderableWidget(EditorWidgets.button(typeLabel(), button -> chooseType())
                 .bounds(rightX, 38, rightWidth, 20).build());
 
         int chooseWidth = Math.min(82, Math.max(58, rightWidth / 3));
@@ -67,7 +67,7 @@ public final class TalentRequirementsScreen extends Screen {
                 Component.translatable("screen.talent_editor.requirements.target"));
         targetField.setMaxLength(256);
         addRenderableWidget(targetField);
-        chooseButton = addRenderableWidget(Button.builder(
+        chooseButton = addRenderableWidget(EditorWidgets.button(
                         Component.translatable("screen.talent_editor.requirements.choose"), button -> openPicker())
                 .bounds(rightX + rightWidth - chooseWidth, 81, chooseWidth, 20).build());
 
@@ -75,21 +75,21 @@ public final class TalentRequirementsScreen extends Screen {
                 Component.translatable("screen.talent_editor.requirements.amount"));
         amountField.setMaxLength(16);
         addRenderableWidget(amountField);
-        operatorButton = addRenderableWidget(Button.builder(Component.empty(), button -> chooseOperator())
+        operatorButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> chooseOperator())
                 .bounds(rightX, 124, 90, 20).build());
 
         int actionY = height - 52;
-        addButton = addRenderableWidget(Button.builder(
+        addButton = addRenderableWidget(EditorWidgets.button(
                         Component.translatable("screen.talent_editor.requirements.add"), button -> addRow())
                 .bounds(x, actionY, (leftWidth - 6) / 2, 20).build());
-        removeButton = addRenderableWidget(Button.builder(
+        removeButton = addRenderableWidget(EditorWidgets.button(
                         Component.translatable("screen.talent_editor.requirements.remove"), button -> removeRow())
                 .bounds(x + (leftWidth + 6) / 2, actionY, (leftWidth - 6) / 2, 20).build());
 
         int backWidth = 76;
-        addRenderableWidget(Button.builder(Component.translatable("gui.cancel"), button -> onClose())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.cancel"), button -> onClose())
                 .bounds(x, height - 28, backWidth, 20).build());
-        applyButton = addRenderableWidget(Button.builder(
+        applyButton = addRenderableWidget(EditorWidgets.button(
                         Component.translatable("screen.talent_editor.requirements.apply"), button -> apply())
                 .bounds(x + backWidth + 6, height - 28, formWidth - backWidth - 6, 20).build());
 
@@ -112,7 +112,7 @@ public final class TalentRequirementsScreen extends Screen {
         EditorTheme.panel(graphics, x - 7, 30, leftWidth + 14, Math.max(160, height - 91));
         EditorTheme.panel(graphics, rightX - 7, 30, rightWidth + 14, Math.max(160, height - 91));
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 12, EditorTheme.TEXT);
+        EditorTheme.title(graphics,font,title,width);
         graphics.drawString(font, Component.translatable("screen.talent_editor.requirements.list", rows.size()),
                 x, 65, EditorTheme.MUTED, false);
         graphics.drawString(font, targetLabel(), rightX, 70, EditorTheme.MUTED, false);

@@ -37,6 +37,9 @@ public record UpdateEditorSettingsPacket(
         if (player != null) {
             if (!player.hasPermissions(2)) {
                 player.sendSystemMessage(Component.translatable("message.talent_editor.permission_denied"));
+                EditorNetwork.sendManagementResult(player, new com.kidxoxo.talenteditor.settings.EditorSettingsService.ManagementResult(
+                        com.kidxoxo.talenteditor.settings.EditorSettingsService.ManagementAction.UPDATE_SETTINGS, false,
+                        Component.translatable("message.talent_editor.permission_denied").getString()));
             } else {
                 try {
                     TalentEditorMod.SETTINGS.update(

@@ -19,6 +19,7 @@ public final class ActionConditionRuntime {
 
     public static boolean active(CompiledAction action, ServerPlayer owner, Entity eventEntity,
                                  double eventAmount, double currentDamage, ResourceLocation talentId) {
+        if (!hasConditions(action)) return true;
         var context = eventEntity == null ? ConditionEvaluator.context(owner)
                 : ConditionEvaluator.eventContext(owner, eventEntity, null, ItemStack.EMPTY, null, null);
         var resolver = NumericExpressionRuntime.resolver(owner, eventEntity, eventAmount, currentDamage, talentId);
@@ -36,9 +37,15 @@ public final class ActionConditionRuntime {
 
     public static boolean active(CompiledCondition enabledWhen, CompiledCondition disabledWhen,
                                  ServerPlayer owner, ResourceLocation talentId) {
+        if (enabledWhen == null && disabledWhen == null) return true;
         var context = ConditionEvaluator.context(owner);
         var resolver = NumericExpressionRuntime.resolver(owner, null, 0.0D, 0.0D, talentId);
         return (enabledWhen == null || ConditionEvaluator.test(enabledWhen, context, resolver))
                 && (disabledWhen == null || !ConditionEvaluator.test(disabledWhen, context, resolver));
+    }
+
+    static boolean hasConditions(CompiledAction action) {
+        return action instanceof ConditionalAction gate
+                && (gate.enabledWhen().isPresent() || gate.disabledWhen().isPresent());
     }
 }

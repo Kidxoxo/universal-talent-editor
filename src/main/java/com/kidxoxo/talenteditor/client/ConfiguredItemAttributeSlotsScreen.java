@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.function.Consumer;
 
 /** One attribute modifier may apply in several equipment slots. */
-final class ConfiguredItemAttributeSlotsScreen extends Screen {
+final class ConfiguredItemAttributeSlotsScreen extends EditorScreen {
     private static final List<String> SLOTS = List.of(
             "mainhand", "offhand", "head", "chest", "legs", "feet", "curios");
     private static final int ROW_HEIGHT = 24;
@@ -30,9 +30,9 @@ final class ConfiguredItemAttributeSlotsScreen extends Screen {
 
     @Override protected void init() {
         int w = Math.min(420, width - 32), x = (width - w) / 2;
-        addRenderableWidget(Button.builder(Component.translatable("gui.cancel"), b -> onClose())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.cancel"), b -> onClose())
                 .bounds(x, height - 28, (w - 6) / 2, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.done"), b -> apply())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.done"), b -> apply())
                 .bounds(x + (w + 6) / 2, height - 28, (w - 6) / 2, 20).build());
     }
 
@@ -41,7 +41,7 @@ final class ConfiguredItemAttributeSlotsScreen extends Screen {
         int w = Math.min(420, width - 32), x = (width - w) / 2;
         EditorTheme.panel(graphics, x - 8, 29, w + 16, Math.min(height - 65, 230));
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 11, EditorTheme.TEXT);
+        EditorTheme.title(graphics,font,title,width);
         graphics.drawString(font, Component.translatable(
                 "screen.talent_editor.configured_item.attributes.slots_help"), x + 4, 39,
                 EditorTheme.MUTED, false);

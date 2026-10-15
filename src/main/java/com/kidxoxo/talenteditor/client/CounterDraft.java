@@ -13,6 +13,7 @@ import java.util.List;
 
 public final class CounterDraft {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    String snapshot() { return root.toString(); }
     private final JsonObject root;
 
     private CounterDraft(JsonObject root) {

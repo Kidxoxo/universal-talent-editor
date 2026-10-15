@@ -18,24 +18,30 @@ public record ValidationResultPacket(
         boolean conflict,
         long activeRevision,
         String activeHash,
-        List<ValidationIssue> issues
+        List<ValidationIssue> issues,
+        long requestId
 ) {
     private static final int MAX_ISSUES = 100;
     private static final int MAX_TEXT = 2_048;
+
+    public ValidationResultPacket(boolean accepted, boolean committed, boolean conflict, long revision, String hash, List<ValidationIssue> issues) {
+        this(accepted,committed,conflict,revision,hash,issues,0);
+    }
 
     public ValidationResultPacket {
         issues = List.copyOf(issues);
     }
 
-    static ValidationResultPacket from(EditorSubmissionResult result) {
+    static ValidationResultPacket from(EditorSubmissionResult result, long requestId) {
         List<ValidationIssue> issues = result.report().issues().stream().limit(MAX_ISSUES).toList();
         return new ValidationResultPacket(
                 result.accepted(), result.committed(), result.conflict(),
-                result.activeRevision(), result.activeHash(), issues
+                result.activeRevision(), result.activeHash(), issues, requestId
         );
     }
 
     static void encode(ValidationResultPacket packet, FriendlyByteBuf buffer) {
+        buffer.writeVarLong(packet.requestId());
         buffer.writeBoolean(packet.accepted());
         buffer.writeBoolean(packet.committed());
         buffer.writeBoolean(packet.conflict());
@@ -52,6 +58,7 @@ public record ValidationResultPacket(
     }
 
     static ValidationResultPacket decode(FriendlyByteBuf buffer) {
+        long requestId = buffer.readVarLong();
         boolean accepted = buffer.readBoolean();
         boolean committed = buffer.readBoolean();
         boolean conflict = buffer.readBoolean();
@@ -71,7 +78,7 @@ public record ValidationResultPacket(
                     buffer.readUtf(MAX_TEXT)
             ));
         }
-        return new ValidationResultPacket(accepted, committed, conflict, revision, hash, issues);
+        return new ValidationResultPacket(accepted, committed, conflict, revision, hash, issues, requestId);
     }
 
     static void handle(ValidationResultPacket packet, Supplier<NetworkEvent.Context> contextSupplier) {

@@ -10,8 +10,8 @@ import net.minecraft.network.chat.Component;
 
 import java.util.List;
 
-public final class EditorHomeScreen extends Screen {
-    private static final int ROW_HEIGHT = 18;
+public final class EditorHomeScreen extends EditorScreen {
+    private static final int ROW_HEIGHT = EditorTheme.DEFINITION_ROW_HEIGHT;
 
     private final EditorBootstrap bootstrap;
     private final List<String> talentSources;
@@ -21,6 +21,7 @@ public final class EditorHomeScreen extends Screen {
     private DefinitionListFilter.State talentState = DefinitionListFilter.State.ALL;
     private String talentSource = "";
     private int talentScroll;
+    private int keyboardIndex=-1;
     private String localStatus = "";
     private final EditorOptionPopup options = new EditorOptionPopup();
 
@@ -32,35 +33,37 @@ public final class EditorHomeScreen extends Screen {
 
     @Override
     protected void init() {
+        var remembered=EditorListMemory.get("Talent");
+        talentState=remembered.state();talentSource=remembered.source();talentScroll=remembered.scroll();keyboardIndex=remembered.selected();
         int contentWidth = Math.min(900, width - 32);
         int x = (width - contentWidth) / 2;
         int actionGap = 4;
         int actionWidth = Math.max(55, (contentWidth - actionGap * 2) / 3);
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.new_talent"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.new_talent"),
                         button -> openNew())
                 .bounds(x, 45, actionWidth, 20)
                 .build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.tree.open"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.tree.open"),
                         button -> openTalentTree())
                 .bounds(x + actionWidth + actionGap, 45, actionWidth, 20)
                 .build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.manage_rarities"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.manage_rarities"),
                         button -> openRarities())
                 .bounds(x + (actionWidth + actionGap) * 2, 45,
                         contentWidth - (actionWidth + actionGap) * 2, 20)
                 .build());
         int managementWidth = Math.max(36, (contentWidth - actionGap * 3) / 4);
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.manage_pools"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.manage_pools"),
                         button -> openPools())
                 .bounds(x, 69, managementWidth, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.manage_counters"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.manage_counters"),
                         button -> openCounters())
                 .bounds(x + managementWidth + actionGap, 69, managementWidth, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.manage_layouts"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.manage_layouts"),
                         button -> openLayouts())
                 .bounds(x + (managementWidth + actionGap) * 2, 69,
                         managementWidth, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.manage_configured_items"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.manage_configured_items"),
                         button -> openConfiguredItems())
                 .bounds(x + (managementWidth + actionGap) * 3, 69,
                         contentWidth - (managementWidth + actionGap) * 3, 20).build());
@@ -72,25 +75,26 @@ public final class EditorHomeScreen extends Screen {
                 Math.max(28, stateX - x - 4), 20,
                 Component.translatable("screen.talent_editor.filter.search"));
         talentSearch.setHint(Component.translatable("screen.talent_editor.filter.search"));
-        talentSearch.setResponder(ignored -> talentScroll = 0);
+        talentSearch.setValue(remembered.query());
+        talentSearch.setResponder(ignored -> {talentScroll=0;keyboardIndex=-1;});
         addRenderableWidget(talentSearch);
-        talentStateButton = addRenderableWidget(Button.builder(talentStateLabel(), button -> chooseTalentState())
+        talentStateButton = addRenderableWidget(EditorWidgets.button(talentStateLabel(), button -> chooseTalentState())
                 .bounds(stateX, 94, stateWidth, 20).build());
-        talentSourceButton = addRenderableWidget(Button.builder(talentSourceLabel(), button -> chooseTalentSource())
+        talentSourceButton = addRenderableWidget(EditorWidgets.button(talentSourceLabel(), button -> chooseTalentSource())
                 .bounds(sourceX, 94, sourceWidth, 20).build());
         int bottomGap = 4;
         int bottomWidth = Math.max(40, (width - 32 - bottomGap * 3) / 4);
         int bottomX = 16;
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.manage_settings"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.manage_settings"),
                         button -> openSettings())
                 .bounds(bottomX, height - 28, bottomWidth, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.manage_resources"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.manage_resources"),
                         button -> openResources())
                 .bounds(bottomX + bottomWidth + bottomGap, height - 28, bottomWidth, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.history.open"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.history.open"),
                         button -> openHistory())
                 .bounds(bottomX + (bottomWidth + bottomGap) * 2, height - 28, bottomWidth, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.done"), button -> onClose())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.done"), button -> onClose())
                 .bounds(bottomX + (bottomWidth + bottomGap) * 3, height - 28,
                         width - bottomX * 2 - (bottomWidth + bottomGap) * 3, 20).build());
     }
@@ -99,7 +103,7 @@ public final class EditorHomeScreen extends Screen {
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics);
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 10, 0xFFFFFF);
+        EditorTheme.title(graphics,font,title,width);
         graphics.drawCenteredString(font, Component.translatable(
                 "screen.talent_editor.revision", bootstrap.revision(), shortHash(bootstrap.contentHash())
         ), width / 2, 25, 0xA0A0A0);
@@ -109,10 +113,10 @@ public final class EditorHomeScreen extends Screen {
         List<EditorBootstrap.TalentSummary> talents = filteredTalents();
         graphics.drawString(font, Component.translatable("screen.talent_editor.talents",
                 Component.translatable("screen.talent_editor.filter.count", talents.size(), bootstrap.talents().size())),
-                x, 121, 0xFFFFFF, false);
+                x, 121, EditorTheme.TEXT, false);
         renderTalents(graphics, mouseX, mouseY, x, contentWidth);
         if (!localStatus.isBlank()) {
-            graphics.drawString(font, fit(localStatus, width - 32), 16, height - 40, 0xA0A0A0, false);
+            graphics.drawString(font, fit(localStatus, width - 32), 16, height - 40, EditorTheme.MUTED, false);
         }
         options.render(graphics, font, width, height);
     }
@@ -126,13 +130,11 @@ public final class EditorHomeScreen extends Screen {
         for (int index = talentScroll; index < end; index++) {
             EditorBootstrap.TalentSummary talent = talents.get(index);
             int y = top + (index - talentScroll) * ROW_HEIGHT;
-            if (hovered(mouseX, mouseY, x, x + contentWidth, y)) {
-                graphics.fill(x, y - 3, x + contentWidth, y + 14, 0x504A90E2);
-            }
             int color = talent.enabled() && talent.available() ? 0xE8E8E8 : 0x909090;
-            String label = talent.id() + " — " + talent.name() + "  {"
-                    + DefinitionListFilter.compactSource(talent.source()) + "}";
-            graphics.drawString(font, fit(label, contentWidth - 8), x + 4, y, color, false);
+            String label = talent.id() + "  · "
+                    + DefinitionListFilter.compactSource(talent.source());
+            EditorTheme.definitionRow(graphics, font, x, y, contentWidth, false,
+                    hovered(mouseX, mouseY, x, x + contentWidth, y), talent.name(), label, color);
         }
         if (talents.isEmpty()) graphics.drawCenteredString(font,
                 Component.translatable("screen.talent_editor.filter.empty"),
@@ -149,7 +151,7 @@ public final class EditorHomeScreen extends Screen {
                 int row = (int) ((mouseY - 137) / ROW_HEIGHT);
                 List<EditorBootstrap.TalentSummary> talents = filteredTalents();
                 int index = talentScroll + row;
-                if (index >= 0 && index < talents.size()) {
+                if (row < visibleRows(137) && index >= 0 && index < talents.size()) {
                     localStatus = Component.translatable("screen.talent_editor.loading_talent").getString();
                     EditorNetwork.requestTalent(talents.get(index).id());
                     return true;
@@ -247,6 +249,12 @@ public final class EditorHomeScreen extends Screen {
 
     @Override public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         if (options.keyPressed(keyCode, height)) return true;
+        var entries=filteredTalents();
+        if(!entries.isEmpty()&&(keyCode==264||keyCode==265)){
+            keyboardIndex=Math.max(0,Math.min(entries.size()-1,keyboardIndex+(keyCode==264?1:-1)));
+            int rows=visibleRows(137);talentScroll=Math.max(0,Math.min(talentScroll,keyboardIndex));talentScroll=Math.max(talentScroll,keyboardIndex-rows+1);return true;
+        }
+        if((keyCode==257||keyCode==335)&&keyboardIndex>=0&&keyboardIndex<entries.size()){EditorNetwork.requestTalent(entries.get(keyboardIndex).id());return true;}
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
     @Override public boolean charTyped(char codePoint, int modifiers) {
@@ -275,7 +283,7 @@ public final class EditorHomeScreen extends Screen {
     }
 
     private static boolean hovered(double mouseX, double mouseY, int left, int right, int y) {
-        return mouseX >= left && mouseX < right && mouseY >= y - 3 && mouseY < y + 14;
+        return mouseX >= left && mouseX < right && mouseY >= y && mouseY < y + ROW_HEIGHT;
     }
 
     private String fit(String value, int maximumWidth) {
@@ -284,5 +292,10 @@ public final class EditorHomeScreen extends Screen {
 
     private static String shortHash(String value) {
         return value.length() <= 12 ? value : value.substring(0, 12);
+    }
+
+    @Override public void removed() {
+        EditorListMemory.put("Talent",new EditorListMemory.View(talentSearch==null?"":talentSearch.getValue(),talentState,talentSource,talentScroll,keyboardIndex));
+        super.removed();
     }
 }

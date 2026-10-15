@@ -13,7 +13,7 @@ import net.minecraft.resources.ResourceLocation;
 
 import java.util.Locale;
 
-final class DeleteDefinitionScreen extends Screen {
+final class DeleteDefinitionScreen extends EditorScreen {
     private final Screen parent;
     private final DefinitionKind kind;
     private final ResourceLocation id;
@@ -41,11 +41,11 @@ final class DeleteDefinitionScreen extends Screen {
     @Override
     protected void init() {
         int center = width / 2;
-        confirmButton = addRenderableWidget(Button.builder(
+        confirmButton = addRenderableWidget(EditorWidgets.button(
                 Component.translatable("screen.talent_editor.delete.confirm"), button -> submit()
         ).bounds(center - 104, height - 32, 100, 20).build());
         confirmButton.active = !waiting;
-        addRenderableWidget(Button.builder(Component.translatable("gui.back"), button -> returnParent())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.back"), button -> returnParent())
                 .bounds(center + 4, height - 32, 100, 20).build());
     }
 
@@ -53,7 +53,7 @@ final class DeleteDefinitionScreen extends Screen {
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics);
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 18, 0xFFFFFF);
+        EditorTheme.title(graphics,font,title,width);
         graphics.drawWordWrap(font, Component.translatable(
                 "screen.talent_editor.delete.target",
                 Component.translatable("screen.talent_editor.references.kind." + kind.serializedName()),

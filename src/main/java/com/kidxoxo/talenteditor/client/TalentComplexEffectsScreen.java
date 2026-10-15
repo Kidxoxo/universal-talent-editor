@@ -11,7 +11,7 @@ import net.minecraft.resources.ResourceLocation;
 import java.util.List;
 import java.util.Locale;
 
-public final class TalentComplexEffectsScreen extends Screen {
+public final class TalentComplexEffectsScreen extends EditorScreen {
     private static final int ROW_HEIGHT = 20;
     private final TalentEditScreen owner;
     private final Screen parent;
@@ -38,13 +38,13 @@ public final class TalentComplexEffectsScreen extends Screen {
         int x = (width - formWidth) / 2;
         int gap = 6;
         int topThird = (formWidth - gap * 2) / 3;
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.complex.add_dynamic"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.complex.add_dynamic"),
                         button -> addDynamic())
                 .bounds(x, 42, topThird, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.add_refresh_bonus"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.add_refresh_bonus"),
                         button -> addRefresh())
                 .bounds(x + topThird + gap, 42, topThird, 20).build());
-        flight = addRenderableWidget(Button.builder(flightLabel(), button -> toggleFlight())
+        flight = addRenderableWidget(EditorWidgets.button(flightLabel(), button -> toggleFlight())
                 .bounds(x + (topThird + gap) * 2, 42, formWidth - (topThird + gap) * 2, 20).build());
 
         int detailY = height - 84;
@@ -53,11 +53,11 @@ public final class TalentComplexEffectsScreen extends Screen {
                 Component.translatable("screen.talent_editor.complex.refresh_amount"));
         refreshAmount.setMaxLength(3);
         addRenderableWidget(refreshAmount);
-        applyRefresh = addRenderableWidget(Button.builder(
+        applyRefresh = addRenderableWidget(EditorWidgets.button(
                         Component.translatable("screen.talent_editor.complex.apply_refresh"),
                         button -> applyRefresh())
                 .bounds(x + third + gap, detailY, third, 20).build());
-        editSelected = addRenderableWidget(Button.builder(
+        editSelected = addRenderableWidget(EditorWidgets.button(
                         Component.translatable("screen.talent_editor.complex.edit_dynamic"),
                         button -> editSelected())
                 .bounds(x + (third + gap) * 2, detailY,
@@ -65,9 +65,9 @@ public final class TalentComplexEffectsScreen extends Screen {
 
         int bottom = height - 28;
         int half = (formWidth - gap) / 2;
-        addRenderableWidget(Button.builder(Component.translatable("gui.back"), button -> returnOwner())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.back"), button -> returnOwner())
                 .bounds(x, bottom, half, 20).build());
-        remove = addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.remove_effect"),
+        remove = addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.remove_effect"), EditorTheme.Tone.DANGER,
                         button -> removeSelected())
                 .bounds(x + half + gap, bottom, formWidth - half - gap, 20).build());
         syncSelection();
@@ -82,7 +82,7 @@ public final class TalentComplexEffectsScreen extends Screen {
         EditorTheme.panel(graphics, x - 7, 70, formWidth + 14, Math.max(1, height - 167));
         EditorTheme.panel(graphics, x - 7, height - 91, formWidth + 14, 55);
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 9, EditorTheme.TEXT);
+        EditorTheme.title(graphics,font,title,width);
         graphics.drawCenteredString(font, Component.translatable("screen.talent_editor.complex.help"),
                 width / 2, 28, EditorTheme.MUTED);
         renderRows(graphics, mouseX, mouseY, x, formWidth);
@@ -137,6 +137,7 @@ public final class TalentComplexEffectsScreen extends Screen {
             int bottom = height - 96;
             if (mouseX >= x && mouseX < x + formWidth && mouseY >= top && mouseY < bottom) {
                 int index = scroll + (int) ((mouseY - top) / ROW_HEIGHT);
+                if(index>=scroll+Math.max(1,(height-82-96)/ROW_HEIGHT))return true;
                 List<TalentDraft.EffectRow> rows = rows();
                 if (index >= 0 && index < rows.size()) {
                     selectedRawIndex = rows.get(index).rawIndex();

@@ -15,6 +15,15 @@
     "consumeCount": 0,
     "actions": []
   },
-  "loot": [],
+  "loot": [
+    {
+      "tableMatch": "regex",
+      "table": "[a-z0-9_.-]+:chests?/.*",
+      "chance": 0.05,
+      "chancePerLuck": 0.0,
+      "minCount": 1,
+      "maxCount": 1
+    }
+  ],
   "requiredMods": []
 }

@@ -12,7 +12,7 @@ import net.minecraft.network.chat.Component;
 import java.util.function.Consumer;
 
 /** Escape hatch for trigger features that do not yet have individual visual controls. */
-public final class ConfiguredItemJsonScreen extends Screen {
+public final class ConfiguredItemJsonScreen extends EditorScreen {
     private final Screen parent;
     private final Consumer<JsonObject> receiver;
     private final String original;
@@ -33,9 +33,9 @@ public final class ConfiguredItemJsonScreen extends Screen {
         jsonField.setValue(original);
         addRenderableWidget(jsonField);
         int half = (w - 6) / 2;
-        addRenderableWidget(Button.builder(Component.translatable("gui.cancel"), b -> close())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.cancel"), b -> close())
                 .bounds(x, height - 28, half, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.done"), b -> apply())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.done"), b -> apply())
                 .bounds(x + half + 6, height - 28, w - half - 6, 20).build());
     }
 
@@ -55,7 +55,7 @@ public final class ConfiguredItemJsonScreen extends Screen {
         int w = Math.min(760, width - 32), x = (width - w) / 2;
         EditorTheme.panel(graphics, x - 7, 27, w + 14, 91);
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 10, EditorTheme.TEXT);
+        EditorTheme.title(graphics,font,title,width);
         graphics.drawString(font, Component.translatable(
                 "screen.talent_editor.configured_item.triggers.raw_help"), x, 44, EditorTheme.MUTED, false);
         if (!status.isBlank()) graphics.drawString(font, font.plainSubstrByWidth(status, w), x,

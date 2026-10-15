@@ -16,6 +16,7 @@ import java.util.Set;
 public final class ConfiguredItemDraft {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
+    String snapshot() { return root.toString(); }
     private final JsonObject root;
 
     private ConfiguredItemDraft(JsonObject root) {

@@ -11,7 +11,7 @@ import net.minecraft.network.chat.Component;
 import java.util.function.Consumer;
 
 /** Optional RGB, hue, opacity, and relative size adjustment for simple registered particles. */
-final class TalentParticleColorScreen extends Screen {
+final class TalentParticleColorScreen extends EditorScreen {
     private final Screen parent;
     private final JsonObject draft;
     private final Consumer<JsonObject> apply;
@@ -35,9 +35,9 @@ final class TalentParticleColorScreen extends Screen {
         sizeTo = field(right, 83, half, value("sizeTo", "1"));
         alphaFrom = field(right, 117, half, value("alphaFrom", "1"));
         alphaTo = field(right, 151, half, value("alphaTo", "1"));
-        addRenderableWidget(Button.builder(Component.translatable("gui.cancel"), button -> close())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.cancel"), button -> close())
                 .bounds(x, height - 28, 90, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.done"), button -> save())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.done"), button -> save())
                 .bounds(x + 98, height - 28, w - 98, 20).build());
     }
 
@@ -97,7 +97,7 @@ final class TalentParticleColorScreen extends Screen {
         int half = (w - 8) / 2, right = x + half + 8;
         EditorTheme.panel(graphics, x - 7, 25, w + 14, Math.min(205, height - 58));
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 10, EditorTheme.TEXT);
+        EditorTheme.title(graphics,font,title,width);
         label(graphics, "from", x, 37);
         label(graphics, "to", x, 71);
         label(graphics, "hue", x, 105);
@@ -110,7 +110,7 @@ final class TalentParticleColorScreen extends Screen {
         if (end >= 0) graphics.fill(x + half / 2 + 3, 155, x + half, 167, 0xFF000000 | end);
         graphics.drawString(font, Component.translatable("screen.talent_editor.particles.color.hint"),
                 x, 183, EditorTheme.MUTED, false);
-        if (!status.isBlank()) graphics.drawString(font, status, x, height - 42, 0xFF7777, false);
+        if (!status.isBlank()) graphics.drawString(font, status, x, height - 42, EditorTheme.ERROR, false);
     }
 
     private int safeColor(EditBox box) {

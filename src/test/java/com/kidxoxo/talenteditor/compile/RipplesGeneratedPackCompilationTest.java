@@ -94,9 +94,13 @@ class RipplesGeneratedPackCompilationTest {
             assertEquals("0", progression.getAsJsonArray("actions").get(2)
                     .getAsJsonObject().get("expression").getAsString());
             JsonObject shinku = talents.get(new ResourceLocation("ripples_talents", "talent_039"));
+            var messages = shinku.getAsJsonArray("onAcquire").asList().stream()
+                    .map(JsonElement::getAsJsonObject)
+                    .filter(cue -> cue.get("type").getAsString().equals("show_message")).toList();
             int[] ticks = {0, 100, 200, 340, 520};
+            assertEquals(ticks.length, messages.size());
             for (int index = 0; index < ticks.length; index++) {
-                JsonObject cue = shinku.getAsJsonArray("onAcquire").get(index).getAsJsonObject();
+                JsonObject cue = messages.get(index);
                 assertEquals("show_message", cue.get("type").getAsString());
                 assertEquals(ticks[index], cue.get("atTick").getAsInt());
             }

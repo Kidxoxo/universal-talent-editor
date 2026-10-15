@@ -44,7 +44,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 
 public final class EditorNetwork {
-    private static final String PROTOCOL = "42";
+    private static final String PROTOCOL = "46";
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final int MAX_CATALOG_ENTRIES = 10_000;
     private static final int MAX_POOL_ENTRIES = 2_048;
@@ -61,6 +61,10 @@ public final class EditorNetwork {
             .clientAcceptedVersions(PROTOCOL::equals)
             .serverAcceptedVersions(PROTOCOL::equals)
             .simpleChannel();
+
+    public static void sendPresentationChat(ServerPlayer player, Component text, int visibleTicks) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new PresentationChatPacket(text, visibleTicks));
+    }
 
     private static int nextMessageId;
     private static boolean registered;
@@ -328,6 +332,11 @@ public final class EditorNetwork {
                 .decoder(HudResourceStatePacket::decode)
                 .consumerMainThread(HudResourceStatePacket::handle)
                 .add();
+        CHANNEL.messageBuilder(PresentationChatPacket.class, nextMessageId++, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(PresentationChatPacket::encode)
+                .decoder(PresentationChatPacket::decode)
+                .consumerMainThread(PresentationChatPacket::handle)
+                .add();
     }
 
     public static void requestOpen() {
@@ -366,28 +375,28 @@ public final class EditorNetwork {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), packet);
     }
 
-    public static void submitTalent(long baseRevision, ResourceLocation id, String json, boolean commit) {
-        CHANNEL.sendToServer(new SubmitTalentPacket(baseRevision, id, json, commit));
+    public static void submitTalent(long baseRevision, ResourceLocation id, String json, boolean commit, long requestId) {
+        CHANNEL.sendToServer(new SubmitTalentPacket(baseRevision, id, json, commit, requestId));
     }
 
-    public static void submitPool(long baseRevision, ResourceLocation id, String json, boolean commit) {
-        CHANNEL.sendToServer(new SubmitPoolPacket(baseRevision, id, json, commit));
+    public static void submitPool(long baseRevision, ResourceLocation id, String json, boolean commit, long requestId) {
+        CHANNEL.sendToServer(new SubmitPoolPacket(baseRevision, id, json, commit, requestId));
     }
 
-    public static void submitRarity(long baseRevision, ResourceLocation id, String json, boolean commit) {
-        CHANNEL.sendToServer(new SubmitRarityPacket(baseRevision, id, json, commit));
+    public static void submitRarity(long baseRevision, ResourceLocation id, String json, boolean commit, long requestId) {
+        CHANNEL.sendToServer(new SubmitRarityPacket(baseRevision, id, json, commit, requestId));
     }
 
-    public static void submitCounter(long baseRevision, ResourceLocation id, String json, boolean commit) {
-        CHANNEL.sendToServer(new SubmitCounterPacket(baseRevision, id, json, commit));
+    public static void submitCounter(long baseRevision, ResourceLocation id, String json, boolean commit, long requestId) {
+        CHANNEL.sendToServer(new SubmitCounterPacket(baseRevision, id, json, commit, requestId));
     }
 
-    public static void submitLayout(long baseRevision, ResourceLocation id, String json, boolean commit) {
-        CHANNEL.sendToServer(new SubmitLayoutPacket(baseRevision, id, json, commit));
+    public static void submitLayout(long baseRevision, ResourceLocation id, String json, boolean commit, long requestId) {
+        CHANNEL.sendToServer(new SubmitLayoutPacket(baseRevision, id, json, commit, requestId));
     }
 
-    public static void submitConfiguredItem(long baseRevision, ResourceLocation id, String json, boolean commit) {
-        CHANNEL.sendToServer(new SubmitConfiguredItemPacket(baseRevision, id, json, commit));
+    public static void submitConfiguredItem(long baseRevision, ResourceLocation id, String json, boolean commit, long requestId) {
+        CHANNEL.sendToServer(new SubmitConfiguredItemPacket(baseRevision, id, json, commit, requestId));
     }
 
     public static void deleteDefinition(long baseRevision, DefinitionKind kind, ResourceLocation id) {
@@ -448,6 +457,10 @@ public final class EditorNetwork {
                 com.kidxoxo.talenteditor.settings.EditorSettingsService.ManagementAction.IMPORT,
                 archivePath
         ));
+    }
+
+    public static void previewImport(String input) {
+        CHANNEL.sendToServer(new EditorManagementActionPacket(com.kidxoxo.talenteditor.settings.EditorSettingsService.ManagementAction.PREVIEW_IMPORT,input));
     }
 
     public static void sendSettings(ServerPlayer player) {
@@ -615,8 +628,8 @@ public final class EditorNetwork {
                 .forEach(states::add);
     }
 
-    public static void sendValidation(ServerPlayer player, EditorSubmissionResult result) {
-        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), ValidationResultPacket.from(result));
+    public static void sendValidation(ServerPlayer player, long requestId, EditorSubmissionResult result) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), ValidationResultPacket.from(result, requestId));
     }
 
     public static void sendDeletionResult(ServerPlayer player, DefinitionDeletionResultPacket result) {
@@ -802,7 +815,7 @@ public final class EditorNetwork {
                     pool.pityAfter() > 0 && PlayerTalents.drawPity(player, pool.id()) >= pool.pityAfter() - 1,
                     TalentDrawService.rarityProbabilitiesForPlayer(snapshot, pool, player), offers
             );
-            CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new DrawSessionPacket(view));
+            CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new DrawSessionPacket(view, TalentEditorMod.SNAPSHOTS.active().bookLayout()));
             return;
         }
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),

@@ -19,7 +19,7 @@ import java.util.Locale;
 import java.util.Map;
 
 /** Interactive overview of talent acquisition and synthesis relationships. */
-public final class TalentTreeScreen extends Screen {
+public final class TalentTreeScreen extends EditorScreen {
     private static final int ACQUIRE_COLOR = 0xFF58C7E8;
     private static final int SYNTHESIS_COLOR = 0xFFFFB84D;
     private static final int DISABLED_COLOR = 0xFF6E7785;
@@ -84,58 +84,58 @@ public final class TalentTreeScreen extends Screen {
         searchField.setResponder(value -> searchValue = value);
         addRenderableWidget(searchField);
         int x = left + searchWidth + 4;
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.tree.locate"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.tree.locate"),
                 button -> locateSearch()).bounds(x, y, locateWidth, 20).build());
         x += locateWidth + 4;
-        relationFilterButton = addRenderableWidget(Button.builder(filterLabel(), button -> chooseFilter())
+        relationFilterButton = addRenderableWidget(EditorWidgets.button(filterLabel(), button -> chooseFilter())
                 .bounds(x, y, filterWidth, 20).build());
         x += filterWidth + 4;
-        addRenderableWidget(Button.builder(Component.literal("−"), button -> zoomAtCenter(1.0D / 1.2D))
+        addRenderableWidget(EditorWidgets.button(Component.literal("−"), button -> zoomAtCenter(1.0D / 1.2D))
                 .bounds(x, y, small, 20).build());
         x += small + 4;
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.tree.reset"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.tree.reset"),
                 button -> resetView()).bounds(x, y, resetWidth, 20).build());
         x += resetWidth + 4;
-        addRenderableWidget(Button.builder(Component.literal("+"), button -> zoomAtCenter(1.2D))
+        addRenderableWidget(EditorWidgets.button(Component.literal("+"), button -> zoomAtCenter(1.2D))
                 .bounds(x, y, Math.max(small, right - x), 20).build());
 
         int sideX = canvasRight() + 9;
         int sideWidth = Math.max(90, width - sideX - 8);
         int gap = 4;
         int half = (sideWidth - gap) / 2;
-        editTalentButton = addRenderableWidget(Button.builder(
+        editTalentButton = addRenderableWidget(EditorWidgets.button(
                         Component.translatable("screen.talent_editor.tree.edit_talent"),
                         button -> editSelected(TalentTreeEditRequest.Page.TALENT))
                 .bounds(sideX, 55, sideWidth, 20).build());
-        editAcquireButton = addRenderableWidget(Button.builder(
+        editAcquireButton = addRenderableWidget(EditorWidgets.button(
                         Component.translatable("screen.talent_editor.tree.edit_acquire"),
                         button -> editSelected(TalentTreeEditRequest.Page.ACQUISITION))
                 .bounds(sideX, 79, half, 20).build());
-        editSynthesisButton = addRenderableWidget(Button.builder(
+        editSynthesisButton = addRenderableWidget(EditorWidgets.button(
                         Component.translatable("screen.talent_editor.tree.edit_synthesis"),
                         button -> editSelected(TalentTreeEditRequest.Page.SYNTHESIS))
                 .bounds(sideX + half + gap, 79, sideWidth - half - gap, 20).build());
-        addAcquireButton = addRenderableWidget(Button.builder(
+        addAcquireButton = addRenderableWidget(EditorWidgets.button(
                         Component.translatable("screen.talent_editor.tree.add_acquire"),
                         button -> addRelation(RelationType.ACQUISITION))
                 .bounds(sideX, 103, half, 20).build());
-        addSynthesisButton = addRenderableWidget(Button.builder(
+        addSynthesisButton = addRenderableWidget(EditorWidgets.button(
                         Component.translatable("screen.talent_editor.tree.add_synthesis"),
                         button -> addRelation(RelationType.SYNTHESIS))
                 .bounds(sideX + half + gap, 103, sideWidth - half - gap, 20).build());
-        editEdgeButton = addRenderableWidget(Button.builder(
+        editEdgeButton = addRenderableWidget(EditorWidgets.button(
                         Component.translatable("screen.talent_editor.tree.edit_relation"),
                         button -> editSelectedEdge())
                 .bounds(sideX, 127, half, 20).build());
-        removeEdgeButton = addRenderableWidget(Button.builder(
+        removeEdgeButton = addRenderableWidget(EditorWidgets.button(
                         Component.translatable("screen.talent_editor.tree.remove_relation"),
                         button -> removeSelectedEdge())
                 .bounds(sideX + half + gap, 127, sideWidth - half - gap, 20).build());
-        edgeVisibilityButton = addRenderableWidget(Button.builder(edgeVisibilityLabel(), button -> {
+        edgeVisibilityButton = addRenderableWidget(EditorWidgets.button(edgeVisibilityLabel(), button -> {
                     showAllEdges = !showAllEdges;
                     edgeVisibilityButton.setMessage(edgeVisibilityLabel());
                 }).bounds(sideX, 151, sideWidth, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.back"), button -> returnHome())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.back"), button -> returnHome())
                 .bounds(sideX, height - 28, sideWidth, 20).build());
         if (!viewInitialized) resetView();
         updateButtons();
@@ -157,7 +157,7 @@ public final class TalentTreeScreen extends Screen {
         renderNodes(graphics, mouseX, mouseY);
         graphics.disableScissor();
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 9, EditorTheme.TEXT);
+        EditorTheme.title(graphics,font,title,width);
         renderSidebar(graphics, right + 10);
         graphics.drawString(font, Component.translatable("screen.talent_editor.tree.legend.acquire"),
                 left + 4, bottom - 12, ACQUIRE_COLOR, false);

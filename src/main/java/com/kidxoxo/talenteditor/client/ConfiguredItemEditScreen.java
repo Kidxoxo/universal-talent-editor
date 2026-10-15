@@ -18,7 +18,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 
-public final class ConfiguredItemEditScreen extends Screen {
+public final class ConfiguredItemEditScreen extends EditorDefinitionScreen {
     private static final String MOD_ID_PATTERN = "[a-z][a-z0-9_-]{1,63}";
 
     private final EditorBootstrap bootstrap;
@@ -44,6 +44,7 @@ public final class ConfiguredItemEditScreen extends Screen {
     private Button referencesButton;
     private Button curiosButton;
     private String localStatus = "";
+    private final EditorOptionPopup itemOptions = new EditorOptionPopup();
 
     private ConfiguredItemEditScreen(
             EditorBootstrap bootstrap,
@@ -83,78 +84,61 @@ public final class ConfiguredItemEditScreen extends Screen {
         return new ConfiguredItemEditScreen(bootstrap, ConfiguredItemDraft.parse(json), id, true);
     }
 
+    static ConfiguredItemEditScreen copyOf(EditorBootstrap bootstrap, ResourceLocation id, String json) {
+        return new ConfiguredItemEditScreen(bootstrap,ConfiguredItemDraft.parse(json),id,false);
+    }
+
     @Override
     protected void init() {
         int formWidth = Math.min(680, width - 32);
         int x = (width - formWidth) / 2;
         int rowStep = height >= 280 ? 34 : 30;
-        int toggleY = 30 + rowStep * 4;
+        int toggleY = 38 + rowStep * 4;
         int useY = toggleY + 26;
-        idField = field(x, 30, formWidth, idValue, 256, value -> idValue = value);
+        idField = field(x, 38, formWidth, idValue, 256, value -> idValue = value);
         idField.setEditable(!existing);
-        nameField = field(x, 30 + rowStep, formWidth, nameValue, 512, value -> nameValue = value);
-        descriptionField = field(x, 30 + rowStep * 2, formWidth, descriptionValue, 4096,
+        nameField = field(x, 38 + rowStep, formWidth, nameValue, 512, value -> nameValue = value);
+        descriptionField = field(x, 38 + rowStep * 2, formWidth, descriptionValue, 4096,
                 value -> descriptionValue = value);
         int gap = 6;
         int half = (formWidth - gap) / 2;
-        modelField = field(x, 30 + rowStep * 3, half, modelValue, 8, value -> modelValue = value);
-        modsField = field(x + half + gap, 30 + rowStep * 3, formWidth - half - gap, modsValue, 2048,
+        modelField = field(x, 38 + rowStep * 3, half, modelValue, 8, value -> modelValue = value);
+        modsField = field(x + half + gap, 38 + rowStep * 3, formWidth - half - gap, modsValue, 2048,
                 value -> modsValue = value);
         int toggleWidth = (formWidth - gap * 3) / 4;
-        addRenderableWidget(Button.builder(enabledLabel(), button -> {
-            enabled = !enabled;
-            button.setMessage(enabledLabel());
-            ClientEditorState.clearValidation();
-        }).bounds(x, toggleY, toggleWidth, 20).build());
-        addRenderableWidget(Button.builder(attributesLabel(), button -> openAttributeModifiers())
-                .bounds(x + toggleWidth + gap, toggleY, toggleWidth, 20).build());
-        addRenderableWidget(Button.builder(lootLabel(), button -> openLootRules())
-                .bounds(x + (toggleWidth + gap) * 2, toggleY, toggleWidth, 20).build());
-        addRenderableWidget(Button.builder(triggersLabel(), button -> openTriggers())
-                .bounds(x + (toggleWidth + gap) * 3, toggleY,
-                        formWidth - (toggleWidth + gap) * 3, 20).build());
-
-        int secondWidth = (formWidth - gap * 4) / 5;
-        addRenderableWidget(Button.builder(glintLabel(), button -> {
-            glint = !glint;
-            button.setMessage(glintLabel());
-            ClientEditorState.clearValidation();
-        }).bounds(x, useY, secondWidth, 20).build());
-        Button useButton = addRenderableWidget(Button.builder(useLabel(), button -> openUseSettings())
-                .bounds(x + secondWidth + gap, useY, secondWidth, 20).build());
-        useButton.active = !ConfiguredItem.isSystemDefinitionId(definitionId);
-        curiosButton = addRenderableWidget(Button.builder(curiosLabel(), button -> openCuriosSlots())
-                .bounds(x + (secondWidth + gap) * 2, useY, secondWidth, 20).build());
-        addRenderableWidget(Button.builder(mainhandLabel(), button -> {
-            mainhandOnly = !mainhandOnly;
-            if (mainhandOnly) curiosEquippable = false;
-            button.setMessage(mainhandLabel());
-            curiosButton.setMessage(curiosLabel());
-            ClientEditorState.clearValidation();
-        }).bounds(x + (secondWidth + gap) * 3, useY, secondWidth, 20).build());
-        addRenderableWidget(Button.builder(
-                        Component.translatable("screen.talent_editor.configured_item.import_icon"),
-                        button -> openIconImport())
-                .bounds(x + (secondWidth + gap) * 4, useY,
-                        formWidth - (secondWidth + gap) * 4, 20).build());
+        addRenderableWidget(EditorWidgets.button(enabledLabel(), button -> {enabled = !enabled; button.setMessage(enabledLabel());})
+                .bounds(x, toggleY, toggleWidth, 20).build());
+        addRenderableWidget(EditorWidgets.button(EditorDefinitionScreen.tr("item_appearance"), button -> itemOptions.open(
+                EditorDefinitionScreen.tr("item_appearance"), List.of(glintLabel(), Component.translatable("screen.talent_editor.configured_item.import_icon")), 0,
+                choice -> {if(choice==0)glint=!glint;else openIconImport();}, height))
+                .bounds(x+toggleWidth+gap,toggleY,toggleWidth,20).build());
+        addRenderableWidget(EditorWidgets.button(EditorDefinitionScreen.tr("item_behavior"), button -> itemOptions.open(
+                EditorDefinitionScreen.tr("item_behavior"), List.of(attributesLabel(),lootLabel(),useLabel()), 0,
+                choice -> {if(choice==0)openAttributeModifiers();else if(choice==1)openLootRules();else if(!ConfiguredItem.isSystemDefinitionId(definitionId))openUseSettings();}, height))
+                .bounds(x+(toggleWidth+gap)*2,toggleY,toggleWidth,20).build());
+        addRenderableWidget(EditorWidgets.button(EditorDefinitionScreen.tr("item_advanced"), button -> itemOptions.open(
+                EditorDefinitionScreen.tr("item_advanced"), List.of(triggersLabel(),curiosLabel(),mainhandLabel()), 0,
+                choice -> {if(choice==0)openTriggers();else if(choice==1)openCuriosSlots();else {mainhandOnly=!mainhandOnly;if(mainhandOnly)curiosEquippable=false;}}, height))
+                .bounds(x+(toggleWidth+gap)*3,toggleY,formWidth-(toggleWidth+gap)*3,20).build());
 
         int bottomY = height - 28;
         int buttonWidth = Math.max(54, (formWidth - gap * 3) / 4);
-        addRenderableWidget(Button.builder(Component.translatable("gui.back"), button -> returnList())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.back"), button -> returnList())
                 .bounds(x, bottomY, buttonWidth, 20).build());
-        referencesButton = addRenderableWidget(Button.builder(
+        referencesButton = addRenderableWidget(EditorWidgets.button(
                         DefinitionReferenceScreen.buttonLabel(DefinitionReferenceScreen.inboundCount(
                                 bootstrap, DefinitionKind.ITEM, definitionId
-                        )), button -> openReferences())
+                        )), button -> definitionActions(bootstrap,ResourceLocation.tryParse(idField.getValue().strip()),existing,this::openReferences))
                 .bounds(x + buttonWidth + gap, bottomY, buttonWidth, 20).build());
-        referencesButton.active = existing;
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.validate"),
+        referencesButton.active = true;
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.validate"),
                         button -> submit(false))
                 .bounds(x + (buttonWidth + gap) * 2, bottomY, buttonWidth, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.save"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.save"), EditorTheme.Tone.PRIMARY,
                         button -> submit(true))
                 .bounds(x + (buttonWidth + gap) * 3, bottomY,
                         formWidth - (buttonWidth + gap) * 3, 20).build());
+        watchDefinition(DefinitionKind.ITEM);
     }
 
     private EditBox field(
@@ -178,72 +162,46 @@ public final class ConfiguredItemEditScreen extends Screen {
         renderBackground(graphics);
         int formWidth = Math.min(680, width - 32);
         int x = (width - formWidth) / 2;
-        EditorTheme.panel(graphics, x - 8, 24, formWidth + 16, 216);
+        EditorTheme.panel(graphics, x - 8, 24, formWidth + 16, Math.min(224, height - 60));
         super.render(graphics, mouseX, mouseY, partialTick);
         int half = (formWidth - 6) / 2;
         int rowStep = height >= 280 ? 34 : 30;
-        graphics.drawCenteredString(font, title, width / 2, 10, 0xFFFFFF);
-        label(graphics, "screen.talent_editor.configured_item.id", x, 19);
-        label(graphics, "screen.talent_editor.configured_item.name", x, 20 + rowStep);
-        label(graphics, "screen.talent_editor.configured_item.description", x, 20 + rowStep * 2);
-        label(graphics, "screen.talent_editor.configured_item.model", x, 20 + rowStep * 3);
+        EditorTheme.title(graphics,font,title,width);
+        label(graphics, "screen.talent_editor.configured_item.id", x, 27);
+        label(graphics, "screen.talent_editor.configured_item.name", x, 28 + rowStep);
+        label(graphics, "screen.talent_editor.configured_item.description", x, 28 + rowStep * 2);
+        label(graphics, "screen.talent_editor.configured_item.model", x, 28 + rowStep * 3);
         label(graphics, "screen.talent_editor.configured_item.required_mods", x + half + 6,
-                20 + rowStep * 3);
-        if (height >= 280) {
+                28 + rowStep * 3);
+        if (height >= 300) {
             graphics.drawString(font, font.plainSubstrByWidth(
                     Component.translatable("screen.talent_editor.configured_item.help").getString(), formWidth
-            ), x, 222, 0x808080, false);
+            ), x, 230, EditorTheme.MUTED, false);
         }
         renderResult(graphics, x, formWidth);
+        itemOptions.render(graphics,font,width,height);
     }
 
+    @Override public boolean mouseClicked(double x,double y,int b){return itemOptions.mouseClicked(x,y,b,width,height)||super.mouseClicked(x,y,b);}
+    @Override public boolean mouseScrolled(double x,double y,double d){return itemOptions.mouseScrolled(d,height)||super.mouseScrolled(x,y,d);}
+    @Override public boolean keyPressed(int k,int scan,int mods){return itemOptions.keyPressed(k,height)||super.keyPressed(k,scan,mods);}
+    @Override public boolean charTyped(char c,int mods){return itemOptions.isOpen()||super.charTyped(c,mods);}
+
     private void label(GuiGraphics graphics, String key, int x, int y) {
-        graphics.drawString(font, Component.translatable(key), x, y, 0xA0A0A0, false);
+        graphics.drawString(font, Component.translatable(key), x, y, EditorTheme.MUTED, false);
     }
 
     private void renderResult(GuiGraphics graphics, int x, int formWidth) {
-        ValidationResultPacket result = ClientEditorState.validation();
-        String message = localStatus;
-        int color = 0xA0A0A0;
-        if (result != null) {
-            if (result.committed()) {
-                message = Component.translatable("screen.talent_editor.result.saved", result.activeRevision()).getString();
-                color = 0x55FF55;
-                if (result.activeRevision() > baseRevision) {
-                    baseRevision = result.activeRevision();
-                    existing = true;
-                    ResourceLocation saved = ResourceLocation.tryParse(idField.getValue().strip());
-                    if (saved != null) definitionId = saved;
-                    idField.setEditable(false);
-                    if (referencesButton != null) referencesButton.active = true;
-                }
-            } else if (result.accepted()) {
-                message = Component.translatable("screen.talent_editor.result.valid").getString();
-                color = 0x55FF55;
-            } else if (result.conflict()) {
-                message = Component.translatable(
-                        "screen.talent_editor.result.conflict", result.activeRevision()
-                ).getString();
-                color = 0xFF5555;
-            } else {
-                ValidationIssue first = result.issues().isEmpty() ? null : result.issues().get(0);
-                message = first == null ? Component.translatable("screen.talent_editor.result.invalid").getString()
-                        : first.code() + " " + first.path() + ": " + first.message();
-                color = 0xFF7777;
-            }
-        }
-        if (!message.isBlank()) {
-            graphics.drawString(font, font.plainSubstrByWidth(message, formWidth),
-                    x, height >= 280 ? height - 47 : 200, color, false);
-        }
+        renderSubmissionResult(graphics, x, formWidth, localStatus);
     }
 
     private void submit(boolean commit) {
+        if(submissionPending())return;
         Values values = readValues();
         if (values == null) return;
         ClientEditorState.clearValidation();
         localStatus = Component.translatable("screen.talent_editor.result.waiting").getString();
-        EditorNetwork.submitConfiguredItem(baseRevision, values.id(), draft.toJson(
+        sendDefinition(baseRevision, values.id(), ConfiguredItemDraft.parse(draft.snapshot()).toJson(
                 values.name(), descriptionField.getValue(), enabled, values.customModelData(), glint,
                 curiosEquippable, mainhandOnly, curiosSlots,
                 values.requiredMods()
@@ -416,6 +374,7 @@ public final class ConfiguredItemEditScreen extends Screen {
     }
 
     private void openReferences() {
+        EditorBootstrap bootstrap=latestBootstrap(this.bootstrap);
         if (!existing || minecraft == null) return;
         minecraft.setScreen(new DefinitionReferenceScreen(
                 this, bootstrap, DefinitionKind.ITEM, definitionId,
@@ -423,7 +382,9 @@ public final class ConfiguredItemEditScreen extends Screen {
         ));
     }
 
-    private void returnList() {
+    private void returnList() { leaveDefinition(this::leaveNow); }
+
+    private void leaveNow() {
         if (minecraft == null) return;
         EditorBootstrap latest = ClientEditorState.bootstrap();
         minecraft.setScreen(new ConfiguredItemListScreen(latest == null ? bootstrap : latest));
@@ -436,4 +397,8 @@ public final class ConfiguredItemEditScreen extends Screen {
 
     private record Values(ResourceLocation id, String name, int customModelData, List<String> requiredMods) {
     }
+
+    @Override protected String draftState() { return fieldsState()+enabled+glint+curiosEquippable+curiosSlots+mainhandOnly+draft.snapshot(); }
+    @Override protected void saveDraft() { submit(true); }
+    @Override protected void committed(ValidationResultPacket value) { baseRevision=value.activeRevision(); existing=true; idField.setEditable(false); var saved=ResourceLocation.tryParse(idField.getValue().strip()); if(saved!=null)definitionId=saved; if(referencesButton!=null)referencesButton.active=true; }
 }

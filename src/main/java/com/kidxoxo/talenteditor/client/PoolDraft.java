@@ -14,6 +14,7 @@ import java.util.Optional;
 public final class PoolDraft {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
+    String snapshot() { return root.toString(); }
     private final JsonObject root;
 
     private PoolDraft(JsonObject root) {

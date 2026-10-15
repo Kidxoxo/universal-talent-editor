@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 
-public final class TalentDynamicAttributeScreen extends Screen {
+public final class TalentDynamicAttributeScreen extends EditorScreen {
     private static final List<String> SOURCES = List.of("counter", "health_percent", "hunger_percent");
     private static final List<String> OPERATIONS = List.of("addition", "multiply_base", "multiply_total");
     private final TalentEditScreen owner;
@@ -81,18 +81,18 @@ public final class TalentDynamicAttributeScreen extends Screen {
 
         attributeField = field(x, 43, formWidth - chooseWidth - gap, 256, attribute.toString());
         attributeField.setEditable(false);
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.dynamic.choose_attribute"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.dynamic.choose_attribute"),
                         button -> chooseAttribute())
                 .bounds(x + formWidth - chooseWidth, 43, chooseWidth, 20).build());
 
         int sourceWidth = Math.min(160, Math.max(100, formWidth / 4));
-        sourceButton = addRenderableWidget(Button.builder(sourceLabel(), button -> chooseSource())
+        sourceButton = addRenderableWidget(EditorWidgets.button(sourceLabel(), button -> chooseSource())
                 .bounds(x, 75, sourceWidth, 20).build());
         int counterWidth = Math.max(30, formWidth - sourceWidth - chooseWidth - gap * 2);
         counterField = field(x + sourceWidth + gap, 75, counterWidth, 256,
                 counter == null ? "" : counter.toString());
         counterField.setEditable(false);
-        chooseCounterButton = addRenderableWidget(Button.builder(
+        chooseCounterButton = addRenderableWidget(EditorWidgets.button(
                         Component.translatable("screen.talent_editor.dynamic.choose_counter"),
                         button -> chooseCounter())
                 .bounds(x + sourceWidth + gap + counterWidth + gap, 75, chooseWidth, 20).build());
@@ -104,17 +104,17 @@ public final class TalentDynamicAttributeScreen extends Screen {
         maximumField = field(x + half + gap, 139, formWidth - half - gap, 48, maximumValue);
 
         int optionWidth = Math.max(88, (formWidth - gap * 2) / 3);
-        operationButton = addRenderableWidget(Button.builder(operationLabel(), button -> chooseOperation())
+        operationButton = addRenderableWidget(EditorWidgets.button(operationLabel(), button -> chooseOperation())
                 .bounds(x, 171, optionWidth, 20).build());
         keyField = field(x + optionWidth + gap, 171, optionWidth, 160, keyValue);
-        showButton = addRenderableWidget(Button.builder(showLabel(), button -> toggleShow())
+        showButton = addRenderableWidget(EditorWidgets.button(showLabel(), button -> toggleShow())
                 .bounds(x + (optionWidth + gap) * 2, 171,
                         formWidth - (optionWidth + gap) * 2, 20).build());
 
         int bottom = height - 28;
-        addRenderableWidget(Button.builder(Component.translatable("gui.cancel"), button -> cancel())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.cancel"), button -> cancel())
                 .bounds(x, bottom, half, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.dynamic.apply"),
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.dynamic.apply"), EditorTheme.Tone.PRIMARY,
                         button -> apply())
                 .bounds(x + half + gap, bottom, formWidth - half - gap, 20).build());
         syncSourceWidgets();
@@ -135,7 +135,7 @@ public final class TalentDynamicAttributeScreen extends Screen {
         int x = (width - formWidth) / 2;
         EditorTheme.panel(graphics, x - 7, 27, formWidth + 14, Math.max(1, height - 63));
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 9, EditorTheme.TEXT);
+        EditorTheme.title(graphics,font,title,width);
         label(graphics, x, 32, "attribute");
         label(graphics, x, 65, "source");
         label(graphics, x, 97, "formula");

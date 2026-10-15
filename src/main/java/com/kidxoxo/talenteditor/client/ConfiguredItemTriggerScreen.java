@@ -13,7 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /** Event rules owned by a configured item. Unknown fields are retained on every edit. */
-public final class ConfiguredItemTriggerScreen extends Screen {
+public final class ConfiguredItemTriggerScreen extends EditorScreen {
     private static final int ROW_HEIGHT = 20;
     private static final List<String> EVENTS = List.of(
             "damage_dealt_pre", "damage_taken_pre", "damage_dealt", "damage_taken", "interact_entity",
@@ -56,34 +56,34 @@ public final class ConfiguredItemTriggerScreen extends Screen {
         int leftWidth = Math.min(220, Math.max(120, w * 2 / 5));
         int rx = x + leftWidth + 12, rw = w - leftWidth - 12;
         int quarter = (rw - 18) / 4;
-        eventButton = addRenderableWidget(Button.builder(Component.empty(), b -> chooseEvent())
+        eventButton = addRenderableWidget(EditorWidgets.button(Component.empty(), b -> chooseEvent())
                 .bounds(rx, 35, rw, 20).build());
         idField = field(rx, 70, rw, 64);
         priorityField = field(rx, 105, quarter, 8);
         chanceField = field(rx + quarter + 6, 105, quarter, 16);
         cooldownField = field(rx + (quarter + 6) * 2, 105, quarter, 10);
         limitField = field(rx + (quarter + 6) * 3, 105, rw - (quarter + 6) * 3, 10);
-        actionsButton = addRenderableWidget(Button.builder(Component.empty(), b -> openActions(false))
+        actionsButton = addRenderableWidget(EditorWidgets.button(Component.empty(), b -> openActions(false))
                 .bounds(rx, 137, rw, 20).build());
-        failureButton = addRenderableWidget(Button.builder(Component.empty(), b -> openActions(true))
+        failureButton = addRenderableWidget(EditorWidgets.button(Component.empty(), b -> openActions(true))
                 .bounds(rx, 164, rw, 20).build());
         int half = (rw - 6) / 2;
-        policyButton = addRenderableWidget(Button.builder(Component.empty(), b -> choosePolicy())
+        policyButton = addRenderableWidget(EditorWidgets.button(Component.empty(), b -> choosePolicy())
                 .bounds(rx, 191, half, 20).build());
-        rawButton = addRenderableWidget(Button.builder(Component.translatable(
+        rawButton = addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.configured_item.triggers.raw"), b -> openRaw())
                 .bounds(rx + half + 6, 191, rw - half - 6, 20).build());
         int leftHalf = (leftWidth - 6) / 2;
-        addRenderableWidget(Button.builder(Component.translatable(
+        addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.configured_item.triggers.add"), b -> addTrigger())
                 .bounds(x, height - 56, leftHalf, 20).build());
-        removeButton = addRenderableWidget(Button.builder(Component.translatable(
+        removeButton = addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.configured_item.triggers.remove"), b -> removeTrigger())
                 .bounds(x + leftHalf + 6, height - 56, leftWidth - leftHalf - 6, 20).build());
         int bottomHalf = (w - 6) / 2;
-        addRenderableWidget(Button.builder(Component.translatable("gui.cancel"), b -> close())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.cancel"), b -> close())
                 .bounds(x, height - 28, bottomHalf, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable(
+        addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.configured_item.triggers.apply"), b -> apply())
                 .bounds(x + bottomHalf + 6, height - 28, w - bottomHalf - 6, 20).build());
         loadSelected();
@@ -267,7 +267,7 @@ public final class ConfiguredItemTriggerScreen extends Screen {
         EditorTheme.panel(graphics, x - 6, 27, leftWidth + 12, Math.max(1, height - 63));
         EditorTheme.panel(graphics, rx - 6, 27, rw + 12, Math.max(1, height - 63));
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 10, EditorTheme.TEXT);
+        EditorTheme.title(graphics,font,title,width);
         graphics.drawString(font, Component.translatable("screen.talent_editor.configured_item.triggers.list"),
                 x + 3, 36, EditorTheme.MUTED, false);
         label(graphics, rx, 59, "id");

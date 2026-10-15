@@ -101,7 +101,7 @@ public final class ClientPacketHandlers {
     }
 
     public static void acceptValidation(ValidationResultPacket packet) {
-        ClientEditorState.setValidation(packet);
+        EditorDefinitionScreen.receive(packet);
     }
 
     public static void acceptDeletionResult(DefinitionDeletionResultPacket packet) {
@@ -350,7 +350,8 @@ public final class ClientPacketHandlers {
 
     public static void acceptDrawSession(DrawSessionPacket packet) {
         ClientEditorState.setDrawSession(packet.view());
-        Minecraft.getInstance().setScreen(new TalentDrawScreen(packet.view()));
+        ClientEditorState.setBookLayout(packet.layout());
+        Minecraft.getInstance().setScreen(new TalentDrawScreen(packet.view(), packet.layout()));
     }
 
     public static void acceptDrawResult(DrawResultPacket packet) {

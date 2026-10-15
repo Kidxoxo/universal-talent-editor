@@ -129,9 +129,9 @@ public final class TalentTriggerService {
         var bindings = TalentEditorMod.SNAPSHOTS.active().triggersByEvent().get(event);
         if (bindings == null || bindings.isEmpty()) return 0;
         eventCalls.increment();
-        Set<ResourceLocation> triggerSources = new HashSet<>(PlayerTalents.triggerSources(owner));
-        triggerSources.addAll(ConfiguredItem.equippedDefinitionIds(owner));
-        if (bindings.stream().noneMatch(binding -> triggerSources.contains(binding.talentId()))) return 0;
+        Set<ResourceLocation> triggerSources = PlayerTalents.triggerSources(owner);
+        Set<ResourceLocation> equippedItems = ConfiguredItem.equippedDefinitionIds(owner);
+        if (bindings.stream().noneMatch(binding -> binding.ownedBy(triggerSources, equippedItems))) return 0;
         ExecutionKey key = new ExecutionKey(owner.getUUID(), event);
         Set<ExecutionKey> active = activeExecutions.get();
         if (!active.add(key)) {
@@ -144,8 +144,13 @@ public final class TalentTriggerService {
             );
             int applied = 0;
             long currentTick = PlayerTalents.counterLifecycleTicks(owner);
-            var candidates = TalentTriggerEngine.ownedBindings(bindings, triggerSources);
+            var candidates = TalentTriggerEngine.ownedBindings(bindings, triggerSources, equippedItems);
             for (TriggerBinding binding : candidates) {
+                if (binding.sourceKind() == com.kidxoxo.talenteditor.domain.DefinitionKind.ITEM) {
+                    owner.getCapability(com.kidxoxo.talenteditor.player.TalentCapabilities.PLAYER_TALENTS)
+                            .ifPresent(data -> data.migrateItemTriggerState(binding.talentId(),
+                                    !TalentEditorMod.SNAPSHOTS.active().talents().containsKey(binding.talentId())));
+                }
                 double chance = effectiveChance(owner, binding);
                 String cooldownKey = cooldownKey(binding);
                 if (event.equals(TalentEventTypes.PLAYER_MOVE_DISTANCE)
@@ -265,7 +270,7 @@ public final class TalentTriggerService {
     }
 
     static String cooldownKey(TriggerBinding binding) {
-        return binding.talentId() + "#" + binding.trigger().id();
+        return binding.stateKey();
     }
 
     private static double effectiveChance(ServerPlayer owner, TriggerBinding binding) {

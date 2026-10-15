@@ -15,7 +15,7 @@ import java.util.Arrays;
 import java.util.List;
 
 /** Form editor for every generic action introduced by the 1.1 runtime. */
-public final class TalentAdvancedActionScreen extends Screen {
+public final class TalentAdvancedActionScreen extends EditorScreen {
     private final Screen returnScreen;
     private final TalentEditScreen owner;
     private final TalentDraft.AdvancedActionLocation location;
@@ -74,34 +74,34 @@ public final class TalentAdvancedActionScreen extends Screen {
         int x = (width - formWidth) / 2;
         int gap = 6;
         int half = (formWidth - gap) / 2;
-        typeButton = addRenderableWidget(Button.builder(Component.empty(), button -> chooseType())
+        typeButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> chooseType())
                 .bounds(x, 29, formWidth, 20).build());
         resourceField = field(x, 61, formWidth - 92, 256);
-        chooseResourceButton = addRenderableWidget(Button.builder(Component.translatable(
+        chooseResourceButton = addRenderableWidget(EditorWidgets.button(Component.translatable(
                         "screen.talent_editor.advanced_action.choose"), button -> chooseResource())
                 .bounds(x + formWidth - 86, 61, 86, 20).build());
         expressionField = field(x, 91, formWidth, 512);
         valueAField = field(x, 121, half, NumericExpression.MAX_LENGTH);
         valueBField = field(x + half + gap, 121, formWidth - half - gap, NumericExpression.MAX_LENGTH);
-        operationButton = addRenderableWidget(Button.builder(Component.empty(), button -> chooseOperation())
+        operationButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> chooseOperation())
                 .bounds(x, 211, half, 20).build());
-        firstToggleButton = addRenderableWidget(Button.builder(Component.empty(), button -> {
+        firstToggleButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> {
             firstToggle = !firstToggle;
             updateWidgets();
         }).bounds(x + half + gap, 211, formWidth - half - gap, 20).build());
-        secondToggleButton = addRenderableWidget(Button.builder(Component.empty(), button -> {
+        secondToggleButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> {
             secondToggle = !secondToggle;
             updateWidgets();
         }).bounds(x, 241, half, 20).build());
-        thirdToggleButton = addRenderableWidget(Button.builder(Component.empty(), button -> {
+        thirdToggleButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> {
             thirdToggle = !thirdToggle;
             updateWidgets();
         }).bounds(x + half + gap, 241, formWidth - half - gap, 20).build());
-        selectorButton = addRenderableWidget(Button.builder(Component.empty(), button -> openSelector())
+        selectorButton = addRenderableWidget(EditorWidgets.button(Component.empty(), button -> openSelector())
                 .bounds(x + half + gap, 241, formWidth - half - gap, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.cancel"), button -> returnParent())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.cancel"), button -> returnParent())
                 .bounds(x, height - 28, 80, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.done"), button -> apply())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.done"), button -> apply())
                 .bounds(x + 86, height - 28, formWidth - 86, 20).build());
         loadFields();
     }
@@ -428,7 +428,7 @@ public final class TalentAdvancedActionScreen extends Screen {
         int x = (width - formWidth) / 2;
         EditorTheme.panel(graphics, x - 7, 24, formWidth + 14, Math.min(284, height - 56));
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 10, EditorTheme.TEXT);
+        EditorTheme.title(graphics,font,title,width);
         if (kind.hasResource()) label(graphics, kind.resourceLabel(), x, 51);
         if (kind.hasExpression()) label(graphics, kind.expressionLabel(), x, 82);
         if (kind.hasValues()) {
@@ -446,7 +446,7 @@ public final class TalentAdvancedActionScreen extends Screen {
             ), x, 270, formWidth, EditorTheme.MUTED);
         }
         if (!status.isBlank()) graphics.drawString(font, font.plainSubstrByWidth(status, formWidth),
-                x, height - 43, 0xFF7777, false);
+                x, height - 43, EditorTheme.ERROR, false);
         options.render(graphics, font, width, height);
     }
 

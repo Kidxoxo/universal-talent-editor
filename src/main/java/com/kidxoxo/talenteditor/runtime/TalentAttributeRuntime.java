@@ -38,6 +38,7 @@ public final class TalentAttributeRuntime {
 
     public static void refresh(ServerPlayer player) {
         removeModifiers(player, STATIC_APPLIED);
+        removeModifiers(player, DYNAMIC_APPLIED);
         Set<ResourceLocation> owned = PlayerTalents.activeSources(player);
         RuntimeSnapshot snapshot = TalentEditorMod.SNAPSHOTS.active();
         ArrayList<AppliedModifier> applied = new ArrayList<>();
@@ -48,8 +49,8 @@ public final class TalentAttributeRuntime {
                 if (instance == null) return;
                 for (ActiveAttributeBinding binding : bindings) {
                     if (!owned.contains(binding.talentId())) continue;
-                    if (!ActionConditionRuntime.active(binding.enabledWhen(), binding.disabledWhen(),
-                            player, binding.talentId())) continue;
+                    // Conditional fixed amounts belong to the periodically reconciled set.
+                    if (binding.enabledWhen() != null || binding.disabledWhen() != null) continue;
                     AttributeModifierAction action = binding.action();
                     UUID modifierId = modifierId(binding.talentId(), attributeId, action.modifierKey());
                     instance.removeModifier(modifierId);
@@ -73,12 +74,21 @@ public final class TalentAttributeRuntime {
         RuntimeSnapshot snapshot = TalentEditorMod.SNAPSHOTS.active();
         ArrayList<DesiredModifier> desired = new ArrayList<>();
         boolean creativeFlight = false;
+        ConditionEvaluator.Context context = null;
         for (ResourceLocation talentId : owned) {
             var talent = snapshot.talents().get(talentId);
             if (talent == null || !talent.enabled() || !talent.available()) continue;
             for (var configured : talent.activeEffects()) {
-                if (!ActionConditionRuntime.active(configured, player, talentId)) continue;
                 var action = com.kidxoxo.talenteditor.domain.ConditionalAction.unwrap(configured);
+                boolean conditional = ActionConditionRuntime.hasConditions(configured);
+                if (!(action instanceof DynamicAttributeModifierAction)
+                        && !(action instanceof CreativeFlightAction)
+                        && !(conditional && action instanceof AttributeModifierAction)) continue;
+                if (conditional) {
+                    if (context == null) context = ConditionEvaluator.context(player);
+                    if (!ActionConditionRuntime.active(configured, context,
+                            NumericExpressionRuntime.resolver(player, null, 0, 0, talentId))) continue;
+                }
                 if (action instanceof DynamicAttributeModifierAction dynamic) {
                     double source = switch (dynamic.source()) {
                         case COUNTER -> PlayerTalents.counter(player, dynamic.counter().orElseThrow());
@@ -90,6 +100,9 @@ public final class TalentAttributeRuntime {
                             talentId, dynamic.attribute(), dynamic.modifierKey(),
                             dynamic.amount(source), dynamic.operation()
                     ));
+                } else if (action instanceof AttributeModifierAction fixed) {
+                    desired.add(new DesiredModifier(talentId, fixed.attribute(), fixed.modifierKey(),
+                            fixed.amount(), fixed.operation()));
                 } else if (action instanceof CreativeFlightAction) {
                     creativeFlight = true;
                 }

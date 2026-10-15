@@ -29,6 +29,40 @@ class DefinitionServiceTest {
     @TempDir
     Path temporaryDirectory;
 
+    @org.junit.jupiter.api.TestFactory
+    List<org.junit.jupiter.api.DynamicTest> sharedSubmissionContractForAllDefinitionKinds() {
+        Map<DefinitionKind,String> definitions=Map.of(
+                DefinitionKind.TALENT,validTalent(),
+                DefinitionKind.RARITY,"{\"schema\":2,\"name\":\"R\",\"color\":\"#FFFFFF\",\"order\":1,\"baseWeight\":1}",
+                DefinitionKind.POOL,"{\"schema\":2,\"name\":\"Pool\",\"rarityWeights\":{\"talent_editor:common\":1}}",
+                DefinitionKind.COUNTER,"{\"schema\":2,\"name\":\"Count\",\"event\":\"kill\"}",
+                DefinitionKind.LAYOUT,"{\"schema\":2}",
+                DefinitionKind.ITEM,"{\"schema\":2,\"name\":\"Item\"}");
+        return definitions.entrySet().stream().map(entry -> org.junit.jupiter.api.DynamicTest.dynamicTest(
+                entry.getKey().name(), () -> {
+                    Fixture f=fixture();DefinitionKind kind=entry.getKey();
+                    ResourceLocation id=new ResourceLocation("contract:test");
+                    Path root=temporaryDirectory.resolve(kind.name());
+                    long revision=f.snapshots.active().revision();
+                    var validation=f.service.submit(kind,revision,id,entry.getValue(),false,f.environment,root);
+                    assertTrue(validation.accepted(),validation.report().issues().toString());
+                    assertFalse(validation.committed());assertFalse(Files.exists(root));
+                    for(String invalid:List.of("[","[]","{}"," ".repeat(DefinitionService.MAX_JSON_CHARACTERS+1))){
+                        var rejected=f.service.submit(kind,revision,id,invalid,true,f.environment,root);
+                        assertFalse(rejected.accepted());assertEquals(revision,f.snapshots.active().revision());
+                        assertFalse(Files.exists(root));
+                    }
+                    Path blocked=temporaryDirectory.resolve(kind.name()+"-blocked");Files.writeString(blocked,"file");
+                    var failure=f.service.submit(kind,revision,id,entry.getValue(),true,f.environment,blocked);
+                    assertFalse(failure.committed());assertEquals(revision,f.snapshots.active().revision());
+                    assertTrue(failure.report().issues().stream().anyMatch(i->i.code().equals("PERSISTENCE_FAILED")));
+                    var saved=f.service.submit(kind,revision,id,entry.getValue(),true,f.environment,root);
+                    assertTrue(saved.committed(),saved.report().issues().toString());
+                    assertEquals(revision+1,saved.activeRevision());
+                    assertTrue(f.service.submit(kind,revision,id,entry.getValue(),true,f.environment,root).conflict());
+                })).toList();
+    }
+
     @Test
     void validatesWithoutWritingThenCommitsAgainstMatchingRevision() {
         Fixture fixture = fixture();

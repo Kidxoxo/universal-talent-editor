@@ -91,10 +91,8 @@ public final class TalentPlayerEvents {
         if (player.tickCount % 20 == 0 && com.kidxoxo.talenteditor.network.PlayerTalentStateFactory.hasRenderAction(
                 TalentEditorMod.SNAPSHOTS.active(), PlayerTalents.activeSources(player)
         )) EditorNetwork.sendPlayerVisualState(player);
-        if (player.tickCount % 20 == 0 && TalentEditorMod.SETTINGS.automaticSynthesis()
-                && TalentEditorMod.SYNTHESES.synthesizeReady(player, 64) > 0) {
-            TalentAttributeRuntime.refresh(player);
-            EditorNetwork.sendPlayerState(player, false);
+        if (player.tickCount % 20 == 0 && TalentEditorMod.SETTINGS.automaticSynthesis()) {
+            TalentEditorMod.SYNTHESES.synthesizeReady(player, 64);
         }
     }
 

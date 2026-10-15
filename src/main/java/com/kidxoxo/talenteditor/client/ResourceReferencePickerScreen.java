@@ -24,8 +24,15 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.function.Consumer;
 
-public final class ResourceReferencePickerScreen extends Screen {
-    private static final int ROW_HEIGHT = 20;
+public final class ResourceReferencePickerScreen extends EditorScreen {
+    private int rowHeight(){return source==Source.TEXTURE?36:24;}
+    private static final Map<Source,LinkedHashSet<ResourceLocation>> RECENT=new java.util.EnumMap<>(Source.class);
+    private final EditorOptionPopup options=new EditorOptionPopup();
+    private final Map<ResourceLocation,String> dimensions=new LinkedHashMap<>();
+    private String namespace="",query="";private boolean recentOnly;private int selected=-1;
+    private static final int TOP=110;
+    static void clearRecent(){RECENT.clear();}
+
     private static final int MAX_ENTRIES = 20_000;
     private final Screen parent;
     private final Source source;
@@ -62,12 +69,20 @@ public final class ResourceReferencePickerScreen extends Screen {
     protected void init() {
         int formWidth = Math.min(620, width - 32);
         int x = (width - formWidth) / 2;
-        search = new EditBox(font, x, 42, formWidth, 20,
+        search = new EditBox(font, x, 32, formWidth, 20,
                 Component.translatable("screen.talent_editor.reference_picker.search"));
         search.setHint(Component.translatable("screen.talent_editor.reference_picker.search"));
-        search.setResponder(ignored -> scroll = 0);
+        search.setValue(query);
+        search.setResponder(value -> {query=value;scroll=0;selected=-1;});
         addRenderableWidget(search);
-        addRenderableWidget(Button.builder(Component.translatable("gui.back"), button -> onClose())
+        int bw=(formWidth-12)/3;
+        addRenderableWidget(EditorWidgets.button(EditorDefinitionScreen.tr("namespace",namespace.isBlank()?"*":namespace),b->{
+            var names=new ArrayList<String>();names.add("");entries.stream().map(e->e.id().getNamespace()).distinct().sorted().forEach(names::add);
+            options.open(EditorDefinitionScreen.tr("namespace", ""),names.stream().map(n->Component.literal(n.isBlank()?"*":n)).toList(),Math.max(0,names.indexOf(namespace)),i->{namespace=names.get(i);scroll=0;selected=-1;rebuildWidgets();},height);
+        }).bounds(x,58,bw,20).build());
+        addRenderableWidget(EditorWidgets.button(EditorDefinitionScreen.tr(recentOnly?"recent_only":"all_resources"),b->{recentOnly=!recentOnly;scroll=0;selected=-1;rebuildWidgets();}).bounds(x+bw+6,58,bw,20).build());
+        if(source==Source.TEXTURE)addRenderableWidget(EditorWidgets.button(EditorDefinitionScreen.tr("import_use"),b->minecraft.setScreen(new ClientResourceImportScreen(this,id->{remember(id);selection.accept(id);minecraft.setScreen(parent);}))).bounds(x+2*(bw+6),58,formWidth-2*(bw+6),20).build());
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.back"), button -> onClose())
                 .bounds(x, height - 28, 76, 20).build());
     }
 
@@ -75,45 +90,51 @@ public final class ResourceReferencePickerScreen extends Screen {
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics);
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 14, 0xFFFFFF);
+        EditorTheme.title(graphics,font,title,width);
         int formWidth = Math.min(620, width - 32);
         int x = (width - formWidth) / 2;
         graphics.drawString(font, Component.translatable(
                 "screen.talent_editor.reference_picker.origin." + source.originName(), entries.size()
-        ), x, 66, 0xFF909090, false);
-        int top = 84;
+        ), x, 86, 0xFF909090, false);
+        int top = TOP;
         List<Entry> visible = filtered();
-        int rows = Math.max(1, (height - top - 39) / ROW_HEIGHT);
+        int rows = Math.max(1, (height - top - 39) / rowHeight());
         scroll = clamp(scroll, visible.size(), rows);
         int end = Math.min(visible.size(), scroll + rows);
         for (int index = scroll; index < end; index++) {
             Entry entry = visible.get(index);
-            int y = top + (index - scroll) * ROW_HEIGHT;
-            boolean hovered = mouseX >= x && mouseX < x + formWidth && mouseY >= y - 3 && mouseY < y + 15;
-            if (hovered) graphics.fill(x, y - 3, x + formWidth, y + 15, 0x504A90E2);
-            String state = "[" + entry.status().label().getString() + "] ";
-            int stateWidth = font.width(state);
-            graphics.drawString(font, state, x + 4, y, entry.status().color(), false);
-            graphics.drawString(font, font.plainSubstrByWidth(
-                    entry.id() + " — " + entry.label(), formWidth - stateWidth - 8),
-                    x + 4 + stateWidth, y, 0xFFE8E8E8, false);
+            int y = top + (index - scroll) * rowHeight();
+            boolean hovered=mouseX>=x&&mouseX<x+formWidth&&mouseY>=y&&mouseY<y+rowHeight();
+            EditorTheme.row(graphics,x,y,formWidth,rowHeight()-2,index==selected,hovered);
+            int textX=x+6;
+            if(source==Source.TEXTURE){
+                UiScene.image(graphics,entry.id().toString(),new com.kidxoxo.talenteditor.domain.UiDocument.Rect(x+3,y+3,28,28),1);
+                textX=x+38;
+            }
+            String label=entry.id()+" — "+entry.label();
+            graphics.drawString(font,font.plainSubstrByWidth(label,formWidth-(textX-x)-8),textX,y+4,entry.status().color(),false);
+            if(source==Source.TEXTURE)graphics.drawString(font,dimensions(entry.id()),textX,y+18,EditorTheme.MUTED,false);
         }
         if (visible.isEmpty()) {
             graphics.drawCenteredString(font, Component.translatable(
                     "screen.talent_editor.reference_picker.empty"), width / 2, height / 2, 0x808080);
         }
+        options.render(graphics,font,width,height);
     }
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if(options.mouseClicked(mouseX,mouseY,button,width,height))return true;
         if (button == 0) {
             int formWidth = Math.min(620, width - 32);
             int x = (width - formWidth) / 2;
-            int top = 84;
+            int top = TOP;
             if (mouseX >= x && mouseX < x + formWidth && mouseY >= top && mouseY < height - 39) {
-                int index = scroll + (int) ((mouseY - top) / ROW_HEIGHT);
+                int index = scroll + (int) ((mouseY - top) / rowHeight());
+                if(index>=scroll+Math.max(1,(height-TOP-39)/rowHeight()))return true;
                 List<Entry> visible = filtered();
                 if (index >= 0 && index < visible.size()) {
+                    remember(visible.get(index).id());
                     selection.accept(visible.get(index).id());
                     returnParent();
                     return true;
@@ -125,7 +146,8 @@ public final class ResourceReferencePickerScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
-        int rows = Math.max(1, (height - 84 - 39) / ROW_HEIGHT);
+        if(options.mouseScrolled(delta,height))return true;
+        int rows = Math.max(1, (height - TOP - 39) / rowHeight());
         scroll = clamp(scroll - (int) Math.signum(delta) * 3, filtered().size(), rows);
         return true;
     }
@@ -140,11 +162,24 @@ public final class ResourceReferencePickerScreen extends Screen {
     }
 
     private List<Entry> filtered() {
-        String query = search == null ? "" : search.getValue();
-        if (query.isBlank()) return entries;
-        return entries.stream().filter(entry -> matchesSearch(entry.id(), entry.label(), query)).toList();
+        String text=search==null?query:search.getValue();
+        var recent=RECENT.getOrDefault(source,new LinkedHashSet<>());
+        return entries.stream().filter(e->namespace.isBlank()||e.id().getNamespace().equals(namespace)).filter(e->!recentOnly||recent.contains(e.id())).filter(e->matchesSearch(e.id(),e.label(),text)).toList();
     }
 
+    private void remember(ResourceLocation id){var recent=RECENT.computeIfAbsent(source,k->new LinkedHashSet<>());recent.remove(id);recent.add(id);while(recent.size()>32)recent.remove(recent.iterator().next());}
+    private String dimensions(ResourceLocation id){return dimensions.computeIfAbsent(id,key->{
+        try(var input=minecraft.getResourceManager().open(key);var image=javax.imageio.ImageIO.createImageInputStream(input)){
+            var readers=javax.imageio.ImageIO.getImageReaders(image);if(!readers.hasNext())return "";var reader=readers.next();try{reader.setInput(image,true,true);return reader.getWidth(0)+" × "+reader.getHeight(0)+" px";}finally{reader.dispose();}
+        }catch(Exception e){return EditorDefinitionScreen.tr("texture_missing").getString();}
+    });}
+    @Override public boolean keyPressed(int key,int scan,int mods){
+        if(options.keyPressed(key,height))return true;var visible=filtered();
+        if(!visible.isEmpty()&&(key==264||key==265)){selected=Math.max(0,Math.min(visible.size()-1,selected+(key==264?1:-1)));int rows=Math.max(1,(height-TOP-39)/rowHeight());scroll=Math.max(0,Math.min(scroll,selected));scroll=Math.max(scroll,selected-rows+1);return true;}
+        if((key==257||key==335)&&selected>=0&&selected<visible.size()){var id=visible.get(selected).id();remember(id);selection.accept(id);returnParent();return true;}
+        return super.keyPressed(key,scan,mods);
+    }
+    @Override public boolean charTyped(char c,int mods){return options.isOpen()||super.charTyped(c,mods);}
     static boolean matchesSearch(ResourceLocation id, String localizedLabel, String query) {
         String normalized = query == null ? "" : query.strip().toLowerCase(Locale.ROOT);
         if (normalized.isBlank()) return true;

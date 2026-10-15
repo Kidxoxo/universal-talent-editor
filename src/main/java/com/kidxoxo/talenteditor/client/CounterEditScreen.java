@@ -17,14 +17,14 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 
-public final class CounterEditScreen extends Screen {
+public final class CounterEditScreen extends EditorDefinitionScreen {
     private static final List<String> EVENTS = List.of(
             "manual", "kill", "damage_dealt", "damage_taken", "item_use", "entity_interact",
             "move_distance", "play_time"
     );
     private final EditorBootstrap bootstrap;
     private final CounterDraft draft;
-    private final ResourceLocation initialId;
+    private ResourceLocation initialId;
     private boolean existing;
     private long baseRevision;
     private boolean enabled;
@@ -81,6 +81,10 @@ public final class CounterEditScreen extends Screen {
         return new CounterEditScreen(bootstrap, CounterDraft.parse(json), id, true);
     }
 
+    static CounterEditScreen copyOf(EditorBootstrap bootstrap, ResourceLocation id, String json) {
+        return new CounterEditScreen(bootstrap,CounterDraft.parse(json),id,false);
+    }
+
     @Override
     protected void init() {
         int formWidth = Math.min(700, width - 32);
@@ -89,9 +93,9 @@ public final class CounterEditScreen extends Screen {
         idField.setEditable(!existing);
         nameField = field(x, 59, formWidth, nameValue, 512, value -> nameValue = value);
         int half = (formWidth - 6) / 2;
-        eventButton = addRenderableWidget(Button.builder(eventLabel(), button -> chooseEvent())
+        eventButton = addRenderableWidget(EditorWidgets.button(eventLabel(), button -> chooseEvent())
                 .bounds(x, 86, half, 20).build());
-        addRenderableWidget(Button.builder(enabledLabel(), button -> {
+        addRenderableWidget(EditorWidgets.button(enabledLabel(), button -> {
             enabled = !enabled;
             button.setMessage(enabledLabel());
             ClientEditorState.clearValidation();
@@ -109,35 +113,29 @@ public final class CounterEditScreen extends Screen {
 
         int bottom = height - 28;
         int buttonGap = 5;
-        int buttonWidth = Math.max(36, (formWidth - buttonGap * 7) / 8);
-        addRenderableWidget(Button.builder(Component.translatable("gui.back"), button -> returnList())
+        int buttonWidth = (formWidth - buttonGap * 4) / 5;
+        addRenderableWidget(EditorWidgets.button(Component.translatable("gui.back"), button -> returnList())
                 .bounds(x, bottom, buttonWidth, 20).build());
         int referenceCount = DefinitionReferenceScreen.inboundCount(
                 bootstrap, DefinitionKind.COUNTER, initialId
         );
-        Button references = addRenderableWidget(Button.builder(
-                        DefinitionReferenceScreen.buttonLabel(referenceCount), button -> openReferences())
+        Button references = addRenderableWidget(EditorWidgets.button(
+                        DefinitionReferenceScreen.buttonLabel(referenceCount), button -> definitionActions(bootstrap,ResourceLocation.tryParse(idField.getValue().strip()),existing,this::openReferences))
                 .bounds(x + buttonWidth + buttonGap, bottom, buttonWidth, 20).build());
-        references.active = existing;
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.counter.filters"),
-                        button -> openFilters())
+        references.active = true;
+        addRenderableWidget(EditorWidgets.button(EditorDefinitionScreen.tr("counter_rules"), button ->
+                options.open(EditorDefinitionScreen.tr("counter_rules"), List.of(
+                        Component.translatable("screen.talent_editor.counter.filters"),
+                        Component.translatable("screen.talent_editor.counter.amount"),
+                        Component.translatable("screen.talent_editor.counter.reset"),
+                        Component.translatable("screen.talent_editor.counter.metadata")), 0,
+                        choice -> { switch(choice) { case 0 -> openFilters(); case 1 -> openAmount(); case 2 -> openReset(); default -> openMetadata(); } }, height))
                 .bounds(x + (buttonWidth + buttonGap) * 2, bottom, buttonWidth, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.counter.amount"),
-                        button -> openAmount())
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.validate"), button -> submit(false))
                 .bounds(x + (buttonWidth + buttonGap) * 3, bottom, buttonWidth, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.validate"),
-                        button -> submit(false))
-                .bounds(x + (buttonWidth + buttonGap) * 6, bottom, buttonWidth, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.save"),
-                        button -> submit(true))
-                .bounds(x + (buttonWidth + buttonGap) * 7, bottom,
-                        formWidth - (buttonWidth + buttonGap) * 7, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.counter.reset"),
-                        button -> openReset())
-                .bounds(x + (buttonWidth + buttonGap) * 4, bottom, buttonWidth, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.talent_editor.counter.metadata"),
-                        button -> openMetadata())
-                .bounds(x + (buttonWidth + buttonGap) * 5, bottom, buttonWidth, 20).build());
+        addRenderableWidget(EditorWidgets.button(Component.translatable("screen.talent_editor.save"), EditorTheme.Tone.PRIMARY, button -> submit(true))
+                .bounds(x + (buttonWidth + buttonGap) * 4, bottom, formWidth - (buttonWidth + buttonGap) * 4, 20).build());
+        watchDefinition(DefinitionKind.COUNTER);
     }
 
     private EditBox field(int x, int y, int width, String value, int maxLength,
@@ -161,7 +159,7 @@ public final class CounterEditScreen extends Screen {
         int x = (width - formWidth) / 2;
         int gap = 5;
         int part = (formWidth - gap * 3) / 4;
-        graphics.drawCenteredString(font, title, width / 2, 8, 0xFFFFFF);
+        EditorTheme.title(graphics,font,title,width);
         label(graphics, "screen.talent_editor.counter.id", x, 21);
         label(graphics, "screen.talent_editor.counter.name", x, 48);
         label(graphics, "screen.talent_editor.counter.increment", x, 108);
@@ -176,11 +174,11 @@ public final class CounterEditScreen extends Screen {
                             compact(amountSettings.scale()),
                             Component.translatable("screen.talent_editor.counter.rounding." + amountSettings.rounding()),
                             amountSettings.minimumIncrement()),
-                    x, 215, 0xA0A0A0, false);
+                    x, 215, EditorTheme.MUTED, false);
             graphics.drawString(font, Component.translatable("screen.talent_editor.counter.reset_summary",
                             yesNo(resetSettings.onLogin()), yesNo(resetSettings.onDeath()),
                             resetSettings.intervalTicks()),
-                    x, 226, 0xA0A0A0, false);
+                    x, 226, EditorTheme.MUTED, false);
         }
         renderResult(graphics, x, formWidth);
         options.render(graphics, font, width, height);
@@ -203,37 +201,11 @@ public final class CounterEditScreen extends Screen {
     }
 
     private void label(GuiGraphics graphics, String key, int x, int y) {
-        graphics.drawString(font, Component.translatable(key), x, y, 0xA0A0A0, false);
+        graphics.drawString(font, Component.translatable(key), x, y, EditorTheme.MUTED, false);
     }
 
     private void renderResult(GuiGraphics graphics, int x, int formWidth) {
-        ValidationResultPacket result = ClientEditorState.validation();
-        String message = localStatus;
-        int color = 0xA0A0A0;
-        if (result != null) {
-            if (result.committed()) {
-                message = Component.translatable("screen.talent_editor.result.saved", result.activeRevision()).getString();
-                color = 0x55FF55;
-                if (result.activeRevision() > baseRevision) {
-                    baseRevision = result.activeRevision();
-                    existing = true;
-                    idField.setEditable(false);
-                }
-            } else if (result.accepted()) {
-                message = Component.translatable("screen.talent_editor.result.valid").getString();
-                color = 0x55FF55;
-            } else if (result.conflict()) {
-                message = Component.translatable("screen.talent_editor.result.conflict", result.activeRevision()).getString();
-                color = 0xFF5555;
-            } else {
-                ValidationIssue first = result.issues().isEmpty() ? null : result.issues().get(0);
-                message = first == null ? Component.translatable("screen.talent_editor.result.invalid").getString()
-                        : first.code() + " " + first.path() + ": " + first.message();
-                color = 0xFF7777;
-            }
-        }
-        if (!message.isBlank()) graphics.drawString(font, font.plainSubstrByWidth(message, formWidth),
-                x, height - 42, color, false);
+        renderSubmissionResult(graphics, x, formWidth, localStatus);
     }
 
     private void chooseEvent() {
@@ -259,6 +231,7 @@ public final class CounterEditScreen extends Screen {
     }
 
     private void submit(boolean commit) {
+        if(submissionPending())return;
         ResourceLocation id = ResourceLocation.tryParse(idValue.strip());
         if (id == null) { invalid("screen.talent_editor.counter.invalid_id"); return; }
         if (nameValue.strip().isBlank()) { invalid("screen.talent_editor.form.empty_name"); return; }
@@ -275,7 +248,7 @@ public final class CounterEditScreen extends Screen {
         if (requiredMods == null) { invalid("screen.talent_editor.counter.invalid_mods"); return; }
         ClientEditorState.clearValidation();
         localStatus = Component.translatable("screen.talent_editor.result.waiting").getString();
-        EditorNetwork.submitCounter(baseRevision, id, draft.toJson(
+        sendDefinition(baseRevision, id, CounterDraft.parse(draft.snapshot()).toJson(
                 nameValue.strip(), enabled, eventValue, increment, maximum, cooldown, interval,
                 resetSettings, metadataSettings, requiredMods, requiredTalents, filters
         ), commit);
@@ -344,6 +317,7 @@ public final class CounterEditScreen extends Screen {
     }
 
     private void openReferences() {
+        EditorBootstrap bootstrap=latestBootstrap(this.bootstrap);
         if (!existing || minecraft == null) return;
         int count = DefinitionReferenceScreen.inboundCount(bootstrap, DefinitionKind.COUNTER, initialId);
         minecraft.setScreen(new DefinitionReferenceScreen(
@@ -351,7 +325,9 @@ public final class CounterEditScreen extends Screen {
         ));
     }
 
-    private void returnList() {
+    private void returnList() { leaveDefinition(this::leaveNow); }
+
+    private void leaveNow() {
         if (minecraft == null) return;
         EditorBootstrap latest = ClientEditorState.bootstrap();
         minecraft.setScreen(new CounterListScreen(latest == null ? bootstrap : latest));
@@ -412,4 +388,8 @@ public final class CounterEditScreen extends Screen {
     private static Component yesNo(boolean value) {
         return Component.translatable(value ? "options.on" : "options.off");
     }
+
+    @Override protected String draftState() { return fieldsState()+enabled+eventValue+filters+amountSettings+resetSettings+metadataSettings+draft.snapshot(); }
+    @Override protected void saveDraft() { submit(true); }
+    @Override protected void committed(ValidationResultPacket value) { baseRevision=value.activeRevision(); initialId=ResourceLocation.tryParse(idField.getValue().strip()); existing=true; idField.setEditable(false); }
 }

@@ -16,6 +16,7 @@ import java.util.Locale;
 public final class TalentBookScreen extends Screen {
     private static final int ROW_HEIGHT = 34;
     private static final ResourceLocation DEFAULT_POOL = new ResourceLocation("talent_editor", "default");
+    private UiScene uiScene;
     private PlayerTalentState state;
     private TalentBookLayoutDefinition layout;
     private Button drawButton;
@@ -49,11 +50,18 @@ public final class TalentBookScreen extends Screen {
     public void updateState(PlayerTalentState state, TalentBookLayoutDefinition layout) {
         ResourceLocation selectedId = selectedEntryId();
         int previousPage = page;
+        boolean changedUi = !this.layout.bookUi().equals(layout.bookUi());
         this.state = state;
         this.layout = layout;
         rebuildPlacement();
+        if (changedUi && minecraft != null && width > 0) { clearWidgets(); init(); }
         if (mode == BookMode.COUNTERS) {
             selectedIndex = findEntryIndex(selectedId);
+            if (layout.bookUi().isPresent()) {
+                int capacity = layout.bookUi().orElseThrow().slotCount();
+                scroll = Math.max(0, Math.min(scroll, Math.max(0, (state.counters().size() - 1) / capacity) * capacity));
+                if (selectedIndex < 0) selectedIndex = state.counters().isEmpty() ? -1 : scroll;
+            }
         } else if (selectedId != null && findIndex(visibleTalents(), selectedId) >= 0) {
             selectedIndex = findEntryIndex(selectedId);
             page = pageForTalentIndex(selectedIndex);
@@ -71,6 +79,12 @@ public final class TalentBookScreen extends Screen {
         int selectedPage = placement.pageFor(selectedIndex);
         page = mode != BookMode.COUNTERS && selectedPage >= 0 ? selectedPage
                 : Math.max(0, Math.min(page, talentPageCount() - 1));
+        if (layout.bookUi().isPresent()) {
+            uiScene = new UiScene(layout.bookUi().orElseThrow(), customContext());
+            uiScene.install(width, height, button -> addRenderableWidget(button));
+            return;
+        }
+        uiScene = null;
         modeButton = addRenderableWidget(Button.builder(modeLabel(), button -> toggleMode())
                 .bounds(8, height - 28, 1, 20).build());
         synthesizeButton = addRenderableWidget(Button.builder(
@@ -95,6 +109,7 @@ public final class TalentBookScreen extends Screen {
         if (mode != BookMode.COUNTERS) {
             page = Math.max(0, Math.min(page, talentPageCount() - 1));
         }
+        if (uiScene != null) { uiScene.render(graphics, mouseX, mouseY, width, height); return; }
         renderBackground(graphics);
         layout.backgroundForPage(page).flatMap(id -> minecraft.getResourceManager().getResource(id)).ifPresent(resource ->
                 graphics.blit(layout.backgroundForPage(page).orElseThrow(), 0, 0, 0.0F, 0.0F,
@@ -103,8 +118,7 @@ public final class TalentBookScreen extends Screen {
         super.render(graphics, mouseX, mouseY, partialTick);
         graphics.drawCenteredString(font, title, width / 2, 10, 0xFFFFFF);
         graphics.drawCenteredString(font, Component.translatable(
-                "screen.talent_editor.book.summary_extended", state.talents().size(), state.syntheses().size(),
-                state.counters().size(), state.drawTokens(), state.definitionRevision()
+                "screen.talent_editor.book.summary_compact", state.talents().size()
         ), width / 2, 25, 0xA0A0A0);
         if (mode != BookMode.COUNTERS) {
             graphics.drawString(font, Component.translatable(
@@ -284,6 +298,7 @@ public final class TalentBookScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (uiScene != null) return uiScene.click(mouseX, mouseY, button) || super.mouseClicked(mouseX, mouseY, button);
         if (button == 0 && mouseX >= 9 && mouseX < divider() - 7 && mouseY >= 49 && mouseY < height - 39) {
             int index;
             if (mode == BookMode.COUNTERS) {
@@ -320,6 +335,10 @@ public final class TalentBookScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        if (uiScene != null) {
+            if (!uiScene.scroll(mouseX, mouseY, delta)) customPage(delta > 0 ? -1 : 1);
+            return true;
+        }
         if (mouseX < divider()) {
             if (mode != BookMode.COUNTERS) {
                 changePage(delta > 0 ? -1 : 1);
@@ -488,8 +507,7 @@ public final class TalentBookScreen extends Screen {
             int color = counter.active() ? 0xFF55FF55 : counter.defined() ? 0xFFFFAA55 : 0xFF808080;
             graphics.fill(12, y, 15, y + 22, color);
             graphics.drawString(font, fit(counter.name(), divider - 32, color), 20, y, color, false);
-            String value = counter.maximum() > 0L
-                    ? counter.current() + " / " + counter.maximum() : Long.toString(counter.current());
+            String value = Long.toString(counter.current());
             graphics.drawString(font, fit(value, divider - 32),
                     20, y + 12, 0xA0A0A0, false);
         }
@@ -506,8 +524,8 @@ public final class TalentBookScreen extends Screen {
         int contentWidth = Math.max(40, width - x - 14);
         int color = counter.active() ? 0xFF55FF55 : counter.defined() ? 0xFFFFAA55 : 0xFF808080;
         graphics.drawString(font, fit(counter.name(), contentWidth, color), x, 50, color, false);
-        graphics.drawString(font, Component.translatable("screen.talent_editor.book.counter_progress",
-                counter.current(), counter.maximum()), x, 70, 0xFFFFFF, false);
+        graphics.drawString(font, Component.translatable("screen.talent_editor.book.counter_count",
+                counter.current()), x, 70, 0xFFFFFF, false);
         if (!counter.event().isBlank()) {
             graphics.drawString(font, Component.translatable("screen.talent_editor.book.counter_event",
                     Component.translatable("screen.talent_editor.counter.event." + counter.event())),
@@ -612,6 +630,7 @@ public final class TalentBookScreen extends Screen {
 
     private int capacityForPage(int pageIndex) {
         List<TalentBookLayoutDefinition.SlotDefinition> slots = layout.slotsForPage(pageIndex);
+        if (layout.bookUi().isPresent()) return pageIndex < layout.pages().size() ? slots.size() : layout.bookUi().orElseThrow().slotCount();
         return slots.isEmpty() ? Math.max(1, talentColumns() * talentRows()) : slots.size();
     }
 
@@ -623,6 +642,93 @@ public final class TalentBookScreen extends Screen {
         placement = TalentBookPagination.place(
                 visibleTalents().stream().map(PlayerTalentState.TalentView::id).toList(),
                 layout.pages(), capacityForPage(layout.pages().size()));
+    }
+
+    private void customPage(int delta) {
+        if (mode == BookMode.COUNTERS) {
+            int capacity = layout.bookUi().orElseThrow().slotCount();
+            int last = Math.max(0, (state.counters().size() - 1) / capacity) * capacity;
+            scroll = Math.max(0, Math.min(last, scroll + delta * capacity));
+            selectedIndex = scroll;
+        } else changePage(delta);
+        if (uiScene != null) uiScene.resetScroll();
+    }
+
+    private UiScene.Context customContext() {
+        return new UiScene.Context() {
+            public String texture(com.kidxoxo.talenteditor.domain.UiDocument.Element e) {
+                if (!e.binding().equals("page_background")) return e.texture();
+                return page < layout.pages().size() ? layout.pages().get(page).background().map(Object::toString).orElse(e.texture()) : e.texture();
+            }
+            public Component text(String binding) {
+                return switch (binding) {
+                    case "title" -> title;
+                    case "page" -> Component.translatable("screen.talent_editor.book.page",
+                            mode == BookMode.COUNTERS ? scroll / layout.bookUi().orElseThrow().slotCount() + 1 : page + 1,
+                            mode == BookMode.COUNTERS ? Math.max(1, (state.counters().size() + layout.bookUi().orElseThrow().slotCount() - 1) / layout.bookUi().orElseThrow().slotCount()) : talentPageCount());
+                    case "summary" -> Component.translatable("screen.talent_editor.book.summary_compact", state.talents().size())
+                            .append(state.truncated() || state.synthesesTruncated() || state.countersTruncated()
+                                    ? Component.translatable("screen.talent_editor.book.truncated_any") : Component.empty());
+                    default -> Component.empty();
+                };
+            }
+            public Component label(String action) {
+                return switch (action) {
+                    case "mode" -> modeLabel();
+                    case "draw" -> Component.translatable("screen.talent_editor.book.draw");
+                    case "synthesize" -> Component.translatable("screen.talent_editor.book.synthesize_manual");
+                    case "previous" -> Component.literal("<");
+                    case "next" -> Component.literal(">");
+                    case "close" -> Component.translatable("gui.done");
+                    default -> Component.translatable("screen.talent_editor.ui.action." + action);
+                };
+            }
+            public boolean enabled(String action) {
+                return switch (action) {
+                    case "draw" -> state.drawTokens() > 0;
+                    case "synthesize" -> !ClientEditorState.editorSettings().automaticSynthesis() && currentSynthesis() != null && currentSynthesis().ready();
+                    case "synthesis" -> !ClientEditorState.editorSettings().automaticSynthesis();
+                    case "previous" -> mode == BookMode.COUNTERS ? scroll > 0 : page > 0;
+                    case "next" -> mode == BookMode.COUNTERS ? scroll + layout.bookUi().orElseThrow().slotCount() < state.counters().size() : page + 1 < talentPageCount();
+                    default -> true;
+                };
+            }
+            public void action(String action, String target) {
+                if (!enabled(action)) return;
+                switch (action) {
+                    case "close" -> onClose();
+                    case "draw" -> EditorNetwork.requestDraw(target.isBlank() ? DEFAULT_POOL : new ResourceLocation(target));
+                    case "synthesize" -> synthesizeSelected();
+                    case "mode" -> toggleMode();
+                    case "previous" -> customPage(-1);
+                    case "next" -> customPage(1);
+                    case "owned", "synthesis", "counters" -> {
+                        mode = BookMode.valueOf(action.toUpperCase(Locale.ROOT)); page = 0; scroll = 0;
+                        rebuildPlacement(); selectedIndex = mode == BookMode.COUNTERS ? 0 : placement.firstIndex(0);
+                    }
+                }
+                if (uiScene != null) uiScene.resetScroll();
+            }
+            private int index(com.kidxoxo.talenteditor.domain.UiDocument.Element e) {
+                return e.type().equals("details") ? selectedIndex : mode == BookMode.COUNTERS ? scroll + e.index() : placement.indexAt(page, e.index());
+            }
+            public UiScene.Card card(com.kidxoxo.talenteditor.domain.UiDocument.Element e) {
+                int i = index(e);
+                if (mode == BookMode.COUNTERS) return i >= 0 && i < state.counters().size() ? UiCards.counter(state.counters().get(i), i == selectedIndex) : null;
+                var talents = visibleTalents();
+                if (i < 0 || i >= talents.size()) return null;
+                java.util.ArrayList<Component> extra = new java.util.ArrayList<>();
+                if (mode == BookMode.SYNTHESIS) {
+                    var s = synthesisAt(i);
+                    extra.add(Component.translatable(s.ready() ? "screen.talent_editor.book.synthesis_ready" : "screen.talent_editor.book.synthesis_blocked"));
+                    if (!s.conditionMet()) extra.add(Component.translatable("screen.talent_editor.book.other_requirements_missing"));
+                    for (var cost : s.costs()) extra.add(Component.literal(cost.name().component(0xFFFFFF).getString() + " " + cost.current() + "/" + cost.required())
+                            .withStyle(style -> style.withColor(cost.satisfied() ? 0x9FE59F : 0xFF7777)));
+                }
+                return UiCards.talent(talents.get(i), i == selectedIndex, layout.showGeneratedEffects(), extra);
+            }
+            public void select(com.kidxoxo.talenteditor.domain.UiDocument.Element e) { selectedIndex = index(e); uiScene.resetScroll(); }
+        };
     }
 
     private static void renderIcon(GuiGraphics graphics, ResourceLocation icon, int x, int y, int size) {
